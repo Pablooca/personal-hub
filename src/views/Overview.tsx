@@ -288,7 +288,7 @@ function QuickCapture() {
         {mode === 'task' ? (
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted">Today at</span>
-            <input type="time" className="field num w-28" value={time} onChange={(e) => setTime(e.target.value)} />
+            <input type="time" className="field num w-36" value={time} onChange={(e) => setTime(e.target.value)} />
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">

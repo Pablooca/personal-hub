@@ -110,3 +110,10 @@
 input[type='range'] {
   accent-color: var(--accent);
 }
+
+/* iOS Safari zooms into inputs under 16px — keep them at 16px on phones. */
+@media (max-width: 640px) {
+  .field {
+    font-size: 16px;
+  }
+}

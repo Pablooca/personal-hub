@@ -62,6 +62,6 @@ export const TX_STYLES: Record<TxType, { label: string; text: string; bg: string
 
 export const TX_CATEGORY_SUGGESTIONS: Record<TxType, string[]> = {
   income: ['salary', 'scholarship', 'freelance', 'refund', 'other'],
-  expense: ['housing', 'groceries', 'transport', 'dining', 'subscriptions', 'health', 'education', 'leisure', 'other'],
+  expense: ['groceries', 'dining', 'transport', 'housing', 'subscriptions', 'health', 'education', 'leisure', 'other'],
   investment: ['index_fund', 'etf', 'pension', 'crypto', 'savings'],
 }
