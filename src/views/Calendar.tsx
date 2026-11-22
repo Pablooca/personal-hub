@@ -4,7 +4,7 @@ import { PageHeader } from '../components/Shell'
 import { EventModal, type EventDraft } from '../components/EventModal'
 import { Button, Card, Check, Empty, Segmented, cx } from '../components/ui'
 import { addDays, addMonths, combineDateTime, isSameDay, monthGrid, startOfDay, toDateKey, weekDays } from '../lib/dates'
-import { fmtDate, fmtMonth, fmtTime, fmtWeekday } from '../lib/format'
+import { capitalize, fmtDate, fmtMonth, fmtTime, fmtWeekday } from '../lib/format'
 import { CATEGORY_STYLES } from '../lib/theme'
 import { EVENT_CATEGORIES, type CalendarEvent, type EventCategory } from '../lib/types'
 import { useData } from '../state/data'
@@ -47,7 +47,7 @@ export function CalendarView() {
   const week = weekDays(cursor)
   const title =
     mode === 'month'
-      ? fmtMonth(cursor)
+      ? capitalize(fmtMonth(cursor))
       : `${fmtDate(week[0], { day: 'numeric', month: 'short' })} – ${fmtDate(week[6], { day: 'numeric', month: 'short', year: 'numeric' })}`
 
   const selectedEvents = byDay.get(toDateKey(selected)) ?? []
@@ -64,24 +64,24 @@ export function CalendarView() {
   return (
     <>
       <PageHeader
-        eyebrow="Calendar & Agenda"
+        eyebrow="Calendario y agenda"
         title={<span className="capitalize">{title}</span>}
         actions={
           <>
-            <Segmented value={mode} onChange={setMode} options={[{ value: 'month', label: 'Month' }, { value: 'week', label: 'Week' }]} />
+            <Segmented value={mode} onChange={setMode} options={[{ value: 'month', label: 'Mes' }, { value: 'week', label: 'Semana' }]} />
             <div className="flex items-center rounded-lg border border-line bg-surface">
-              <Button variant="ghost" size="icon" onClick={() => step(-1)} aria-label="Previous">
+              <Button variant="ghost" size="icon" onClick={() => step(-1)} aria-label="Anterior">
                 <ChevronLeft className="size-4" />
               </Button>
               <button onClick={goToday} className="h-8 px-2 text-xs font-medium text-muted hover:text-fg">
-                Today
+                Hoy
               </button>
-              <Button variant="ghost" size="icon" onClick={() => step(1)} aria-label="Next">
+              <Button variant="ghost" size="icon" onClick={() => step(1)} aria-label="Siguiente">
                 <ChevronRight className="size-4" />
               </Button>
             </div>
             <Button variant="primary" onClick={() => setDraft({ dateKey: toDateKey(selected) })}>
-              <Plus className="size-4" /> <span className="hidden sm:inline">New event</span>
+              <Plus className="size-4" /> <span className="hidden sm:inline">Nuevo evento</span>
             </Button>
           </>
         }
@@ -138,8 +138,8 @@ export function CalendarView() {
         <Card
           title={
             <span className="flex items-baseline gap-2">
-              {fmtDate(selected, { weekday: 'long', day: 'numeric', month: 'short' })}
-              {isSameDay(selected, today) && <span className="eyebrow text-accent">Today</span>}
+              {capitalize(fmtDate(selected, { weekday: 'long', day: 'numeric', month: 'short' }))}
+              {isSameDay(selected, today) && <span className="eyebrow text-accent">Hoy</span>}
             </span>
           }
           action={<span className="num text-xs text-muted">{doneCount}/{selectedEvents.length}</span>}
@@ -147,9 +147,9 @@ export function CalendarView() {
         >
           {selectedEvents.length === 0 ? (
             <Empty>
-              Free day.
+              Día libre.
               <Button size="sm" variant="ghost" onClick={() => setDraft({ dateKey: toDateKey(selected) })}>
-                <Plus className="size-3.5" /> Add event
+                <Plus className="size-3.5" /> Añadir evento
               </Button>
             </Empty>
           ) : (
@@ -164,7 +164,7 @@ export function CalendarView() {
                   )}
                 >
                   <div className="pt-0.5">
-                    <Check checked={e.is_completed} onChange={(v) => update('events', e.id, { is_completed: v })} label={`Complete ${e.title}`} />
+                    <Check checked={e.is_completed} onChange={(v) => update('events', e.id, { is_completed: v })} label={`Completar ${e.title}`} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className={cx('text-sm font-medium', e.is_completed && 'text-faint line-through')}>{e.title}</div>
@@ -253,7 +253,7 @@ function MonthGrid({
                     onCreate(d)
                   }}
                   className="hidden size-5 place-items-center rounded text-faint opacity-0 group-hover:opacity-100 hover:bg-line hover:text-fg sm:grid"
-                  aria-label="Add event"
+                  aria-label="Añadir evento"
                 >
                   <Plus className="size-3" />
                 </button>
@@ -285,7 +285,7 @@ function MonthGrid({
                     <span className="truncate">{e.title}</span>
                   </button>
                 ))}
-                {events.length > 3 && <div className="px-1 font-mono text-[10px] text-muted">+{events.length - 3} more</div>}
+                {events.length > 3 && <div className="px-1 font-mono text-[10px] text-muted">+{events.length - 3} más</div>}
               </div>
             </div>
           )

@@ -1,12 +1,18 @@
-import type { Transaction } from './types'
+import type { Account, Transaction } from './types'
+
+/**
+ * Opening balances (e.g. dated 31 Dec) carry money that already existed.
+ * They count towards account balances but never as income.
+ */
+export const OPENING_BALANCE = 'opening_balance'
 
 export interface MonthSummary {
   income: number
   expense: number
   investment: number
-  /** income − expense − investment: cash left in the account. */
+  /** income − expense − saved: cash left in the current account. */
   net: number
-  /** (income − expense) / income: share of income not consumed (investing counts as saving). */
+  /** (income − expense) / income: share of income not spent (money moved to savings counts as saved). */
   savingsRate: number
 }
 
@@ -15,6 +21,7 @@ export function summarise(txs: Transaction[]): MonthSummary {
   let expense = 0
   let investment = 0
   for (const t of txs) {
+    if (t.category === OPENING_BALANCE) continue
     if (t.type === 'income') income += t.amount
     else if (t.type === 'expense') expense += t.amount
     else investment += t.amount
@@ -30,23 +37,35 @@ export function summarise(txs: Transaction[]): MonthSummary {
 
 export const inMonth = (txs: Transaction[], ym: string) => txs.filter((t) => t.date.startsWith(ym))
 
+/** Year-to-date: from 1 January of `ym`'s year through the end of month `ym` (inclusive). */
+export const yearToDate = (txs: Transaction[], ym: string) => {
+  const from = `${ym.slice(0, 4)}-01`
+  return txs.filter((t) => {
+    const m = t.date.slice(0, 7)
+    return m >= from && m <= ym
+  })
+}
+
 export function byCategory(txs: Transaction[], type: Transaction['type']) {
   const map = new Map<string, number>()
   for (const t of txs) if (t.type === type) map.set(t.category, (map.get(t.category) ?? 0) + t.amount)
   return [...map.entries()].map(([category, total]) => ({ category, total })).sort((a, b) => b.total - a.total)
 }
 
-const csvCell = (v: string | number) => {
-  const s = String(v)
-  // Quote when needed; neutralise spreadsheet formula injection.
-  const safe = /^[=+\-@]/.test(s) && typeof v === 'string' ? `'${s}` : s
-  return /[",\n;]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
+const csvCell = (v: string) => {
+  // Neutralise spreadsheet formula injection, then quote when needed.
+  const safe = /^[=+\-@]/.test(v) ? `'${v}` : v
+  return /[";\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
+/** Spanish Excel-friendly CSV: `;` separator and decimal comma. */
 export function toCsv(txs: Transaction[]): string {
-  const head = ['date', 'type', 'category', 'concept', 'amount', 'account']
-  const rows = txs.map((t) => [t.date, t.type, t.category, t.concept, t.amount.toFixed(2), t.account].map(csvCell).join(','))
-  return [head.join(','), ...rows].join('\n')
+  const head = ['fecha', 'tipo', 'categoria', 'concepto', 'importe', 'cuenta']
+  const typeEs = { income: 'ingreso', expense: 'gasto', investment: 'ahorro' } as const
+  const rows = txs.map((t) =>
+    [t.date, typeEs[t.type], t.category, t.concept, t.amount.toFixed(2).replace('.', ','), t.account].map(csvCell).join(';'),
+  )
+  return [head.join(';'), ...rows].join('\n')
 }
 
 export function downloadCsv(filename: string, content: string) {
@@ -59,4 +78,43 @@ export function downloadCsv(filename: string, content: string) {
   a.click()
   a.remove()
   URL.revokeObjectURL(url)
+}
+
+export interface AccountBalance {
+  name: string
+  account: Account | null // null → name only seen in transactions (e.g. an unmatched card)
+  balance: number
+  count: number
+}
+
+/**
+ * Balance per account up to (and including) month `ym`.
+ * income: +amount · expense: −amount on its account.
+ * saved: +amount on its account and −amount on the primary account
+ * (a transfer from the everyday account into savings).
+ */
+export function accountBalances(txs: Transaction[], accounts: Account[], ym?: string): AccountBalance[] {
+  const primary = accounts.find((a) => a.is_primary)?.name
+  const bal = new Map<string, { balance: number; count: number }>()
+  const bump = (name: string, delta: number, counted = true) => {
+    const cur = bal.get(name) ?? { balance: 0, count: 0 }
+    cur.balance += delta
+    if (counted) cur.count += 1
+    bal.set(name, cur)
+  }
+  accounts.forEach((a) => bal.set(a.name, { balance: 0, count: 0 }))
+  for (const t of txs) {
+    if (ym && t.date.slice(0, 7) > ym) continue
+    if (t.type === 'income') bump(t.account, t.amount)
+    else if (t.type === 'expense') bump(t.account, -t.amount)
+    else {
+      bump(t.account, t.amount)
+      if (primary && t.account !== primary) bump(primary, -t.amount, false)
+    }
+  }
+  const known = new Map(accounts.map((a) => [a.name, a]))
+  const order = (a: Account | null) => (a ? (a.is_primary ? -1 : accounts.indexOf(a)) : Number.MAX_SAFE_INTEGER)
+  return [...bal.entries()]
+    .map(([name, v]) => ({ name, account: known.get(name) ?? null, ...v }))
+    .sort((a, b) => order(a.account) - order(b.account) || a.name.localeCompare(b.name))
 }

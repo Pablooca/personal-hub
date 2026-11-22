@@ -1,6 +1,7 @@
 import { addDays, combineDateTime, toDateKey } from '../lib/dates'
 import { uid } from '../lib/format'
-import type { CalendarEvent, Dataset, Project, ProjectTask, Transaction } from '../lib/types'
+import type { Account, CalendarEvent, Category, Dataset, Project, ProjectTask, Transaction } from '../lib/types'
+import { defaultCategories } from '../lib/categories'
 
 /**
  * Synthetic, fictional data for Demo Mode.
@@ -32,99 +33,117 @@ export function buildDemoDataset(today = new Date()): Dataset {
   })
 
   const events: CalendarEvent[] = [
-    ev(0, '07:00', '08:00', 'Morning run — zone 2', 'training', '8 km easy pace', true),
-    ev(0, '09:30', '10:00', 'Stand-up with platform team', 'work', 'Sprint 14 sync'),
-    ev(0, '11:00', '13:00', 'Deep work: inference pipeline', 'research', 'Profile batching & quantisation'),
-    ev(0, '16:00', '17:30', 'Lecture: Distributed Systems', 'master', 'Raft & consensus'),
-    ev(0, '20:00', '20:30', 'Review weekly budget', 'personal'),
-    ev(1, '08:00', '09:00', 'Gym — strength block', 'training'),
-    ev(1, '10:00', '11:30', 'Design review: telemetry service', 'work'),
-    ev(1, '15:00', '16:00', 'Supervisor meeting', 'research', 'Bring ablation results'),
-    ev(2, '09:00', '12:00', 'Lab session: GPU cluster', 'master'),
-    ev(2, '18:30', '20:00', 'Dinner with friends', 'personal'),
-    ev(3, '07:00', '08:15', 'Interval training', 'training'),
-    ev(3, '14:00', '15:00', 'Paper reading group', 'research', 'Mixture-of-Experts routing'),
-    ev(4, '10:00', '11:00', 'Quarterly planning', 'work'),
-    ev(4, '17:00', '19:00', 'Assignment 3 deadline prep', 'master'),
-    ev(5, '10:00', '12:00', 'Long ride — 60 km', 'training'),
-    ev(6, '11:00', '12:00', 'Call family', 'personal'),
-    ev(8, '09:00', '17:00', 'Workshop: MLOps in production', 'work'),
-    ev(10, '16:00', '17:00', 'Thesis checkpoint', 'master'),
-    ev(13, '12:00', '13:00', 'Dentist', 'personal'),
-    ev(-1, '09:30', '10:00', 'Stand-up with platform team', 'work', '', true),
-    ev(-1, '17:00', '18:30', 'Seminar: Graph Neural Nets', 'master', '', true),
-    ev(-2, '07:00', '08:00', 'Morning run', 'training', '', true),
-    ev(-3, '15:00', '16:00', 'Experiment sweep kickoff', 'research', '', true),
-    ev(-5, '10:00', '11:00', 'Retro', 'work', '', true),
-    ev(-8, '19:00', '21:00', 'Climbing session', 'training', '', true),
+    ev(0, '07:00', '08:00', 'Rodaje matinal — zona 2', 'training', '8 km a ritmo suave', true),
+    ev(0, '09:30', '10:00', 'Daily con el equipo de plataforma', 'work', 'Sincronización sprint 14'),
+    ev(0, '11:00', '13:00', 'Trabajo profundo: pipeline de inferencia', 'research', 'Perfilar batching y cuantización'),
+    ev(0, '16:00', '17:30', 'Clase: Sistemas Distribuidos', 'master', 'Raft y consenso'),
+    ev(0, '20:00', '20:30', 'Revisar presupuesto semanal', 'personal'),
+    ev(1, '08:00', '09:00', 'Gimnasio — bloque de fuerza', 'training'),
+    ev(1, '10:00', '11:30', 'Revisión de diseño: servicio de telemetría', 'work'),
+    ev(1, '15:00', '16:00', 'Reunión con el director', 'research', 'Llevar resultados de la ablación'),
+    ev(2, '09:00', '12:00', 'Laboratorio: clúster de GPUs', 'master'),
+    ev(2, '18:30', '20:00', 'Cena con amigos', 'personal'),
+    ev(3, '07:00', '08:15', 'Series en pista', 'training'),
+    ev(3, '14:00', '15:00', 'Grupo de lectura de papers', 'research', 'Enrutado en Mixture-of-Experts'),
+    ev(4, '10:00', '11:00', 'Planificación trimestral', 'work'),
+    ev(4, '17:00', '19:00', 'Preparar entrega de la práctica 3', 'master'),
+    ev(5, '10:00', '12:00', 'Salida larga en bici — 60 km', 'training'),
+    ev(6, '11:00', '12:00', 'Llamar a la familia', 'personal'),
+    ev(8, '09:00', '17:00', 'Taller: MLOps en producción', 'work'),
+    ev(10, '16:00', '17:00', 'Revisión del TFM', 'master'),
+    ev(13, '12:00', '13:00', 'Dentista', 'personal'),
+    ev(-1, '09:30', '10:00', 'Daily con el equipo de plataforma', 'work', '', true),
+    ev(-1, '17:00', '18:30', 'Seminario: Graph Neural Networks', 'master', '', true),
+    ev(-2, '07:00', '08:00', 'Rodaje matinal', 'training', '', true),
+    ev(-3, '15:00', '16:00', 'Lanzar barrido de experimentos', 'research', '', true),
+    ev(-5, '10:00', '11:00', 'Retrospectiva', 'work', '', true),
+    ev(-8, '19:00', '21:00', 'Sesión de escalada', 'training', '', true),
   ]
 
   // -------------------------------------------------------------- projects
-  const pj = (p: Omit<Project, 'id' | 'updated_at'>): Project => ({ ...p, id: uid(), updated_at: now })
+  const pj = (p: Omit<Project, 'id' | 'updated_at' | 'description' | 'start_date'> & Partial<Pick<Project, 'description' | 'start_date'>>): Project => ({
+    description: '',
+    start_date: null,
+    ...p,
+    id: uid(),
+    updated_at: now,
+  })
 
   const projects: Project[] = [
     pj({
-      title: 'Sparse attention benchmark',
+      title: 'Benchmark de atención dispersa',
+      description: 'Comparar kernels de atención block-sparse frente a atención densa con distintas longitudes de secuencia y GPUs, y publicar los resultados en un workshop.',
+      start_date: day(-40),
       area: 'research',
       status: 'in_progress',
       progress: 62,
       priority: 'high',
       deadline: day(18),
       repo_url: 'https://github.com/example/sparse-attn-bench',
-      notes: '## Hypothesis\nBlock-sparse kernels beat dense attention above 8k tokens.\n\n- [x] Baseline on A100\n- [ ] Ablate block size 64/128',
+      notes: '## Hipótesis\nLos kernels block-sparse superan a la atención densa a partir de 8k tokens.\n\n- [x] Baseline en A100\n- [ ] Ablación tamaño de bloque 64/128',
     }),
     pj({
       title: 'Personal Hub (Life OS)',
+      description: 'Centro de mando privado para agenda, proyectos y finanzas. También sirve como pieza de portfolio full-stack con Supabase y RLS.',
+      start_date: day(-21),
       area: 'engineering',
       status: 'in_progress',
       progress: 78,
       priority: 'medium',
       deadline: day(9),
       repo_url: 'https://github.com/example/personal-hub',
-      notes: 'React + Supabase. RLS per user. Demo mode uses localStorage.',
+      notes: 'React + Supabase. RLS por usuario. El modo demo usa localStorage.',
     }),
     pj({
-      title: 'Thesis — Chapter 2 draft',
+      title: 'TFM — Borrador del capítulo 2',
+      description: 'Estado del arte para el TFM: transformers eficientes, dispersión y diseño consciente del hardware.',
+      start_date: day(-60),
       area: 'academic',
       status: 'review',
       progress: 90,
       priority: 'high',
       deadline: day(5),
       repo_url: null,
-      notes: 'Waiting on supervisor feedback for section 2.3.',
+      notes: 'Pendiente del feedback del director para la sección 2.3.',
     }),
     pj({
-      title: 'Telemetry ingestion service',
+      title: 'Servicio de ingesta de telemetría',
+      description: 'Servicio para ingerir, almacenar y consultar telemetría de dispositivos a ~50k eventos/s.',
+      start_date: day(7),
       area: 'engineering',
       status: 'backlog',
       progress: 10,
       priority: 'medium',
       deadline: day(35),
       repo_url: null,
-      notes: 'Evaluate ClickHouse vs TimescaleDB.',
+      notes: 'Evaluar ClickHouse frente a TimescaleDB.',
     }),
     pj({
-      title: 'Half-marathon plan',
+      title: 'Plan de media maratón',
+      description: 'Bloque de doce semanas para una media maratón en primavera.',
+      start_date: day(-32),
       area: 'personal',
       status: 'in_progress',
       progress: 45,
       priority: 'low',
       deadline: day(52),
       repo_url: null,
-      notes: '12-week plan. Target sub 1:45.',
+      notes: 'Plan de 12 semanas. Objetivo: bajar de 1:45.',
     }),
     pj({
-      title: 'Distributed Systems — Lab 2',
+      title: 'Sistemas Distribuidos — Práctica 2',
+      description: 'Implementar elección de líder y replicación de log de Raft en Go.',
+      start_date: day(-25),
       area: 'academic',
       status: 'completed',
       progress: 100,
       priority: 'medium',
       deadline: day(-4),
       repo_url: 'https://github.com/example/ds-lab2',
-      notes: 'Raft leader election + log replication.',
+      notes: 'Elección de líder + replicación de log en Raft.',
     }),
     pj({
-      title: 'Read: Designing Data-Intensive Apps',
+      title: 'Leer: Designing Data-Intensive Applications',
       area: 'personal',
       status: 'backlog',
       progress: 0,
@@ -144,31 +163,32 @@ export function buildDemoDataset(today = new Date()): Dataset {
   })
 
   const project_tasks: ProjectTask[] = [
-    tk(0, 'Reproduce dense baseline', true),
-    tk(0, 'Implement block-sparse kernel', true),
-    tk(0, 'Run sweep over sequence lengths', false),
-    tk(0, 'Write results section', false),
-    tk(1, 'Schema + RLS policies', true),
-    tk(1, 'Calendar month/week views', true),
-    tk(1, 'Finance CSV export', true),
-    tk(1, 'Deploy to Vercel', false),
-    tk(2, 'Literature review', true),
-    tk(2, 'Methodology section', true),
-    tk(2, 'Address feedback', false),
-    tk(3, 'Write ADR for storage engine', false),
-    tk(4, 'Weeks 1–4 base building', true),
-    tk(4, 'Weeks 5–8 tempo', false),
-    tk(5, 'Leader election', true),
-    tk(5, 'Log replication', true),
+    tk(0, 'Reproducir baseline densa', true),
+    tk(0, 'Implementar kernel block-sparse', true),
+    tk(0, 'Barrido de longitudes de secuencia', false),
+    tk(0, 'Redactar sección de resultados', false),
+    tk(1, 'Esquema + políticas RLS', true),
+    tk(1, 'Vistas de mes/semana del calendario', true),
+    tk(1, 'Exportación CSV de finanzas', true),
+    tk(1, 'Desplegar en Vercel', false),
+    tk(2, 'Revisión bibliográfica', true),
+    tk(2, 'Sección de metodología', true),
+    tk(2, 'Aplicar correcciones', false),
+    tk(3, 'Escribir ADR del motor de almacenamiento', false),
+    tk(4, 'Semanas 1–4: base aeróbica', true),
+    tk(4, 'Semanas 5–8: tempo', false),
+    tk(5, 'Elección de líder', true),
+    tk(5, 'Replicación de log', true),
   ]
 
   // ---------------------------------------------------------- transactions
   const transactions: Transaction[] = []
-  const tx = (date: string, type: Transaction['type'], category: string, concept: string, amount: number, account = 'checking') =>
+  const tx = (date: string, type: Transaction['type'], category: string, concept: string, amount: number, account = 'Cuenta nómina') =>
     transactions.push({ id: uid(), date, type, category, concept, amount, account, created_at: now })
 
-  // Six months of plausible synthetic history.
-  for (let m = 0; m < 6; m++) {
+  // Synthetic history from January (at least six months).
+  const months = Math.max(6, today.getMonth() + 1)
+  for (let m = 0; m < months; m++) {
     const base = new Date(today.getFullYear(), today.getMonth() - m, 1)
     const d = (dayOfMonth: number) => {
       const x = new Date(base.getFullYear(), base.getMonth(), dayOfMonth)
@@ -180,27 +200,45 @@ export function buildDemoDataset(today = new Date()): Dataset {
     }
     const jitter = (n: number) => Math.round(n * (0.85 + ((m * 37 + n) % 30) / 100) * 100) / 100
 
-    add(1, 'income', 'salary', 'Monthly salary', 2450)
-    add(3, 'expense', 'housing', 'Rent', 780)
-    add(4, 'expense', 'subscriptions', 'Cloud & streaming bundle', 24.99, 'credit')
-    add(5, 'investment', 'index_fund', 'Global index fund — auto', 300, 'broker')
-    add(6, 'expense', 'groceries', 'Supermarket', jitter(86.4))
-    add(9, 'expense', 'transport', 'Metro pass', 40)
-    add(11, 'expense', 'dining', 'Lunch with team', jitter(32.5), 'credit')
-    add(13, 'expense', 'groceries', 'Supermarket', jitter(72.1))
-    add(15, 'income', 'freelance', 'Consulting invoice', m % 2 === 0 ? 420 : 0)
-    add(16, 'expense', 'health', 'Gym membership', 39.9)
-    add(18, 'expense', 'education', 'Online course', m % 3 === 0 ? 59 : 0, 'credit')
-    add(20, 'expense', 'groceries', 'Supermarket', jitter(64.3))
-    add(22, 'expense', 'leisure', 'Concert tickets', m % 2 === 1 ? 55 : 0, 'credit')
-    add(25, 'investment', 'pension', 'Pension plan', 100, 'broker')
-    add(27, 'expense', 'dining', 'Dinner out', jitter(48))
+    add(1, 'income', 'salary', 'Nómina mensual', 2450)
+    add(3, 'expense', 'housing', 'Alquiler', 780)
+    add(4, 'expense', 'subscriptions', 'Pack cloud y streaming', 24.99, 'Tarjeta de crédito')
+    add(5, 'investment', 'savings', 'Aportación mensual a ahorro', 300, 'Cuenta ahorro')
+    add(6, 'expense', 'groceries', 'Supermercado', jitter(86.4))
+    add(9, 'expense', 'transport', 'Abono transporte', 40)
+    add(11, 'expense', 'dining', 'Comida con el equipo', jitter(32.5), 'Tarjeta de crédito')
+    add(13, 'expense', 'groceries', 'Supermercado', jitter(72.1))
+    add(15, 'income', 'freelance', 'Factura consultoría', m % 2 === 0 ? 420 : 0)
+    add(16, 'expense', 'health', 'Cuota del gimnasio', 39.9)
+    add(18, 'expense', 'education', 'Curso online', m % 3 === 0 ? 59 : 0, 'Tarjeta de crédito')
+    add(20, 'expense', 'groceries', 'Supermercado', jitter(64.3))
+    add(22, 'expense', 'leisure', 'Entradas concierto', m % 2 === 1 ? 55 : 0, 'Tarjeta de crédito')
+    add(25, 'investment', 'pension', 'Plan de pensiones', 100, 'Cuenta ahorro')
+    add(27, 'expense', 'dining', 'Cena fuera', jitter(48))
   }
+
+  // Opening balances on 31 Dec of last year — the recommended way to bring in history.
+  const opening = `${today.getFullYear() - 1}-12-31`
+  tx(opening, 'income', 'opening_balance', 'Saldo inicial', 1840.25, 'Cuenta nómina')
+  tx(opening, 'income', 'opening_balance', 'Saldo inicial', 6200, 'Cuenta ahorro')
+  // Two card payments that arrived via the Apple Pay automation and still need a category.
+  tx(day(0), 'expense', 'uncategorized', 'CAFETERIA LA PLAZA', 4.8, 'Tarjeta de crédito')
+  tx(day(-1), 'expense', 'uncategorized', 'PARKING CENTRO', 6.5, 'Cuenta nómina')
+
+  const accounts: Account[] = [
+    { id: uid(), name: 'Cuenta nómina', kind: 'checking', color: 'sky', is_primary: true, created_at: now },
+    { id: uid(), name: 'Cuenta ahorro', kind: 'savings', color: 'emerald', is_primary: false, created_at: now },
+    { id: uid(), name: 'Tarjeta de crédito', kind: 'credit', color: 'violet', is_primary: false, created_at: now },
+  ]
+
+  const categories: Category[] = defaultCategories().map((c) => ({ ...c, id: uid(), created_at: now }))
 
   return {
     events,
     projects,
     project_tasks,
     transactions: transactions.filter((t) => t.amount > 0),
+    categories,
+    accounts,
   }
 }

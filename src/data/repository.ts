@@ -14,19 +14,24 @@ export interface Repository {
   readonly kind: 'supabase' | 'local'
   loadAll(): Promise<Dataset>
   insert<K extends TableName>(table: K, row: Tables[K]): Promise<Tables[K]>
+  insertMany<K extends TableName>(table: K, rows: Tables[K][]): Promise<Tables[K][]>
   update<K extends TableName>(table: K, id: string, patch: Partial<Tables[K]>): Promise<Tables[K]>
   remove(table: TableName, id: string): Promise<void>
+  /** Make one account the primary one (and un-flag the previous). */
+  setPrimaryAccount(id: string): Promise<void>
   /** Live changes from other devices/tabs. Returns an unsubscribe function. */
   subscribe?(onChange: (e: ChangeEvent) => void): () => void
 }
 
-const TABLES: TableName[] = ['events', 'projects', 'project_tasks', 'transactions']
+const TABLES: TableName[] = ['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts']
 
 const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   events: { column: 'start_at', ascending: true },
   projects: { column: 'updated_at', ascending: false },
   project_tasks: { column: 'created_at', ascending: true },
   transactions: { column: 'date', ascending: false },
+  categories: { column: 'name', ascending: true },
+  accounts: { column: 'created_at', ascending: true },
 }
 
 /** Postgres `numeric` arrives as a string — normalise it. */
@@ -82,6 +87,18 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
       return normalise(table, data)
     },
 
+    async insertMany(table, rows) {
+      const out: Tables[typeof table][] = []
+      // PostgREST handles large payloads fine, but chunking keeps requests small.
+      for (let i = 0; i < rows.length; i += 500) {
+        const chunk = rows.slice(i, i + 500).map((r) => ({ ...strip(r), user_id: userId }))
+        const { data, error } = await client.from(table).insert(chunk).select()
+        if (error) throw error
+        out.push(...(data ?? []).map((r) => normalise(table, r as Tables[typeof table])))
+      }
+      return out
+    },
+
     async update(table, id, patch) {
       const { id: _id, user_id: _uid, ...rest } = patch as Record<string, unknown>
       const { data, error } = await client.from(table).update(strip(rest)).eq('id', id).select().single()
@@ -91,6 +108,11 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 
     async remove(table, id) {
       const { error } = await client.from(table).delete().eq('id', id)
+      if (error) throw error
+    },
+
+    async setPrimaryAccount(id) {
+      const { error } = await client.rpc('set_primary_account', { account_id: id })
       if (error) throw error
     },
 
@@ -117,7 +139,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v1'
+const DEMO_KEY = 'ph-demo-dataset-v3'
 
 function readDemo(): Dataset {
   try {
@@ -165,6 +187,12 @@ export function createLocalRepository(): Repository {
       return row
     },
 
+    async insertMany(table, rows) {
+      ;(db[table] as Tables[typeof table][]).push(...rows)
+      commit()
+      return rows
+    },
+
     async update(table, id, patch) {
       const rows = db[table] as Tables[typeof table][]
       const idx = rows.findIndex((r) => r.id === id)
@@ -179,6 +207,11 @@ export function createLocalRepository(): Repository {
     async remove(table, id) {
       ;(db as Record<TableName, { id: string }[]>)[table] = db[table].filter((r) => r.id !== id)
       if (table === 'projects') db.project_tasks = db.project_tasks.filter((t) => t.project_id !== id)
+      commit()
+    },
+
+    async setPrimaryAccount(id) {
+      db.accounts = db.accounts.map((a) => ({ ...a, is_primary: a.id === id }))
       commit()
     },
   }

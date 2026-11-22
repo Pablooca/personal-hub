@@ -161,7 +161,7 @@ export function Modal({
       >
         <header className="flex items-center justify-between border-b border-line px-5 py-3.5">
           <h2 className="text-sm font-semibold">{title}</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Cerrar">
             <X className="size-4" />
           </Button>
         </header>

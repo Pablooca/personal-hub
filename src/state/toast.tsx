@@ -33,7 +33,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <button
               className="text-faint hover:text-fg"
               onClick={() => setToasts((all) => all.filter((x) => x.id !== t.id))}
-              aria-label="Dismiss"
+              aria-label="Descartar"
             >
               <X className="size-4" />
             </button>

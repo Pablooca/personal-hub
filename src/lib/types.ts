@@ -33,7 +33,9 @@ export interface Project {
   status: ProjectStatus
   progress: number
   priority: Priority
-  deadline: string | null // YYYY-MM-DD
+  description: string
+  start_date: string | null // YYYY-MM-DD
+  deadline: string | null // YYYY-MM-DD — end date
   repo_url: string | null
   notes: string
   updated_at: string
@@ -60,11 +62,38 @@ export interface Transaction {
   created_at: string
 }
 
+export const CATEGORY_COLORS = ['rose', 'orange', 'amber', 'lime', 'emerald', 'teal', 'cyan', 'sky', 'indigo', 'violet', 'fuchsia', 'slate'] as const
+export type CategoryColor = (typeof CATEGORY_COLORS)[number]
+
+export interface Category {
+  id: string
+  user_id?: string
+  name: string // lower-case; matches transactions.category
+  type: TxType
+  color: CategoryColor
+  created_at: string
+}
+
+export const ACCOUNT_KINDS = ['checking', 'savings', 'credit', 'cash', 'investment'] as const
+export type AccountKind = (typeof ACCOUNT_KINDS)[number]
+
+export interface Account {
+  id: string
+  user_id?: string
+  name: string
+  kind: AccountKind
+  color: CategoryColor
+  is_primary: boolean
+  created_at: string
+}
+
 export interface Tables {
   events: CalendarEvent
   projects: Project
   project_tasks: ProjectTask
   transactions: Transaction
+  categories: Category
+  accounts: Account
 }
 
 export type TableName = keyof Tables

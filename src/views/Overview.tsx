@@ -3,10 +3,12 @@ import { ArrowRight, CalendarClock, CheckSquare, FolderKanban, PiggyBank, Plus, 
 import { PageHeader, type ViewId } from '../components/Shell'
 import { EventModal, type EventDraft } from '../components/EventModal'
 import { Badge, Button, Card, Check, Empty, ProgressBar, Segmented, Stat, cx } from '../components/ui'
-import { addDays, combineDateTime, daysUntil, fromDateKey, isSameDay, monthKey, startOfDay, toDateKey, toTimeValue } from '../lib/dates'
-import { inMonth, summarise } from '../lib/finance'
-import { fmtDate, fmtMoney, fmtMonth, fmtPct, fmtTime, fmtWeekday } from '../lib/format'
-import { AREA_STYLES, CATEGORY_STYLES, STATUS_STYLES, TX_CATEGORY_SUGGESTIONS } from '../lib/theme'
+import { addDays, combineDateTime, daysUntil, isSameDay, monthKey, startOfDay, toDateKey, toTimeValue } from '../lib/dates'
+import { inMonth, summarise, yearToDate } from '../lib/finance'
+import { capitalize, fmtDate, fmtMoney, fmtMonth, fmtPct, fmtTime, fmtWeekday } from '../lib/format'
+import { AREA_LABELS, AREA_STYLES, CATEGORY_STYLES, STATUS_STYLES } from '../lib/theme'
+import { categoryLabel, categoryNames } from '../lib/categories'
+import { usePrimaryAccountName } from './finance/TxForms'
 import type { CalendarEvent } from '../lib/types'
 import { useData } from '../state/data'
 import { useToast } from '../state/toast'
@@ -44,26 +46,32 @@ export function Overview({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
 
   const ym = monthKey(now)
   const month = useMemo(() => summarise(inMonth(data.transactions, ym)), [data.transactions, ym])
+  const ytd = useMemo(() => summarise(yearToDate(data.transactions, ym)), [data.transactions, ym])
   const doneToday = today.filter((e) => e.is_completed).length
 
   const hour = now.getHours()
-  const greeting = hour < 6 ? 'Late night' : hour < 13 ? 'Good morning' : hour < 20 ? 'Good afternoon' : 'Good evening'
+  const greeting = hour < 6 ? 'Buenas noches' : hour < 13 ? 'Buenos días' : hour < 21 ? 'Buenas tardes' : 'Buenas noches'
 
   return (
     <>
       <PageHeader eyebrow={fmtDate(now, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} title={greeting} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Today" value={`${doneToday}/${today.length}`} hint="events completed" icon={<CheckSquare className="size-4" />} />
-        <Stat label="Active projects" value={active.length} hint={`${data.projects.filter((p) => p.status === 'completed').length} completed`} icon={<FolderKanban className="size-4" />} />
+        <Stat label="Hoy" value={`${doneToday}/${today.length}`} hint="eventos completados" icon={<CheckSquare className="size-4" />} />
+        <Stat label="Proyectos activos" value={active.length} hint={`${data.projects.filter((p) => p.status === 'completed').length} completados`} icon={<FolderKanban className="size-4" />} />
         <Stat
-          label="Net · month"
+          label="Balance · mes"
           value={fmtMoney(month.net)}
           tone={month.net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}
-          hint={fmtMonth(now)}
+          hint={capitalize(fmtMonth(now))}
           icon={<Receipt className="size-4" />}
         />
-        <Stat label="Savings rate" value={fmtPct(month.savingsRate)} hint="(income − expenses) / income" icon={<PiggyBank className="size-4" />} />
+        <Stat
+          label={`Tasa de ahorro · ${now.getFullYear()}`}
+          value={fmtPct(ytd.savingsRate)}
+          hint={`Acumulado del año · este mes ${fmtPct(month.savingsRate)}`}
+          icon={<PiggyBank className="size-4" />}
+        />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -74,19 +82,19 @@ export function Overview({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
           action={
             <div className="flex gap-1">
               <Button size="sm" variant="ghost" onClick={() => setDraft({ dateKey: todayKey })}>
-                <Plus className="size-3.5" /> Event
+                <Plus className="size-3.5" /> Evento
               </Button>
               <Button size="sm" variant="ghost" onClick={() => onNavigate('calendar')}>
-                Calendar <ArrowRight className="size-3.5" />
+                Agenda <ArrowRight className="size-3.5" />
               </Button>
             </div>
           }
         >
           <div className="grid gap-5 md:grid-cols-2">
             <div>
-              <div className="eyebrow mb-2">Today</div>
+              <div className="eyebrow mb-2">Hoy</div>
               {today.length === 0 ? (
-                <Empty icon={<CalendarClock className="size-5" />}>Nothing scheduled today.</Empty>
+                <Empty icon={<CalendarClock className="size-5" />}>Nada programado para hoy.</Empty>
               ) : (
                 <ul className="space-y-1.5">
                   {today.map((e) => (
@@ -96,9 +104,9 @@ export function Overview({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
               )}
             </div>
             <div>
-              <div className="eyebrow mb-2">Next 7 days</div>
+              <div className="eyebrow mb-2">Próximos 7 días</div>
               {upcoming.length === 0 ? (
-                <Empty>No upcoming events.</Empty>
+                <Empty>No hay eventos próximos.</Empty>
               ) : (
                 <ul className="space-y-1.5">
                   {upcoming.map((e) => (
@@ -116,15 +124,15 @@ export function Overview({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
         {/* ------------------------------------------------ projects */}
         <Card
           className="lg:col-span-2"
-          title="Active projects"
+          title="Proyectos activos"
           action={
             <Button size="sm" variant="ghost" onClick={() => onNavigate('projects')}>
-              Tracker <ArrowRight className="size-3.5" />
+              Proyectos <ArrowRight className="size-3.5" />
             </Button>
           }
         >
           {active.length === 0 ? (
-            <Empty icon={<FolderKanban className="size-5" />}>No active projects.</Empty>
+            <Empty icon={<FolderKanban className="size-5" />}>No hay proyectos activos.</Empty>
           ) : (
             <ul className="divide-y divide-line">
               {active.slice(0, 6).map((p) => {
@@ -138,13 +146,13 @@ export function Overview({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
                         <span className="truncate text-sm font-medium">{p.title}</span>
                       </div>
                       <div className="mt-1 flex items-center gap-2 pl-3.5 text-xs text-muted">
-                        <Badge className={AREA_STYLES[p.area]}>{p.area}</Badge>
+                        <Badge className={AREA_STYLES[p.area]}>{AREA_LABELS[p.area]}</Badge>
                         <span className="num">
-                          {tasks.filter((t) => t.is_done).length}/{tasks.length} tasks
+                          {tasks.filter((t) => t.is_done).length}/{tasks.length} tareas
                         </span>
                         {due !== null && (
                           <span className={cx('num', due < 0 ? 'text-rose-500' : due <= 7 ? 'text-amber-600 dark:text-amber-400' : '')}>
-                            {due < 0 ? `${-due}d overdue` : due === 0 ? 'due today' : `${due}d left`}
+                            {due < 0 ? `${-due} d de retraso` : due === 0 ? 'vence hoy' : `quedan ${due} d`}
                           </span>
                         )}
                       </div>
@@ -162,28 +170,28 @@ export function Overview({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
 
         {/* ------------------------------------------------ month finance */}
         <Card
-          title={`Finance · ${fmtDate(now, { month: 'long' })}`}
+          title={`Finanzas · ${capitalize(fmtDate(now, { month: 'long' }))}`}
           action={
             <Button size="sm" variant="ghost" onClick={() => onNavigate('finance')}>
-              Ledger <ArrowRight className="size-3.5" />
+              Finanzas <ArrowRight className="size-3.5" />
             </Button>
           }
         >
           <dl className="space-y-3 text-sm">
-            <Row icon={<TrendingUp className="size-4 text-emerald-500" />} label="Income" value={fmtMoney(month.income)} />
-            <Row icon={<TrendingDown className="size-4 text-rose-500" />} label="Expenses" value={fmtMoney(month.expense)} />
-            <Row icon={<PiggyBank className="size-4 text-sky-500" />} label="Invested" value={fmtMoney(month.investment)} />
+            <Row icon={<TrendingUp className="size-4 text-emerald-500" />} label="Ingresos" value={fmtMoney(month.income)} />
+            <Row icon={<TrendingDown className="size-4 text-rose-500" />} label="Gastos" value={fmtMoney(month.expense)} />
+            <Row icon={<PiggyBank className="size-4 text-sky-500" />} label="Ahorrado" value={fmtMoney(month.investment)} />
           </dl>
           <div className="mt-4 border-t border-line pt-4">
             <div className="flex items-baseline justify-between text-xs text-muted">
-              <span>Savings rate</span>
+              <span>Tasa de ahorro (mes)</span>
               <span className="num text-base font-semibold text-fg">{fmtPct(month.savingsRate)}</span>
             </div>
             <ProgressBar className="mt-2" value={Math.max(0, month.savingsRate)} tone="emerald" />
             {month.income > 0 && (
               <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-line">
-                <div className="bg-rose-500" style={{ width: `${Math.min(100, (month.expense / month.income) * 100)}%` }} title="Expenses" />
-                <div className="bg-sky-500" style={{ width: `${Math.min(100, (month.investment / month.income) * 100)}%` }} title="Invested" />
+                <div className="bg-rose-500" style={{ width: `${Math.min(100, (month.expense / month.income) * 100)}%` }} title="Gastos" />
+                <div className="bg-sky-500" style={{ width: `${Math.min(100, (month.investment / month.income) * 100)}%` }} title="Ahorrado" />
               </div>
             )}
           </div>
@@ -217,7 +225,7 @@ function AgendaRow({ e, onToggle, onOpen, showDay }: { e: CalendarEvent; onToggl
         CATEGORY_STYLES[e.category].bar,
       )}
     >
-      <Check checked={e.is_completed} onChange={onToggle} label={`Complete ${e.title}`} />
+      <Check checked={e.is_completed} onChange={onToggle} label={`Completar ${e.title}`} />
       <div className="min-w-0 flex-1">
         <div className={cx('truncate text-sm', e.is_completed && 'text-faint line-through')}>{e.title}</div>
         <div className="num text-[11px] text-muted">
@@ -240,7 +248,10 @@ function QuickCapture() {
     return toTimeValue(d)
   })
   const [amount, setAmount] = useState('')
-  const [category, setCategory] = useState('groceries')
+  const { data } = useData()
+  const primary = usePrimaryAccountName()
+  const expenseCategories = categoryNames(data, 'expense')
+  const [category, setCategory] = useState(() => expenseCategories[0] ?? 'other')
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -257,7 +268,7 @@ function QuickCapture() {
         category: 'personal',
         is_completed: false,
       })
-      if (ok) toast('success', 'Task added to today')
+      if (ok) toast('success', 'Tarea añadida a hoy')
     } else {
       const value = Number(amount.replace(',', '.'))
       if (!Number.isFinite(value) || value <= 0) return
@@ -267,36 +278,36 @@ function QuickCapture() {
         category: category.trim() || 'other',
         concept: title.trim(),
         amount: Math.round(value * 100) / 100,
-        account: 'checking',
+        account: primary,
       })
-      if (ok) toast('success', `Expense of ${fmtMoney(value)} logged`)
+      if (ok) toast('success', `Gasto de ${fmtMoney(value)} registrado`)
       setAmount('')
     }
     setTitle('')
   }
 
   return (
-    <Card title="Quick capture" action={<Segmented value={mode} onChange={setMode} options={[{ value: 'task', label: 'Task' }, { value: 'expense', label: 'Expense' }]} />}>
+    <Card title="Captura rápida" action={<Segmented value={mode} onChange={setMode} options={[{ value: 'task', label: 'Tarea' }, { value: 'expense', label: 'Gasto' }]} />}>
       <form onSubmit={submit} className="space-y-3">
         <input
           className="field"
-          placeholder={mode === 'task' ? 'e.g. Email supervisor' : 'Concept (e.g. Coffee beans)'}
+          placeholder={mode === 'task' ? 'p. ej. Escribir al tutor' : 'Concepto (p. ej. Café)'}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={200}
         />
         {mode === 'task' ? (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted">Today at</span>
+            <span className="text-xs text-muted">Hoy a las</span>
             <input type="time" className="field num w-36" value={time} onChange={(e) => setTime(e.target.value)} />
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            <input className="field num" inputMode="decimal" placeholder="0.00 €" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <input className="field num" inputMode="decimal" placeholder="0,00 €" value={amount} onChange={(e) => setAmount(e.target.value)} />
             <select className="field" value={category} onChange={(e) => setCategory(e.target.value)}>
-              {TX_CATEGORY_SUGGESTIONS.expense.map((c) => (
+              {expenseCategories.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {categoryLabel(c)}
                 </option>
               ))}
             </select>
@@ -304,10 +315,10 @@ function QuickCapture() {
         )}
         <Button type="submit" variant="primary" className="w-full" disabled={mode === 'task' ? !title.trim() : !amount}>
           <Plus className="size-4" />
-          {mode === 'task' ? 'Add task' : 'Log expense'}
+          {mode === 'task' ? 'Añadir tarea' : 'Registrar gasto'}
         </Button>
         <p className="text-center font-mono text-[10px] text-faint">
-          {mode === 'task' ? 'Creates a 30-min event in today’s agenda' : `Logged on ${fmtDate(fromDateKey(toDateKey(new Date())))}`}
+          {mode === 'task' ? 'Crea un evento de 30 min en la agenda de hoy' : `Hoy · cuenta «${primary}»`}
         </p>
       </form>
     </Card>

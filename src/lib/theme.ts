@@ -1,27 +1,27 @@
-import type { EventCategory, Priority, ProjectArea, ProjectStatus, TxType } from './types'
+import type { AccountKind, EventCategory, Priority, ProjectArea, ProjectStatus, TxType } from './types'
 
 /** Category palette — Tailwind classes kept literal so they are not purged. */
 export const CATEGORY_STYLES: Record<EventCategory, { dot: string; chip: string; bar: string; label: string }> = {
   work: {
-    label: 'Work',
+    label: 'Trabajo',
     dot: 'bg-sky-500',
     bar: 'border-l-sky-500',
     chip: 'bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/25',
   },
   master: {
-    label: 'Master',
+    label: 'Máster',
     dot: 'bg-violet-500',
     bar: 'border-l-violet-500',
     chip: 'bg-violet-500/12 text-violet-700 dark:text-violet-300 border-violet-500/25',
   },
   research: {
-    label: 'Research',
+    label: 'Investigación',
     dot: 'bg-emerald-500',
     bar: 'border-l-emerald-500',
     chip: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 border-emerald-500/25',
   },
   training: {
-    label: 'Training',
+    label: 'Entrenamiento',
     dot: 'bg-amber-500',
     bar: 'border-l-amber-500',
     chip: 'bg-amber-500/14 text-amber-700 dark:text-amber-300 border-amber-500/30',
@@ -42,10 +42,10 @@ export const AREA_STYLES: Record<ProjectArea, string> = {
 }
 
 export const STATUS_STYLES: Record<ProjectStatus, { label: string; dot: string }> = {
-  backlog: { label: 'Backlog', dot: 'bg-slate-400' },
-  in_progress: { label: 'In progress', dot: 'bg-sky-500' },
-  review: { label: 'Review', dot: 'bg-amber-500' },
-  completed: { label: 'Completed', dot: 'bg-emerald-500' },
+  backlog: { label: 'Pendiente', dot: 'bg-slate-400' },
+  in_progress: { label: 'En curso', dot: 'bg-sky-500' },
+  review: { label: 'En revisión', dot: 'bg-amber-500' },
+  completed: { label: 'Completado', dot: 'bg-emerald-500' },
 }
 
 export const PRIORITY_STYLES: Record<Priority, string> = {
@@ -55,13 +55,30 @@ export const PRIORITY_STYLES: Record<Priority, string> = {
 }
 
 export const TX_STYLES: Record<TxType, { label: string; text: string; bg: string; sign: string }> = {
-  income: { label: 'Income', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500', sign: '+' },
-  expense: { label: 'Expense', text: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500', sign: '−' },
-  investment: { label: 'Investment', text: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500', sign: '→' },
+  income: { label: 'Ingreso', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500', sign: '+' },
+  expense: { label: 'Gasto', text: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500', sign: '−' },
+  investment: { label: 'Ahorro', text: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500', sign: '→' },
 }
 
 export const TX_CATEGORY_SUGGESTIONS: Record<TxType, string[]> = {
   income: ['salary', 'scholarship', 'freelance', 'refund', 'other'],
   expense: ['groceries', 'dining', 'transport', 'housing', 'subscriptions', 'health', 'education', 'leisure', 'other'],
-  investment: ['index_fund', 'etf', 'pension', 'crypto', 'savings'],
+  investment: ['savings', 'index_fund', 'pension', 'emergency_fund'],
+}
+
+export const AREA_LABELS: Record<ProjectArea, string> = {
+  research: 'Investigación',
+  engineering: 'Ingeniería',
+  academic: 'Académico',
+  personal: 'Personal',
+}
+
+export const PRIORITY_LABELS: Record<Priority, string> = { low: 'Baja', medium: 'Media', high: 'Alta' }
+
+export const ACCOUNT_KIND_LABELS: Record<AccountKind, string> = {
+  checking: 'Cuenta corriente',
+  savings: 'Cuenta de ahorro',
+  credit: 'Tarjeta de crédito',
+  cash: 'Efectivo',
+  investment: 'Inversión',
 }

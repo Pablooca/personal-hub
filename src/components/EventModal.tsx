@@ -51,7 +51,7 @@ export function EventModal({ draft, onClose }: { draft: EventDraft | null; onClo
     if (editing && draft?.id) {
       await update('events', draft.id, payload)
     } else if (await create('events', payload)) {
-      toast('success', 'Event created')
+      toast('success', 'Evento creado')
     }
   }
 
@@ -59,26 +59,26 @@ export function EventModal({ draft, onClose }: { draft: EventDraft | null; onClo
     if (!draft?.id) return
     onClose()
     await remove('events', draft.id)
-    toast('success', 'Event deleted')
+    toast('success', 'Evento eliminado')
   }
 
   return (
     <Modal
       open={draft !== null}
       onClose={onClose}
-      title={editing ? 'Edit event' : 'New event'}
+      title={editing ? 'Editar evento' : 'Nuevo evento'}
       footer={
         <>
           {editing && (
             <Button variant="danger" className="mr-auto" onClick={del}>
-              <Trash2 className="size-4" /> Delete
+              <Trash2 className="size-4" /> Eliminar
             </Button>
           )}
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            Cancelar
           </Button>
           <Button variant="primary" onClick={save} disabled={invalid}>
-            {editing ? 'Save' : 'Create'}
+            {editing ? 'Guardar' : 'Crear'}
           </Button>
         </>
       }
@@ -90,24 +90,24 @@ export function EventModal({ draft, onClose }: { draft: EventDraft | null; onClo
           void save()
         }}
       >
-        <Field label="Title">
-          <input className="field" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What's happening?" maxLength={200} />
+        <Field label="Título">
+          <input className="field" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="¿Qué tienes?" maxLength={200} />
         </Field>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Field label="Date" className="col-span-2 sm:col-span-1">
+          <Field label="Fecha" className="col-span-2 sm:col-span-1">
             <input type="date" className="field num" value={date} onChange={(e) => setDate(e.target.value)} required />
           </Field>
-          <Field label="Start">
+          <Field label="Inicio">
             <input type="time" className="field num" value={start} onChange={(e) => setStart(e.target.value)} />
           </Field>
-          <Field label="End">
+          <Field label="Fin">
             <input type="time" className="field num" value={end} onChange={(e) => setEnd(e.target.value)} />
           </Field>
         </div>
-        {end < start && <p className="-mt-2 text-xs text-rose-500">End time must be after start time.</p>}
+        {end < start && <p className="-mt-2 text-xs text-rose-500">La hora de fin debe ser posterior a la de inicio.</p>}
 
         <div>
-          <span className="label">Category</span>
+          <span className="label">Categoría</span>
           <div className="flex flex-wrap gap-1.5">
             {EVENT_CATEGORIES.map((c) => (
               <button
@@ -126,13 +126,13 @@ export function EventModal({ draft, onClose }: { draft: EventDraft | null; onClo
           </div>
         </div>
 
-        <Field label="Description">
-          <textarea className="field" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Notes, agenda, links…" />
+        <Field label="Descripción">
+          <textarea className="field" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Notas, orden del día, enlaces…" />
         </Field>
 
         <label className="flex items-center gap-2.5 text-sm">
-          <Check checked={done} onChange={setDone} label="Completed" />
-          Mark as completed
+          <Check checked={done} onChange={setDone} label="Completado" />
+          Marcar como completado
         </label>
         <button type="submit" hidden />
       </form>

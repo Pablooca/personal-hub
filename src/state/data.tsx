@@ -10,15 +10,17 @@ interface DataApi {
   error: string | null
   source: Repository['kind']
   create<K extends TableName>(table: K, row: NewRow<K>): Promise<Tables[K] | null>
+  createMany<K extends TableName>(table: K, rows: NewRow<K>[]): Promise<Tables[K][] | null>
   update<K extends TableName>(table: K, id: string, patch: Partial<Tables[K]>): Promise<void>
   remove(table: TableName, id: string): Promise<void>
+  setPrimaryAccount(id: string): Promise<void>
   reload(): Promise<void>
 }
 
-const EMPTY: Dataset = { events: [], projects: [], project_tasks: [], transactions: [] }
+const EMPTY: Dataset = { events: [], projects: [], project_tasks: [], transactions: [], categories: [], accounts: [] }
 const Ctx = createContext<DataApi | null>(null)
 
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : 'Unexpected error')
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : 'Error inesperado')
 
 /**
  * Single source of truth for the four tables. Writes are optimistic: the UI
@@ -79,7 +81,28 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
         return saved
       } catch (e) {
         setData((d) => ({ ...d, [table]: (d[table] as { id: string }[]).filter((r) => r.id !== full.id) }))
-        toast('error', `Could not save: ${errMsg(e)}`)
+        toast('error', `No se ha podido guardar: ${errMsg(e)}`)
+        return null
+      }
+    },
+    [repo, toast],
+  )
+
+  const createMany = useCallback<DataApi['createMany']>(
+    async (table, rows) => {
+      if (rows.length === 0) return []
+      const ts = new Date().toISOString()
+      const full = rows.map((row) => ({ created_at: ts, ...(table === 'projects' ? { updated_at: ts } : {}), ...row, id: row.id ?? uid() })) as unknown as Tables[typeof table][]
+      const ids = new Set(full.map((r) => r.id))
+      setData((d) => ({ ...d, [table]: [...d[table], ...full] }))
+      try {
+        const saved = await repo.insertMany(table, full)
+        const byId = new Map(saved.map((r) => [r.id, r]))
+        setData((d) => ({ ...d, [table]: (d[table] as { id: string }[]).map((r) => byId.get(r.id) ?? r) }))
+        return saved
+      } catch (e) {
+        setData((d) => ({ ...d, [table]: (d[table] as { id: string }[]).filter((r) => !ids.has(r.id)) }))
+        toast('error', `No se ha podido guardar: ${errMsg(e)}`)
         return null
       }
     },
@@ -98,7 +121,7 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
         swap(await repo.update(table, id, patch))
       } catch (e) {
         swap(prev)
-        toast('error', `Could not update: ${errMsg(e)}`)
+        toast('error', `No se ha podido actualizar: ${errMsg(e)}`)
       }
     },
     [repo, toast],
@@ -116,15 +139,29 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
         await repo.remove(table, id)
       } catch (e) {
         setData(snapshot)
-        toast('error', `Could not delete: ${errMsg(e)}`)
+        toast('error', `No se ha podido eliminar: ${errMsg(e)}`)
+      }
+    },
+    [repo, toast],
+  )
+
+  const setPrimaryAccount = useCallback<DataApi['setPrimaryAccount']>(
+    async (id) => {
+      const snapshot = dataRef.current.accounts
+      setData((d) => ({ ...d, accounts: d.accounts.map((a) => ({ ...a, is_primary: a.id === id })) }))
+      try {
+        await repo.setPrimaryAccount(id)
+      } catch (e) {
+        setData((d) => ({ ...d, accounts: snapshot }))
+        toast('error', `No se ha podido cambiar la cuenta principal: ${errMsg(e)}`)
       }
     },
     [repo, toast],
   )
 
   const value = useMemo<DataApi>(
-    () => ({ data, loading, error, source: repo.kind, create, update, remove, reload }),
-    [data, loading, error, repo.kind, create, update, remove, reload],
+    () => ({ data, loading, error, source: repo.kind, create, createMany, update, remove, setPrimaryAccount, reload }),
+    [data, loading, error, repo.kind, create, createMany, update, remove, setPrimaryAccount, reload],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

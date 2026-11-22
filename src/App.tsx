@@ -11,7 +11,7 @@ import { Button } from './components/ui'
 import { Overview } from './views/Overview'
 import { CalendarView } from './views/Calendar'
 import { ProjectsView } from './views/Projects'
-import { FinanceView } from './views/Finance'
+import { FinanceView } from './views/finance/FinanceView'
 
 type Mode = { kind: 'loading' } | { kind: 'login' } | { kind: 'demo' } | { kind: 'supabase'; session: Session }
 
@@ -97,7 +97,7 @@ export default function App() {
 
   if (!repo) return <Login onDemo={enterDemo} theme={theme} toggleTheme={toggle} />
 
-  const userLabel = mode.kind === 'supabase' ? (mode.session.user.email ?? 'Signed in') : 'demo@personal-hub.local'
+  const userLabel = mode.kind === 'supabase' ? (mode.session.user.email ?? 'Sesión iniciada') : 'demo@personal-hub.local'
 
   return (
     <DataProvider key={`${repo.kind}-${userId ?? 'demo'}-${demoEpoch}`} repo={repo}>
@@ -138,13 +138,13 @@ function Workspace(props: {
     <Shell view={view} onNavigate={navigate} {...props}>
       {error ? (
         <div className="card mx-auto mt-10 max-w-lg p-6 text-sm">
-          <h2 className="font-semibold">Could not load your data</h2>
+          <h2 className="font-semibold">No se han podido cargar tus datos</h2>
           <p className="mt-2 font-mono text-xs text-rose-600 dark:text-rose-400">{error}</p>
           <p className="mt-3 text-muted">
-            Make sure you ran <code className="num">supabase/schema.sql</code> in the Supabase SQL Editor.
+            Comprueba que has ejecutado <code className="num">supabase/schema.sql</code> en el SQL Editor de Supabase.
           </p>
           <Button className="mt-4" onClick={() => void reload()}>
-            Retry
+            Reintentar
           </Button>
         </div>
       ) : loading ? (

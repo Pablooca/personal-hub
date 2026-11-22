@@ -19,10 +19,10 @@ import type { Theme } from '../state/theme'
 export type ViewId = 'overview' | 'calendar' | 'projects' | 'finance'
 
 export const NAV: { id: ViewId; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'calendar', label: 'Calendar', icon: CalendarDays },
-  { id: 'projects', label: 'Projects', icon: KanbanSquare },
-  { id: 'finance', label: 'Finance', icon: Wallet },
+  { id: 'overview', label: 'Resumen', icon: LayoutDashboard },
+  { id: 'calendar', label: 'Agenda', icon: CalendarDays },
+  { id: 'projects', label: 'Proyectos', icon: KanbanSquare },
+  { id: 'finance', label: 'Finanzas', icon: Wallet },
 ]
 
 interface Props {
@@ -61,15 +61,15 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
         <div className="sticky top-0 z-40 flex items-center justify-center gap-3 border-b border-amber-500/25 bg-amber-50 px-4 py-1.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
           <FlaskConical className="size-3.5 shrink-0" />
           <span className="truncate">
-            <span className="font-semibold">Demo Mode</span>
-            <span className="hidden sm:inline"> — Changes are stored locally</span>
+            <span className="font-semibold">Modo demo</span>
+            <span className="hidden sm:inline"> — Los cambios se guardan localmente</span>
           </span>
-          <button onClick={onResetDemo} className="inline-flex items-center gap-1 underline-offset-2 hover:underline" title="Reset demo data">
+          <button onClick={onResetDemo} className="inline-flex items-center gap-1 underline-offset-2 hover:underline" title="Restablecer datos de la demo">
             <RotateCcw className="size-3" />
-            <span className="hidden sm:inline">Reset</span>
+            <span className="hidden sm:inline">Restablecer</span>
           </button>
           <button onClick={onSignOut} className="inline-flex items-center gap-1 font-semibold underline-offset-2 hover:underline">
-            Exit to login
+            Salir al login
           </button>
         </div>
       )}
@@ -118,10 +118,10 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
               </div>
             )}
             <div className={cx('flex gap-1', collapsed ? 'flex-col items-center' : 'items-center')}>
-              <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme" title="Toggle theme">
+              <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Cambiar tema" title="Cambiar tema">
                 {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
               </Button>
-              <Button variant="ghost" size="icon" onClick={onSignOut} aria-label="Sign out" title={demo ? 'Exit demo' : 'Sign out'}>
+              <Button variant="ghost" size="icon" onClick={onSignOut} aria-label="Cerrar sesión" title={demo ? 'Salir de la demo' : 'Cerrar sesión'}>
                 <LogOut className="size-4" />
               </Button>
               <Button
@@ -129,8 +129,8 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
                 size="icon"
                 className={cx(!collapsed && 'ml-auto')}
                 onClick={() => setCollapsed((c) => !c)}
-                aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                title={collapsed ? 'Expand' : 'Collapse'}
+                aria-label={collapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'}
+                title={collapsed ? 'Expandir' : 'Contraer'}
               >
                 {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
               </Button>
@@ -147,10 +147,10 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
               <span className="text-sm font-semibold">{NAV.find((n) => n.id === view)?.label}</span>
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
+              <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Cambiar tema">
                 {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
               </Button>
-              <Button variant="ghost" size="icon" onClick={onSignOut} aria-label="Sign out">
+              <Button variant="ghost" size="icon" onClick={onSignOut} aria-label="Cerrar sesión">
                 <LogOut className="size-4" />
               </Button>
             </div>
