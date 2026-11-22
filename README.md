@@ -110,6 +110,12 @@ Cada vez que pagas con Apple Pay, una **automatización personal** de la app Ata
 
 Los pagos sin categoría aparecen en **Finanzas** con el badge **«Por revisar»**. Se pueden categorizar en un clic desde la propia tabla, o pulsando la fila para editar el concepto.
 
+### Tests
+
+```bash
+npm run test:webhook   # node:test sobre supabase/functions/tests/ (también: deno test supabase/functions/tests)
+```
+
 ### Despliegue de la función (Supabase CLI)
 
 ```bash
@@ -156,16 +162,25 @@ curl -X POST "https://<project-ref>.supabase.co/functions/v1/apple-pay-webhook" 
    - **Encabezados:**
      - `Authorization` → `Bearer <secreto-generado>`
      - `Content-Type` → `application/json`
-   - **Cuerpo de la solicitud:** `JSON`, con estos campos de tipo *Texto*:
-     | Clave | Valor (variable mágica de *Entrada del atajo* / *Transacción*) |
-     | --- | --- |
-     | `amount` | **Importe** |
-     | `merchant` | **Comercio** |
-     | `card` | **Tarjeta o pase** (nombre de la tarjeta) |
-     | `date` | **Fecha actual** → toca la variable → *Formato de fecha:* **ISO 8601** |
+   - **Cuerpo de la solicitud:** `JSON`, con **una sola clave**:
+     | Clave | Tipo | Valor |
+     | --- | --- | --- |
+     | `payload` | *Diccionario* (o *Texto*) | variable mágica **Entrada del atajo** |
+
+     La función acepta lo que iOS mande en `payload`:
+     - un objeto con claves en español o inglés (`Importe`/`Amount`, `Comercio`/`Merchant`, `Tarjeta o cartera`/`Card or Pass`, `Fecha`/`Date`…; sin distinguir mayúsculas ni tildes);
+     - ese mismo objeto como texto JSON, si elegiste el tipo *Texto*;
+     - una frase como `14,50 € en MERCADONA con DEBITO SMART`, `Pago de 14,50 € en MERCADONA` o `DEBITO SMART: 14,50 € en MERCADONA`.
+
+     También sigue aceptando campos planos (`amount`, `merchant`, `card`, `date`), útiles para probar con `curl`.
 4. Añade **Obtener valor del diccionario** → clave `message` → del *Contenido de la URL*.
 5. Añade **Mostrar notificación** con el *Valor del diccionario*.
 6. Guarda. Haz un pago de prueba y comprueba que aparece en Finanzas.
+7. Para ver exactamente qué envió tu tarjeta (y cómo se interpretó):
+   ```bash
+   supabase functions logs apple-pay-webhook
+   ```
+   Cada petición autenticada registra `Incoming Apple Pay body: …` y `apple-pay-webhook: parsed {source, amount, merchant, card, date, category}`.
 
 > 💡 Si llamas a tus cuentas en la app igual que a tus tarjetas en Wallet (p. ej. «Visa Nómina»), cada pago se asignará a la cuenta correcta.
 

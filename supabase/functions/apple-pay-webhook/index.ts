@@ -20,7 +20,7 @@
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  injected automatically by Supabase
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { categorize, categoryLabel, formatEuro, parseAmount, parseDate } from './normalize.ts'
+import { categorize, categoryLabel, extractPayment, formatEuro, parseAmount, parseDate } from './normalize.ts'
 
 const MAX_BODY_BYTES = 8 * 1024
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -43,7 +43,8 @@ async function safeEqual(a: string, b: string): Promise<boolean> {
   return diff === 0
 }
 
-const clean = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '')
+const clean = (v: unknown, max: number) =>
+  (typeof v === 'string' ? v : typeof v === 'number' && Number.isFinite(v) ? String(v) : '').replace(/\s+/g, ' ').trim().slice(0, max)
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return json(405, { ok: false, message: 'Method Not Allowed' })
@@ -82,13 +83,25 @@ Deno.serve(async (req) => {
     return json(400, { ok: false, message: 'JSON no válido' })
   }
 
-  const amount = parseAmount(body.amount)
-  if (amount === null) return json(400, { ok: false, message: `Importe no válido: ${clean(body.amount, 40) || '(vacío)'}` })
+  // Raw shape as sent by iOS, to inspect with `supabase functions logs apple-pay-webhook`.
+  // Only reached after authentication; headers (and so the secret) are never logged.
+  console.log('Incoming Apple Pay body:', JSON.stringify(body).slice(0, 4000))
 
-  const merchant = clean(body.merchant, 200) || 'Apple Pay'
-  const card = clean(body.card, 60)
-  const date = parseDate(body.date, timeZone)
+  const extracted = extractPayment(body)
+  const amount = parseAmount(extracted.amount)
+  if (amount === null) {
+    console.warn('apple-pay-webhook: no valid amount', { source: extracted.source, amount: clean(extracted.amount, 40) })
+    return json(400, {
+      ok: false,
+      message: `No se ha encontrado un importe válido (> 0) en la petición${extracted.amount !== undefined ? `: ${clean(extracted.amount, 40)}` : ''}`,
+    })
+  }
+
+  const merchant = clean(extracted.merchant, 200) || 'Pago Apple Pay'
+  const card = clean(extracted.card, 60)
+  const date = parseDate(extracted.date, timeZone)
   const category = categorize(merchant)
+  console.log('apple-pay-webhook: parsed', JSON.stringify({ source: extracted.source, amount, merchant, card, date, category }))
 
   const db = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },

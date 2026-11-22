@@ -184,3 +184,157 @@ export const categoryLabel = (c: string) => LABELS[c] ?? c
 
 export const formatEuro = (n: number) =>
   `${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })} €`
+
+// ---------------------------------------------------------------------------
+// Raw iOS Shortcuts / Wallet payloads
+// ---------------------------------------------------------------------------
+//
+// The Shortcut can send either flat fields ({ amount, merchant, card, date },
+// handy for curl) or { payload: <Shortcut Input> }, where payload may be:
+//   1. an object with Spanish/English keys ("Importe", "Tarjeta o cartera"…)
+//   2. that same object serialised as a JSON string (key typed as "Texto")
+//   3. a plain sentence: "14,50 € en MERCADONA con DEBITO SMART"
+
+export type PayloadSource = 'flat' | 'object' | 'json-string' | 'text' | 'none'
+
+export interface ExtractedPayment {
+  amount: unknown
+  merchant: string
+  card: string
+  date: unknown
+  source: PayloadSource
+}
+
+/** Key aliases, most specific first. Compared after normaliseKey(). */
+const KEY_ALIASES = {
+  amount: ['importe', 'cantidad', 'monto', 'amount', 'total', 'price', 'precio'],
+  merchant: ['comercio', 'establecimiento', 'merchant', 'name', 'nombre', 'title', 'titulo', 'description', 'descripcion'],
+  card: ['tarjeta o cartera', 'tarjeta o pase', 'card or pass', 'tarjeta', 'cartera', 'card', 'pass', 'account', 'cuenta'],
+  date: ['fecha', 'date', 'timestamp', 'createdat', 'created at', 'created_at'],
+} as const
+
+type Field = keyof typeof KEY_ALIASES
+
+/** "Tarjeta o Cartera " → "tarjeta o cartera"; "CreatedAt" → "createdat"; "Título" → "titulo" */
+const normaliseKey = (k: string) =>
+  k
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[_\s]+/g, ' ')
+    .trim()
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** Turn any scalar into trimmed text; objects/arrays are ignored. */
+const asText = (v: unknown): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : typeof v === 'number' && Number.isFinite(v) ? String(v) : '')
+
+function pick(obj: Record<string, unknown>, field: Field): unknown {
+  const index = new Map<string, unknown>()
+  for (const [k, v] of Object.entries(obj)) {
+    const nk = normaliseKey(k)
+    if (!index.has(nk)) index.set(nk, v)
+    index.set(nk.replace(/ /g, ''), v) // "created at" ⇄ "createdat"
+  }
+  for (const alias of KEY_ALIASES[field]) {
+    const v = index.get(alias) ?? index.get(alias.replace(/ /g, ''))
+    if (v !== undefined && v !== null && asText(v) !== '') return v
+  }
+  return undefined
+}
+
+/** JSON.parse that never throws; only accepts objects (or a one-element array of one). */
+function parseJsonObject(s: string): Record<string, unknown> | null {
+  const t = s.trim()
+  if (!t.startsWith('{') && !t.startsWith('[')) return null
+  try {
+    let v: unknown = JSON.parse(t)
+    if (Array.isArray(v)) v = v[0]
+    if (typeof v === 'string') return parseJsonObject(v) // triple-encoded
+    return isRecord(v) ? v : null
+  } catch {
+    return null
+  }
+}
+
+// Amount next to a € sign (either side) first; otherwise any decimal number.
+const AMOUNT_EUR = /(?:€\s*)(-?\d{1,3}(?:[.\s]\d{3})*(?:[.,]\d{1,2})?|-?\d+(?:[.,]\d{1,2})?)|(-?\d{1,3}(?:[.\s]\d{3})*(?:[.,]\d{1,2})?|-?\d+(?:[.,]\d{1,2})?)\s*(?:€|eur\b|euros?\b)/i
+const AMOUNT_ANY = /(\d+[.,]\d{1,2})/
+
+/**
+ * Fallback for Spanish debit-card summaries:
+ *   "14,50 € en MERCADONA con DEBITO SMART"
+ *   "Pago de 14,50 € en MERCADONA"
+ *   "DEBITO SMART: 14,50 € en MERCADONA"
+ */
+export function parsePlainText(text: string): { amount: string | null; merchant: string; card: string } {
+  const s = text.replace(/\s+/g, ' ').trim()
+  const m = s.match(AMOUNT_EUR) ?? s.match(AMOUNT_ANY)
+  const amount = m ? (m[1] ?? m[2] ?? m[0]).replace(/\s/g, '') : null
+  const afterAmount = m && m.index !== undefined ? s.slice(m.index + m[0].length) : s
+
+  // Card: "<CARD>: …" prefix, or "… con <CARD>" suffix.
+  let card = ''
+  const prefix = s.match(/^([^:]{2,60}):\s/)
+  if (prefix && !/\d/.test(prefix[1])) card = prefix[1].trim()
+
+  let merchant = ''
+  const en = afterAmount.match(/\ben\s+(.+)$/i)
+  if (en) {
+    const rest = en[1]
+    const con = rest.match(/^(.*?)\s+con\s+(.+)$/i)
+    if (con) {
+      merchant = con[1]
+      if (!card) card = con[2]
+    } else merchant = rest
+  } else {
+    const con = afterAmount.match(/\bcon\s+(.+)$/i)
+    if (con && !card) card = con[1]
+  }
+  const tidy = (x: string) => x.replace(/^[\s"'«]+|[\s"'».,;]+$/g, '').trim()
+  return { amount, merchant: tidy(merchant).slice(0, 200), card: tidy(card).slice(0, 60) }
+}
+
+/**
+ * Pull amount / merchant / card / date out of whatever the Shortcut sent.
+ * Flat top-level fields win (explicit curl tests); `payload` fills the gaps.
+ */
+export function extractPayment(body: unknown): ExtractedPayment {
+  const out: ExtractedPayment = { amount: undefined, merchant: '', card: '', date: undefined, source: 'none' }
+  if (!isRecord(body)) return out
+
+  const { payload, ...flat } = body
+  const fill = (obj: Record<string, unknown>) => {
+    if (out.amount === undefined) out.amount = pick(obj, 'amount')
+    if (!out.merchant) out.merchant = asText(pick(obj, 'merchant'))
+    if (!out.card) out.card = asText(pick(obj, 'card'))
+    if (out.date === undefined) out.date = pick(obj, 'date')
+  }
+
+  fill(flat)
+  if (out.amount !== undefined) out.source = 'flat'
+
+  let raw = payload
+  if (Array.isArray(raw)) raw = raw[0]
+
+  if (isRecord(raw)) {
+    fill(raw)
+    if (out.source === 'none') out.source = 'object'
+  } else if (typeof raw === 'string' && raw.trim()) {
+    const obj = parseJsonObject(raw)
+    if (obj) {
+      fill(obj)
+      if (out.source === 'none') out.source = 'json-string'
+    } else {
+      const t = parsePlainText(raw)
+      if (out.amount === undefined && t.amount) out.amount = t.amount
+      if (!out.merchant) out.merchant = t.merchant
+      if (!out.card) out.card = t.card
+      if (out.source === 'none') out.source = 'text'
+    }
+  } else if (typeof raw === 'number' && out.amount === undefined) {
+    out.amount = raw
+    out.source = 'object'
+  }
+  return out
+}
