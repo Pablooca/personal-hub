@@ -38,4 +38,4 @@ supabase/.temp/
 supabase/.branches/
 
 # Local notes with real commands/secrets — never commit
-comando.txt
+comando*.txt
