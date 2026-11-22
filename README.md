@@ -1,97 +1,189 @@
 # Personal Hub — Life OS
 
-A private command center for calendar, projects and personal finance.
-React + TypeScript on the front end, **Supabase** (PostgreSQL + Auth + Row Level Security) behind it, deployable for free on Vercel or Cloudflare Pages.
+Centro de mando personal y privado: **agenda, proyectos y finanzas** en un solo sitio.
+React + TypeScript en el frontend y **Supabase** (PostgreSQL + Auth + Row Level Security) como backend. Se puede desplegar gratis en Vercel o Cloudflare Pages.
 
-> **Try it without an account:** click **"Try Interactive Demo"** on the login screen. Demo Mode loads synthetic data into `localStorage` and never contacts the database.
+> **Pruébala sin cuenta:** en la pantalla de acceso pulsa **«Probar demo interactiva»**. El modo demo carga datos ficticios en `localStorage` y no hace ninguna petición a la base de datos.
 
 ---
 
-## Features
+## Funcionalidades
 
-| Module | What it does |
+| Módulo | Qué hace |
 | --- | --- |
-| **Overview** | Today's agenda with a checklist, the next 7 days, active projects with progress, this month's income / expenses / savings rate, and quick capture for a task or an expense. |
-| **Calendar & Agenda** | Month and week views (time grid with overlap layout and a now-line), colour-coded categories you can filter, create/edit/delete events, and a checklist for the selected day. |
-| **Projects Tracker** | Kanban board (drag & drop between statuses) and list view, editable progress (or derived from sub-tasks), sub-tasks/milestones, technical notes, optional repo link. |
-| **Personal Finance** | Quick entry for income/expense/investment, monthly KPIs (net balance, savings rate, month-over-month deltas), category breakdown, 6-month trend, and a filterable, sortable ledger with CSV export. |
+| **Resumen** | Agenda de hoy con checklist, próximos 7 días, proyectos activos con su progreso, finanzas del mes, **tasa de ahorro acumulada del año** y captura rápida de tareas y gastos. |
+| **Agenda** | Vistas de mes y semana (rejilla horaria con solapamientos y línea de «ahora»), categorías por colores con filtro, crear/editar/eliminar eventos y checklist del día seleccionado. |
+| **Proyectos** | Tablero Kanban (arrastrar y soltar) y vista de lista. Cada proyecto tiene su propia página con descripción, fechas de inicio y fin, cronograma, subtareas/hitos editables, progreso (manual o calculado a partir de las subtareas), notas técnicas y enlace al repositorio. |
+| **Finanzas** | Registro rápido de ingresos, gastos y ahorro, **varias cuentas bancarias con una cuenta principal**, saldo por cuenta y patrimonio, **categorías propias**, KPIs del mes, tasa de ahorro anual, evolución de 12 meses, movimientos filtrables con exportación a CSV y bandeja **«Por revisar»** para los pagos de Apple Pay sin categoría. |
+| **Apple Pay** | Una Edge Function de Supabase recibe cada pago hecho con Apple Pay desde un Atajo de iPhone y lo registra como gasto, categorizado automáticamente. |
 
-Also: dark/light mode, a collapsible sidebar on desktop, bottom navigation on mobile (built for iPhone safe areas), optimistic UI with rollback, and realtime sync between devices.
+También incluye: modo claro/oscuro, barra lateral colapsable en escritorio, navegación inferior en móvil (con las zonas seguras del iPhone), interfaz optimista con rollback y sincronización en tiempo real entre dispositivos.
 
 ## Stack
 
-- **React 19 + Vite + TypeScript** (strict)
-- **Tailwind CSS v4**, design tokens as CSS variables, `Plus Jakarta Sans` + `JetBrains Mono`
-- **lucide-react** icons
-- **@supabase/supabase-js**: Auth (email + password), PostgREST, Realtime
+- **React 19 + Vite + TypeScript** (modo estricto)
+- **Tailwind CSS v4** con tokens de diseño en variables CSS, y las fuentes `Plus Jakarta Sans` + `JetBrains Mono`
+- **lucide-react** para los iconos
+- **@supabase/supabase-js**: Auth (email + contraseña), PostgREST y Realtime
+- **Supabase Edge Functions** (Deno) para el webhook de Apple Pay
 
-## Architecture
+## Arquitectura
 
 ```
 src/
-├── App.tsx               # auth state machine: loading → login | supabase | demo
+├── App.tsx                 # máquina de estados de sesión: loading → login | supabase | demo
 ├── data/
-│   ├── repository.ts     # Repository interface + Supabase and Local (demo) implementations
-│   └── demoSeed.ts       # synthetic data, generated relative to "today"
-├── state/
-│   ├── data.tsx          # DataProvider: one store for the 4 tables, optimistic CRUD, realtime merge
-│   ├── theme.tsx         # dark / light
-│   └── toast.tsx
-├── lib/                  # types, date + finance helpers, formatting, Supabase client
-├── components/           # Shell (sidebar / bottom nav / demo banner), Login, EventModal, UI primitives
-└── views/                # Overview, Calendar, Projects, Finance
-supabase/schema.sql       # tables, constraints, indexes, RLS policies, realtime publication
+│   ├── repository.ts       # interfaz Repository + implementaciones Supabase y Local (demo)
+│   └── demoSeed.ts         # datos sintéticos generados en relación con «hoy»
+├── state/                  # DataProvider (CRUD optimista + realtime), tema y toasts
+├── lib/                    # tipos, fechas, finanzas, categorías, formato (es-ES)
+├── components/             # Shell, Login, EventModal, primitivas de UI
+└── views/
+    ├── Overview.tsx · Calendar.tsx · Projects.tsx · ProjectDetail.tsx
+    └── finance/            # FinanceView, Ledger, TxForms, Manage (cuentas y categorías)
+supabase/
+├── schema.sql              # tablas, restricciones, índices, RLS, RPC y realtime (idempotente)
+└── functions/apple-pay-webhook/
+    ├── index.ts            # handler HTTP: auth, validación, cuenta, deduplicado, inserción
+    └── normalize.ts        # funciones puras: importe, fecha y reglas de categoría
 ```
 
-The UI only talks to a `Repository`. Demo Mode and the real database share every component and code path; the only difference is which implementation gets injected.
+La interfaz solo habla con un `Repository`. El modo demo y la base de datos real comparten todos los componentes; lo único que cambia es la implementación que se inyecta.
 
-## Getting started
+### Modelo de datos
+
+`events` · `projects` · `project_tasks` · `transactions` · `categories` · `accounts`
+
+- Los importes siempre son positivos y el `type` indica el signo: `income` (ingreso), `expense` (gasto) o `investment` (en la interfaz aparece como **Ahorro**).
+- Un movimiento de **Ahorro** es una transferencia desde la cuenta principal hacia la cuenta en la que se registra.
+- **Tasa de ahorro** = (ingresos − gastos) / ingresos. Lo que mueves a ahorro cuenta como ahorrado.
+- **Saldo inicial:** para traer lo que ya tenías, registra un *Ingreso* con categoría `Saldo inicial` el **31/12** del año anterior en cada cuenta. Suma al saldo de la cuenta, pero no cuenta como ingreso, así que no altera la tasa de ahorro.
+
+## Puesta en marcha
 
 ### 1. Supabase
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. Open **SQL Editor**, paste [`supabase/schema.sql`](supabase/schema.sql) and run it. The script is idempotent.
-3. Under **Authentication → Users**, create your user (email + password). For a single-user setup you can also turn off public sign-ups under **Authentication → Providers → Email**.
+1. Crea un proyecto en [supabase.com](https://supabase.com).
+2. En **SQL Editor**, pega [`supabase/schema.sql`](supabase/schema.sql) y ejecútalo. Es idempotente: vuelve a ejecutarlo cada vez que se actualice el esquema.
+3. En **Authentication → Users → Add user → Create new user**, crea tu usuario con email y contraseña, marcando *Auto Confirm User*. Si solo vas a usarla tú, puedes desactivar el registro público en **Authentication → Providers → Email**.
 
-### 2. Local development
+### 2. Desarrollo local
 
 ```bash
-cp .env.example .env      # then fill in your project URL and anon key
+cp .env.example .env      # rellena la URL del proyecto y la anon key
 npm install
 npm run dev               # http://localhost:5173
 ```
 
-| Variable | Where to find it |
+| Variable | Dónde encontrarla |
 | --- | --- |
-| `VITE_SUPABASE_URL` | Project Settings → API → Project URL (`https://<ref>.supabase.co`, without `/rest/v1`) |
-| `VITE_SUPABASE_ANON_KEY` | Project Settings → API → `anon` `public` key |
+| `VITE_SUPABASE_URL` | Project Settings → API → Project URL (`https://<ref>.supabase.co`, **sin** `/rest/v1`) |
+| `VITE_SUPABASE_ANON_KEY` | Project Settings → API → clave `anon` `public` |
 
-If the variables are missing, the app still builds and runs, but only Demo Mode is offered.
+Si faltan las variables, la app compila igualmente pero solo ofrece el modo demo.
 
-### 3. Deploy
+### 3. Despliegue
 
-**Vercel:** import the repo (framework preset: Vite) and add the two env vars. `vercel.json` already rewrites routes to the SPA.
+- **Vercel:** importa el repositorio (preset Vite) y añade las dos variables. `vercel.json` ya redirige las rutas a la SPA.
+- **Cloudflare Pages:** comando de build `npm run build`, directorio de salida `dist`, y añade las dos variables. `public/_redirects` se encarga del enrutado de la SPA.
 
-**Cloudflare Pages:** build command `npm run build`, output directory `dist`, and add the two env vars. `public/_redirects` handles SPA routing.
+---
 
-## Security model
+## Apple Pay → registro automático de gastos
 
-- **Row Level Security is enabled on every table.** The policies for `SELECT`, `INSERT`, `UPDATE` and `DELETE` all require `auth.uid() = user_id`, so a user can only see and change their own rows. `project_tasks` also checks that the parent project belongs to the same user.
-- The **anon key is designed to be public**: it ships in the client bundle of every Supabase app. On its own it can read nothing, because every policy is scoped to the `authenticated` role and to the row owner.
-- **Never** use the `service_role` key in this front end.
-- `.env` and `.env.*` are git-ignored. Only `.env.example`, with empty values, is committed.
-- Demo Mode makes zero network requests to Supabase. Its data is synthetic and stays in the visitor's browser.
-- CSV export neutralises spreadsheet formula injection (`=`, `+`, `-`, `@` prefixes).
+Cada vez que pagas con Apple Pay, una **automatización personal** de la app Atajos envía el importe, el comercio y la tarjeta a la Edge Function `apple-pay-webhook`. La función:
+
+1. Valida la cabecera `Authorization: Bearer <APPLE_PAY_WEBHOOK_SECRET>` con una comparación de tiempo constante. Si no coincide, responde `401`.
+2. Normaliza el importe (`"14,50 €"`, `"1.234,56 €"`, `"14.50"`…) y la fecha (ISO, `22/11/2026`, `22 nov 2026`… y, si no se entiende, usa la fecha de hoy en `Europe/Madrid`).
+3. Categoriza el gasto por palabras clave del comercio. Ejemplos: `MERCADONA` → Supermercado, `RENFE`/`UBER` → Transporte, `AMAZON` → Compras. Si ninguna regla coincide, lo marca como `uncategorized`. Las reglas están en [`normalize.ts`](supabase/functions/apple-pay-webhook/normalize.ts) y se pueden ampliar.
+4. Elige la cuenta: la que coincida con el nombre de la tarjeta; si no hay ninguna, tu **cuenta principal**; y si tampoco existe, el nombre de la tarjeta.
+5. Descarta los duplicados (mismo importe, comercio y fecha en los últimos 2 minutos), inserta el gasto en `transactions` y devuelve:
+
+```json
+{ "ok": true, "message": "Registrado: 14,50 € en MERCADONA (Supermercado)" }
+```
+
+Los pagos sin categoría aparecen en **Finanzas** con el badge **«Por revisar»**. Se pueden categorizar en un clic desde la propia tabla, o pulsando la fila para editar el concepto.
+
+### Despliegue de la función (Supabase CLI)
+
+```bash
+# 0. Instala la CLI e inicia sesión
+brew install supabase/tap/supabase
+supabase login
+
+# 1. Genera un secreto largo y guárdalo (lo necesitarás en el Atajo)
+openssl rand -hex 32
+
+# 2. Configura los secretos de la función
+#    <project-ref>: el subdominio de tu URL (https://<project-ref>.supabase.co)
+#    OWNER_USER_ID: Authentication → Users → tu usuario → User UID
+supabase secrets set --project-ref <project-ref> \
+  APPLE_PAY_WEBHOOK_SECRET=<secreto-generado> \
+  OWNER_USER_ID=<tu-user-uuid> \
+  TIMEZONE=Europe/Madrid
+
+#    (alternativa) cp supabase/functions/.env.example supabase/functions/.env, rellénalo y:
+#    supabase secrets set --project-ref <project-ref> --env-file supabase/functions/.env
+
+# 3. Despliega (sin verificación JWT: la función se autentica con su propio secreto)
+supabase functions deploy apple-pay-webhook --no-verify-jwt --project-ref <project-ref>
+
+# 4. Prueba
+curl -X POST "https://<project-ref>.supabase.co/functions/v1/apple-pay-webhook" \
+  -H "Authorization: Bearer <secreto-generado>" \
+  -H "Content-Type: application/json" \
+  -d '{"amount":"14,50 €","merchant":"MERCADONA","card":"Visa","date":""}'
+```
+
+`SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` las inyecta Supabase automáticamente en las Edge Functions. **No** las pongas en el `.env` del frontend.
+
+### Configurar el Atajo en el iPhone
+
+1. Abre **Atajos** → pestaña **Automatización** → **＋ / Nueva automatización**.
+2. Elige **Transacción**.
+   - **Cuando toque:** selecciona tus tarjetas de Wallet (y, si quieres, filtra por categorías o comercios).
+   - Marca **Ejecutar inmediatamente** y desactiva *Notificar al ejecutarse*, porque ya mostrarás tu propia notificación.
+   - Pulsa **Siguiente** → **Nueva automatización en blanco**.
+3. Añade la acción **Obtener contenido de URL**:
+   - **URL:** `https://<project-ref>.supabase.co/functions/v1/apple-pay-webhook`
+   - Toca **Mostrar más** → **Método:** `POST`
+   - **Encabezados:**
+     - `Authorization` → `Bearer <secreto-generado>`
+     - `Content-Type` → `application/json`
+   - **Cuerpo de la solicitud:** `JSON`, con estos campos de tipo *Texto*:
+     | Clave | Valor (variable mágica de *Entrada del atajo* / *Transacción*) |
+     | --- | --- |
+     | `amount` | **Importe** |
+     | `merchant` | **Comercio** |
+     | `card` | **Tarjeta o pase** (nombre de la tarjeta) |
+     | `date` | **Fecha actual** → toca la variable → *Formato de fecha:* **ISO 8601** |
+4. Añade **Obtener valor del diccionario** → clave `message` → del *Contenido de la URL*.
+5. Añade **Mostrar notificación** con el *Valor del diccionario*.
+6. Guarda. Haz un pago de prueba y comprueba que aparece en Finanzas.
+
+> 💡 Si llamas a tus cuentas en la app igual que a tus tarjetas en Wallet (p. ej. «Visa Nómina»), cada pago se asignará a la cuenta correcta.
+
+---
+
+## Modelo de seguridad
+
+- **Row Level Security en todas las tablas.** Las políticas de `SELECT`, `INSERT`, `UPDATE` y `DELETE` exigen `auth.uid() = user_id`. `project_tasks` además comprueba que el proyecto padre sea del mismo usuario.
+- La **anon key es pública por diseño**: va en el bundle de cualquier app de Supabase. Por sí sola no puede leer nada, porque todas las políticas están limitadas al rol `authenticated` y al propietario de cada fila.
+- La **service-role key solo existe dentro de la Edge Function**, nunca en el frontend. Esa función solo escribe filas de `OWNER_USER_ID` y con columnas controladas por el servidor (`type = 'expense'`), protegida con un secreto compartido.
+- `.env` y `.env.*` están en `.gitignore`. Solo se suben los `.env.example` vacíos.
+- El modo demo no hace ninguna petición a Supabase.
+- La exportación CSV neutraliza la inyección de fórmulas (prefijos `=`, `+`, `-`, `@`).
 
 ## Scripts
 
-| Command | |
+| Comando | |
 | --- | --- |
-| `npm run dev` | Start the dev server |
-| `npm run build` | Type-check (`tsc -b`) and build for production |
-| `npm run preview` | Serve the production build locally |
-| `npm run typecheck` | Type-check only |
+| `npm run dev` | Servidor de desarrollo |
+| `npm run build` | Comprobación de tipos (`tsc -b`) y build de producción |
+| `npm run preview` | Sirve el build de producción en local |
+| `npm run typecheck` | Solo comprobación de tipos |
 
-## License
+## Licencia
 
 MIT
