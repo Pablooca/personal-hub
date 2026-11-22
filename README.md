@@ -63,7 +63,7 @@ npm run dev               # http://localhost:5173
 
 | Variable | Where to find it |
 | --- | --- |
-| `VITE_SUPABASE_URL` | Project Settings → API → Project URL |
+| `VITE_SUPABASE_URL` | Project Settings → API → Project URL (`https://<ref>.supabase.co`, without `/rest/v1`) |
 | `VITE_SUPABASE_ANON_KEY` | Project Settings → API → `anon` `public` key |
 
 If the variables are missing, the app still builds and runs, but only Demo Mode is offered.
