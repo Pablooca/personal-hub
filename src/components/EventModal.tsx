@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react'
 import { CalendarRange, Repeat, Trash2 } from 'lucide-react'
 import { addDays, combineDateTime, fromDateKey, toDateKey, toTimeValue } from '../lib/dates'
 import { fmtDate, uid } from '../lib/format'
-import { holidayLabel } from '../lib/holidays'
-import { useHolidays, useOffDays } from '../lib/useHolidays'
+import { holidayLabel, regionForCategory, REGION_OPTIONS } from '../lib/holidays'
+import { useHolidayRules, useHolidays, useOffDays } from '../lib/useHolidays'
 import { CATEGORY_STYLES } from '../lib/theme'
 import { EVENT_CATEGORIES, type CalendarEvent, type EventCategory, type NewRow } from '../lib/types'
 import { useData } from '../state/data'
@@ -61,11 +61,17 @@ function EventForm({ draft, onClose }: { draft: EventDraft; onClose: () => void 
   const [applyToSeries, setApplyToSeries] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<null | 'one' | 'series' | 'future'>(null)
 
-  const holidays = useHolidays(fromDateKey(date))
-  const holidaysUntil = useHolidays(fromDateKey(until))
-  // Official holidays + days already marked as vacation / holiday events.
-  const offFrom = useOffDays(fromDateKey(date))
-  const offUntil = useOffDays(fromDateKey(until))
+  // Holidays that apply depend on the category: work → national + Andalucía,
+  // master → national + C. Valenciana, rest → configurable (see calendar settings).
+  const [rules] = useHolidayRules()
+  const region = regionForCategory(rules, category)
+  const regionLabel = REGION_OPTIONS.find((o) => o.value === region)?.label ?? ''
+  const holidays = useHolidays(fromDateKey(date), region)
+  const holidaysUntil = useHolidays(fromDateKey(until), region)
+  // Vacation days / local holidays also block work and other events, but not master classes.
+  const includeEventDays = category !== 'master'
+  const offFrom = useOffDays(fromDateKey(date), region, includeEventDays)
+  const offUntil = useOffDays(fromDateKey(until), region, includeEventDays)
 
   const isVacationish = category === 'vacation' || category === 'holiday'
   const timesInvalid = !allDay && end < start
@@ -305,8 +311,9 @@ function EventForm({ draft, onClose }: { draft: EventDraft; onClose: () => void 
                 </Field>
                 <label className="flex items-center gap-2.5 text-sm">
                   <Check checked={skipHolidays} onChange={setSkipHolidays} label="Saltar festivos" />
-                  Saltar festivos y días de vacaciones
+                  Saltar festivos{includeEventDays ? ' y días de vacaciones' : ''}
                 </label>
+                <p className="-mt-1.5 pl-7 text-[11px] text-muted">Para {CATEGORY_STYLES[category].label}: {regionLabel.toLowerCase()}</p>
                 {skipHolidays && (
                   <label className="flex items-center gap-2.5 pl-7 text-sm text-muted">
                     <Check checked={markHolidays} onChange={setMarkHolidays} label="Crear evento Festivo" />

@@ -104,39 +104,66 @@ export function holidaysForYear(year: number): Holiday[] {
 }
 
 // ---------------------------------------------------------------- settings
-/** Which regional calendars apply to you (national ones always do). */
+/** A set of regional calendars (national holidays always apply). */
 export type HolidayRegion = 'AN' | 'VC' | 'AN+VC' | 'ES'
 export const REGION_OPTIONS: { value: HolidayRegion; label: string }[] = [
-  { value: 'AN', label: 'Andalucía' },
-  { value: 'VC', label: 'C. Valenciana' },
-  { value: 'AN+VC', label: 'Andalucía + C. Valenciana' },
+  { value: 'AN', label: 'Nacionales + Andalucía' },
+  { value: 'VC', label: 'Nacionales + C. Valenciana' },
+  { value: 'AN+VC', label: 'Nacionales + Andalucía + C. Valenciana' },
   { value: 'ES', label: 'Solo nacionales' },
 ]
-const REGION_KEY = 'ph-holiday-region'
 
-export function readHolidayRegion(): HolidayRegion {
+/**
+ * Which holidays affect which kind of event:
+ *   Máster → national + Comunitat Valenciana
+ *   Resto (work, Horas, everything else) → national + Andalucía
+ * The calendar always *displays* national, Andalusian and Valencian holidays.
+ */
+export interface HolidayRules {
+  master: HolidayRegion
+  other: HolidayRegion
+}
+export const DEFAULT_HOLIDAY_RULES: HolidayRules = { master: 'VC', other: 'AN' }
+export const RULE_LABELS: Record<keyof HolidayRules, string> = { master: 'Máster', other: 'Resto (Trabajo, Horas y demás categorías)' }
+/** What the calendar always shows. */
+export const DISPLAY_SCOPES: HolidayScope[] = ['ES', 'AN', 'VC']
+
+const RULES_KEY = 'ph-holiday-rules-v2'
+export const RULES_EVENT = 'ph-holiday-rules'
+const isRegion = (v: unknown): v is HolidayRegion => REGION_OPTIONS.some((o) => o.value === v)
+
+export function readHolidayRules(): HolidayRules {
   try {
-    const v = localStorage.getItem(REGION_KEY) as HolidayRegion | null
-    return v && REGION_OPTIONS.some((o) => o.value === v) ? v : 'AN'
+    const raw = JSON.parse(localStorage.getItem(RULES_KEY) ?? 'null') as Partial<HolidayRules> | null
+    if (!raw) return DEFAULT_HOLIDAY_RULES
+    return {
+      master: isRegion(raw.master) ? raw.master : DEFAULT_HOLIDAY_RULES.master,
+      other: isRegion(raw.other) ? raw.other : DEFAULT_HOLIDAY_RULES.other,
+    }
   } catch {
-    return 'AN'
+    return DEFAULT_HOLIDAY_RULES
   }
 }
 
-export function writeHolidayRegion(r: HolidayRegion) {
+export function writeHolidayRules(r: HolidayRules) {
   try {
-    localStorage.setItem(REGION_KEY, r)
-    window.dispatchEvent(new Event('ph-holiday-region'))
+    localStorage.setItem(RULES_KEY, JSON.stringify(r))
   } catch {
     /* ignore */
   }
+  window.dispatchEvent(new Event(RULES_EVENT))
+}
+
+/** Region whose holidays apply to an event of this category. */
+export function regionForCategory(rules: HolidayRules, category: string): HolidayRegion {
+  return category === 'master' ? rules.master : rules.other
 }
 
 const scopesFor = (r: HolidayRegion): HolidayScope[] => (r === 'AN+VC' ? ['ES', 'AN', 'VC'] : r === 'ES' ? ['ES'] : ['ES', r])
 
-/** dateKey → holidays that apply for the chosen region, for the given years. */
-export function holidayMap(region: HolidayRegion, years: number[]): Map<string, Holiday[]> {
-  const scopes = new Set(scopesFor(region))
+/** dateKey → holidays in the given scopes (or region), for the given years. */
+export function holidayMap(regionOrScopes: HolidayRegion | HolidayScope[], years: number[]): Map<string, Holiday[]> {
+  const scopes = new Set(Array.isArray(regionOrScopes) ? regionOrScopes : scopesFor(regionOrScopes))
   const m = new Map<string, Holiday[]>()
   for (const y of new Set(years)) {
     for (const h of holidaysForYear(y)) {
@@ -147,4 +174,5 @@ export function holidayMap(region: HolidayRegion, years: number[]): Map<string, 
   return m
 }
 
-export const holidayLabel = (hs: Holiday[]) => hs.map((h) => h.name).join(' · ')
+/** "Inmaculada Concepción" · regional ones get their community: "Día de Andalucía (Andalucía)". */
+export const holidayLabel = (hs: Holiday[]) => hs.map((h) => (h.scope === 'ES' ? h.name : `${h.name} (${SCOPE_LABELS[h.scope]})`)).join(' · ')

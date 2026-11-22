@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { CalendarOff, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { PageHeader } from '../components/Shell'
 import { EventModal, type EventDraft } from '../components/EventModal'
 import { Button, Card, Check, Empty, Segmented, cx } from '../components/ui'
@@ -8,8 +8,9 @@ import { capitalize, fmtDate, fmtMonth, fmtTime, fmtWeekday } from '../lib/forma
 import { CATEGORY_STYLES } from '../lib/theme'
 import { EVENT_CATEGORIES, type CalendarEvent, type EventCategory } from '../lib/types'
 import { useData } from '../state/data'
-import { REGION_OPTIONS, SCOPE_LABELS, holidayLabel, type Holiday, type HolidayRegion } from '../lib/holidays'
-import { useHolidayRegion, useHolidays } from '../lib/useHolidays'
+import { DEFAULT_HOLIDAY_RULES, REGION_OPTIONS, RULE_LABELS, SCOPE_LABELS, holidayLabel, type Holiday, type HolidayRegion, type HolidayRules } from '../lib/holidays'
+import { useHolidayRules, useHolidays } from '../lib/useHolidays'
+import { Modal } from '../components/ui'
 
 const timeLabel = (e: CalendarEvent) => (e.all_day ? 'Todo el día' : `${fmtTime(e.start_at)}–${fmtTime(e.end_at)}`)
 
@@ -25,8 +26,9 @@ export function CalendarView() {
   const [selected, setSelected] = useState(() => startOfDay(new Date()))
   const [hidden, setHidden] = useState<Set<EventCategory>>(new Set())
   const [draft, setDraft] = useState<EventDraft | null>(null)
-  const [region, setRegion] = useHolidayRegion()
-  const holidays = useHolidays(cursor)
+  const [rules, setRules] = useHolidayRules()
+  const [showRules, setShowRules] = useState(false)
+  const holidays = useHolidays(cursor) // always national + Andalucía + C. Valenciana
 
   const visible = useMemo(() => data.events.filter((e) => !hidden.has(e.category)), [data.events, hidden])
 
@@ -77,19 +79,9 @@ export function CalendarView() {
         title={title}
         actions={
           <>
-            <select
-              className="field h-8 w-auto text-xs"
-              value={region}
-              onChange={(e) => setRegion(e.target.value as HolidayRegion)}
-              aria-label="Festivos que se aplican"
-              title="Festivos que se aplican"
-            >
-              {REGION_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  Festivos: {o.label}
-                </option>
-              ))}
-            </select>
+            <Button onClick={() => setShowRules(true)} title="Qué festivos afectan a cada categoría">
+              <CalendarOff className="size-4 text-orange-500" /> <span className="hidden sm:inline">Festivos</span>
+            </Button>
             <Segmented value={mode} onChange={setMode} options={[{ value: 'month', label: 'Mes' }, { value: 'week', label: 'Semana' }]} />
             <div className="flex items-center rounded-lg border border-line bg-surface">
               <Button variant="ghost" size="icon" onClick={() => step(-1)} aria-label="Anterior">
@@ -228,7 +220,59 @@ export function CalendarView() {
       </div>
 
       <EventModal draft={draft} onClose={() => setDraft(null)} />
+      {showRules && <HolidayRulesModal rules={rules} onSave={setRules} onClose={() => setShowRules(false)} />}
     </>
+  )
+}
+
+/** Which official holidays affect each kind of event. */
+function HolidayRulesModal({ rules, onSave, onClose }: { rules: HolidayRules; onSave: (r: HolidayRules) => void; onClose: () => void }) {
+  const [draft, setDraft] = useState(rules)
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Festivos por categoría"
+      footer={
+        <>
+          <Button variant="ghost" className="mr-auto" onClick={() => setDraft(DEFAULT_HOLIDAY_RULES)}>
+            Restablecer
+          </Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              onSave(draft)
+              onClose()
+            }}
+          >
+            Guardar
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {(Object.keys(RULE_LABELS) as (keyof HolidayRules)[]).map((k) => (
+          <label key={k} className="block">
+            <span className="label">{RULE_LABELS[k]}</span>
+            <select className="field" value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: e.target.value as HolidayRegion })}>
+              {REGION_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+        <p className="text-xs text-muted">
+          Al crear eventos repetidos se saltan los festivos que correspondan a su categoría, y «Horas» usa los de «Resto». El calendario muestra
+          siempre los nacionales, los de Andalucía y los de la C. Valenciana (indicando la comunidad). Los festivos locales de tu municipio
+          añádelos como evento «Festivo».
+        </p>
+      </div>
+    </Modal>
   )
 }
 
