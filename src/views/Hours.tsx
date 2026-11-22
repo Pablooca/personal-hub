@@ -9,6 +9,7 @@ import { LOCALE, capitalize, fmtDate, fmtMonth } from '../lib/format'
 import type { WorkLog } from '../lib/types'
 import { NO_KEY, fmtHours, hoursByDay, inLogMonth, monthDays, readDailyTarget, timesheet, worklogCsv, writeDailyTarget } from '../lib/worklog'
 import { useData } from '../state/data'
+import { useOffDays } from '../lib/useHolidays'
 import { useToast } from '../state/toast'
 
 /** 7.5 → "7,5" (rounded to 2 decimals, avoids float noise like 7.000000001). */
@@ -29,7 +30,8 @@ export function HoursView() {
   const today = startOfDay(new Date())
   const logs = useMemo(() => inLogMonth(data.work_logs, month), [data.work_logs, month])
   const perDay = useMemo(() => hoursByDay(logs), [logs])
-  const days = useMemo(() => monthDays(month), [month])
+  const offDays = useOffDays(month)
+  const days = useMemo(() => monthDays(month, offDays), [month, offDays])
   const sheet = useMemo(() => timesheet(logs), [logs])
   const logsByDay = useMemo(() => {
     const m = new Map<string, WorkLog[]>()
@@ -37,7 +39,8 @@ export function HoursView() {
     return m
   }, [logs])
 
-  const pastWorkdays = days.filter((d) => !d.weekend && d.date <= today)
+  const pastWorkdays = days.filter((d) => !d.rest && d.date <= today)
+  const offCount = days.filter((d) => !d.weekend && d.off && d.date <= today).length
   const missing = pastWorkdays.filter((d) => !perDay.get(d.key))
   const short = pastWorkdays.filter((d) => {
     const h = perDay.get(d.key) ?? 0
@@ -52,7 +55,7 @@ export function HoursView() {
     .reverse()
     .filter((d) => d.date <= today || perDay.get(d.key))
     .filter((d) => !d.weekend || perDay.get(d.key))
-    .filter((d) => !onlyMissing || (!d.weekend && (perDay.get(d.key) ?? 0) < target))
+    .filter((d) => !onlyMissing || (!d.rest && (perDay.get(d.key) ?? 0) < target))
 
   async function copySheet() {
     const cols = days.filter((d) => !d.weekend || sheet.some((r) => r.days.has(d.key)))
@@ -98,7 +101,7 @@ export function HoursView() {
         <Stat
           label="Días registrados"
           value={`${pastWorkdays.length - missing.length}/${pastWorkdays.length}`}
-          hint="días laborables hasta hoy"
+          hint={offCount ? `laborables hasta hoy · ${offCount} festivo${offCount === 1 ? '' : 's'}/vacaciones excluidos` : 'días laborables hasta hoy'}
           icon={<CalendarCheck className="size-4" />}
         />
         <button className="text-left" onClick={() => setOnlyMissing((v) => !v)} aria-pressed={onlyMissing}>
@@ -147,8 +150,8 @@ export function HoursView() {
               {visibleDays.map((d) => {
                 const entries = logsByDay.get(d.key) ?? []
                 const h = perDay.get(d.key) ?? 0
-                const isMissing = !d.weekend && h === 0
-                const isShort = !d.weekend && h > 0 && h < target
+                const isMissing = !d.rest && h === 0
+                const isShort = !d.rest && h > 0 && h < target
                 return (
                   <li key={d.key} className={cx('px-4 py-3', isMissing && 'bg-amber-500/[0.05]')}>
                     <div className="flex items-center gap-3">
@@ -171,7 +174,9 @@ export function HoursView() {
                         <Plus className="size-4" />
                       </Button>
                     </div>
-                    {isMissing ? (
+                    {d.off && h === 0 ? (
+                      <div className="mt-1.5 text-xs text-orange-700 dark:text-orange-300">{d.off} · no laborable</div>
+                    ) : isMissing ? (
                       <button onClick={() => setDraft({ date: d.key })} className="mt-1.5 text-xs text-amber-700 hover:underline dark:text-amber-300">
                         Sin registrar · ¿qué hiciste este día?
                       </button>
@@ -246,7 +251,9 @@ export function HoursView() {
                 <tr className="bg-surface-2">
                   <th className="sticky left-0 z-10 bg-surface-2 px-3 py-2 text-left font-semibold text-muted">Clave</th>
                   {days.map((d) => (
-                    <th key={d.key} className={cx('num min-w-9 px-1 py-2 text-center font-normal', d.weekend ? 'text-faint/60' : 'text-muted', !d.weekend && !perDay.get(d.key) && d.date <= today && 'bg-amber-500/10')}>
+                    <th key={d.key} className={cx('num min-w-9 px-1 py-2 text-center font-normal', d.rest ? 'text-faint/60' : 'text-muted', d.off && !d.weekend && 'bg-orange-500/10', !d.rest && !perDay.get(d.key) && d.date <= today && 'bg-amber-500/10')}
+                      title={d.off ?? undefined}
+                    >
                       <div className="text-[9px] uppercase">{fmtDate(d.date, { weekday: 'narrow' })}</div>
                       {d.date.getDate()}
                     </th>
@@ -261,7 +268,7 @@ export function HoursView() {
                     {days.map((d) => {
                       const v = r.days.get(d.key)
                       return (
-                        <td key={d.key} className={cx('num px-1 py-2 text-center', d.weekend && 'bg-surface-2/60', v ? 'text-fg' : 'text-faint/40')}>
+                        <td key={d.key} className={cx('num px-1 py-2 text-center', d.rest && 'bg-surface-2/60', v ? 'text-fg' : 'text-faint/40')}>
                           {v ? num(v) : '·'}
                         </td>
                       )
@@ -274,7 +281,7 @@ export function HoursView() {
                   {days.map((d) => {
                     const v = perDay.get(d.key)
                     return (
-                      <td key={d.key} className={cx('num px-1 py-2 text-center', !!v && v < target && !d.weekend && 'text-amber-600 dark:text-amber-400')}>
+                      <td key={d.key} className={cx('num px-1 py-2 text-center', !!v && v < target && !d.rest && 'text-amber-600 dark:text-amber-400')}>
                         {v ? num(v) : ''}
                       </td>
                     )

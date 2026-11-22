@@ -23,6 +23,9 @@ export interface Repository {
   insertMany<K extends TableName>(table: K, rows: Tables[K][]): Promise<Tables[K][]>
   update<K extends TableName>(table: K, id: string, patch: Partial<Tables[K]>): Promise<Tables[K]>
   remove(table: TableName, id: string): Promise<void>
+  removeMany(table: TableName, ids: string[]): Promise<void>
+  /** Same patch to every row where `column = value` (e.g. a whole event series). */
+  updateWhere<K extends TableName>(table: K, column: keyof Tables[K] & string, value: string, patch: Partial<Tables[K]>): Promise<void>
   /** Make one account the primary one (and un-flag the previous). */
   setPrimaryAccount(id: string): Promise<void>
   /** Live changes from other devices/tabs. Returns an unsubscribe function. */
@@ -157,6 +160,19 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
       if (error) throw error
     },
 
+    async removeMany(table, ids) {
+      for (let i = 0; i < ids.length; i += 200) {
+        const { error } = await client.from(table).delete().in('id', ids.slice(i, i + 200))
+        if (error) throw error
+      }
+    },
+
+    async updateWhere(table, column, value, patch) {
+      const { id: _id, user_id: _uid, ...rest } = patch as Record<string, unknown>
+      const { error } = await client.from(table).update(strip(rest)).eq(column as string, value)
+      if (error) throw error
+    },
+
     async setPrimaryAccount(id) {
       const { error } = await client.rpc('set_primary_account', { account_id: id })
       if (error) throw error
@@ -185,7 +201,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v5'
+const DEMO_KEY = 'ph-demo-dataset-v6'
 
 function readDemo(): Dataset {
   try {
@@ -254,6 +270,19 @@ export function createLocalRepository(): Repository {
       ;(db as Record<TableName, { id: string }[]>)[table] = db[table].filter((r) => r.id !== id)
       if (table === 'projects') db.project_tasks = db.project_tasks.filter((t) => t.project_id !== id)
       if (table === 'project_tasks') db.work_logs = db.work_logs.map((w) => (w.task_id === id ? { ...w, task_id: null } : w))
+      commit()
+    },
+
+    async removeMany(table, ids) {
+      const set = new Set(ids)
+      ;(db as Record<TableName, { id: string }[]>)[table] = db[table].filter((r) => !set.has(r.id))
+      commit()
+    },
+
+    async updateWhere(table, column, value, patch) {
+      ;(db as unknown as Record<TableName, Record<string, unknown>[]>)[table] = (db[table] as unknown as Record<string, unknown>[]).map((r) =>
+        r[column] === value ? { ...r, ...patch } : r,
+      )
       commit()
     },
 

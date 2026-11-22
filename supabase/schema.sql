@@ -34,16 +34,27 @@ create table if not exists public.events (
   description   text not null default '',
   start_at      timestamptz not null,
   end_at        timestamptz not null,
-  category      text not null default 'personal'
-                check (category in ('work', 'master', 'research', 'training', 'personal')),
+  category      text not null default 'personal',
   is_completed  boolean not null default false,
+  all_day       boolean not null default false,
+  series_id     uuid,  -- events created together by "Repetir" share this id
   created_at    timestamptz not null default now(),
   constraint events_time_order check (end_at >= start_at)
 );
 
 comment on table public.events is 'Calendar events and day tasks.';
 
+-- Upgrade path: all-day events, series and the vacation / holiday categories.
+alter table public.events add column if not exists all_day boolean not null default false;
+alter table public.events add column if not exists series_id uuid;
+comment on column public.events.series_id is 'Groups events created in bulk (e.g. work Mon–Thu 8:00–17:30) so they can be edited or deleted together.';
+alter table public.events drop constraint if exists events_category_check;
+alter table public.events
+  add constraint events_category_check
+  check (category in ('work', 'master', 'research', 'training', 'personal', 'vacation', 'holiday'));
+
 create index if not exists events_user_start_idx on public.events (user_id, start_at);
+create index if not exists events_series_idx on public.events (user_id, series_id) where series_id is not null;
 
 -- =============================================================================
 --  2. PROJECTS — project tracker

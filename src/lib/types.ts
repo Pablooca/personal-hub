@@ -1,4 +1,4 @@
-export const EVENT_CATEGORIES = ['work', 'master', 'research', 'training', 'personal'] as const
+export const EVENT_CATEGORIES = ['work', 'master', 'research', 'training', 'personal', 'vacation', 'holiday'] as const
 export type EventCategory = (typeof EVENT_CATEGORIES)[number]
 
 export const PROJECT_AREAS = ['research', 'engineering', 'academic', 'personal'] as const
@@ -28,6 +28,8 @@ export interface CalendarEvent {
   end_at: string // ISO timestamp
   category: EventCategory
   is_completed: boolean
+  all_day: boolean
+  series_id: string | null
   created_at: string
 }
 

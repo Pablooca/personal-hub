@@ -15,6 +15,8 @@ interface DataApi {
   createMany<K extends TableName>(table: K, rows: NewRow<K>[]): Promise<Tables[K][] | null>
   update<K extends TableName>(table: K, id: string, patch: Partial<Tables[K]>): Promise<void>
   remove(table: TableName, id: string): Promise<void>
+  removeMany(table: TableName, ids: string[]): Promise<void>
+  updateWhere<K extends TableName>(table: K, column: keyof Tables[K] & string, value: string, patch: Partial<Tables[K]>): Promise<void>
   setPrimaryAccount(id: string): Promise<void>
   reload(): Promise<void>
 }
@@ -156,6 +158,39 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
     [repo, toast],
   )
 
+  const removeMany = useCallback<DataApi['removeMany']>(
+    async (table, ids) => {
+      if (!ids.length) return
+      const snapshot = dataRef.current
+      const set = new Set(ids)
+      setData((d) => ({ ...d, [table]: (d[table] as { id: string }[]).filter((r) => !set.has(r.id)) }))
+      try {
+        await repo.removeMany(table, ids)
+      } catch (e) {
+        setData(snapshot)
+        toast('error', `No se ha podido eliminar: ${errMsg(e)}`)
+      }
+    },
+    [repo, toast, setData],
+  )
+
+  const updateWhere = useCallback<DataApi['updateWhere']>(
+    async (table, column, value, patch) => {
+      const snapshot = dataRef.current
+      setData((d) => ({
+        ...d,
+        [table]: (d[table] as unknown as Record<string, unknown>[]).map((r) => (r[column] === value ? { ...r, ...patch } : r)),
+      }))
+      try {
+        await repo.updateWhere(table, column, value, patch)
+      } catch (e) {
+        setData(snapshot)
+        toast('error', `No se ha podido actualizar: ${errMsg(e)}`)
+      }
+    },
+    [repo, toast, setData],
+  )
+
   const setPrimaryAccount = useCallback<DataApi['setPrimaryAccount']>(
     async (id) => {
       const snapshot = dataRef.current.accounts
@@ -171,8 +206,8 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
   )
 
   const value = useMemo<DataApi>(
-    () => ({ data: safeData, loading, error, missingTables, source: repo.kind, create, createMany, update, remove, setPrimaryAccount, reload }),
-    [safeData, loading, error, missingTables, repo.kind, create, createMany, update, remove, setPrimaryAccount, reload],
+    () => ({ data: safeData, loading, error, missingTables, source: repo.kind, create, createMany, update, remove, removeMany, updateWhere, setPrimaryAccount, reload }),
+    [safeData, loading, error, missingTables, repo.kind, create, createMany, update, remove, removeMany, updateWhere, setPrimaryAccount, reload],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

@@ -1,4 +1,5 @@
-import { addDays, combineDateTime, toDateKey } from '../lib/dates'
+import { addDays, combineDateTime, startOfWeek, toDateKey } from '../lib/dates'
+import { holidayMap } from '../lib/holidays'
 import { uid } from '../lib/format'
 import type { Account, CalendarEvent, Category, Dataset, Project, ProjectTask, Transaction, WorkLog } from '../lib/types'
 import { defaultCategories } from '../lib/categories'
@@ -29,6 +30,8 @@ export function buildDemoDataset(today = new Date()): Dataset {
     end_at: combineDateTime(day(offset), end),
     category,
     is_completed: done,
+    all_day: false,
+    series_id: null,
     created_at: now,
   })
 
@@ -60,6 +63,39 @@ export function buildDemoDataset(today = new Date()): Dataset {
     ev(-8, '19:00', '21:00', 'Sesión de escalada', 'training', '', true),
   ]
 
+  // Work schedule as a series: Mon–Thu 8:00–17:30 for six weeks, skipping
+  // Andalusian holidays (each skipped day gets a "Festivo" event instead).
+  const hol = holidayMap('AN', [today.getFullYear(), today.getFullYear() + 1])
+  // A few vacation days in four weeks' time (Tue–Fri); the work series skips them.
+  const vacSeries = uid()
+  const vacationKeys = new Set<string>()
+  for (let i = 1; i <= 4; i++) {
+    const key = toDateKey(addDays(startOfWeek(addDays(today, 28)), i))
+    vacationKeys.add(key)
+    events.push({
+      id: uid(), title: 'Vacaciones', description: '', start_at: combineDateTime(key, '00:00'), end_at: combineDateTime(key, '23:59'),
+      category: 'vacation', is_completed: false, all_day: true, series_id: vacSeries, created_at: now,
+    })
+  }
+  const workSeries = uid()
+  for (let d = startOfWeek(today), i = 0; i < 42; i++, d = addDays(d, 1)) {
+    if (![1, 2, 3, 4].includes(d.getDay())) continue
+    const key = toDateKey(d)
+    if (vacationKeys.has(key)) continue
+    const h = hol.get(key)
+    if (h) {
+      events.push({
+        id: uid(), title: `Festivo: ${h.map((x) => x.name).join(' · ')}`, description: '',
+        start_at: combineDateTime(key, '00:00'), end_at: combineDateTime(key, '23:59'),
+        category: 'holiday', is_completed: false, all_day: true, series_id: null, created_at: now,
+      })
+      continue
+    }
+    events.push({
+      id: uid(), title: 'Jornada laboral', description: '', start_at: combineDateTime(key, '08:00'), end_at: combineDateTime(key, '17:30'),
+      category: 'work', is_completed: d < today, all_day: false, series_id: workSeries, created_at: now,
+    })
+  }
   // -------------------------------------------------------------- projects
   const pj = (p: Omit<Project, 'id' | 'updated_at' | 'description' | 'start_date'> & Partial<Pick<Project, 'description' | 'start_date'>>): Project => ({
     description: '',

@@ -11,6 +11,7 @@ import { categoryLabel, categoryNames } from '../lib/categories'
 import { usePrimaryAccountName } from './finance/TxForms'
 import { LogHoursModal, type LogDraft } from '../components/LogHoursModal'
 import { fmtHours, hoursByDay, inLogMonth, monthDays, readDailyTarget } from '../lib/worklog'
+import { useOffDays } from '../lib/useHolidays'
 import { Clock } from 'lucide-react'
 import type { CalendarEvent } from '../lib/types'
 import { useData } from '../state/data'
@@ -239,7 +240,7 @@ function AgendaRow({ e, onToggle, onOpen, showDay }: { e: CalendarEvent; onToggl
         <div className={cx('truncate text-sm', e.is_completed && 'text-faint line-through')}>{e.title}</div>
         <div className="num text-[11px] text-muted">
           {showDay && `${fmtWeekday(s)} ${fmtDate(s, { day: '2-digit' })} · `}
-          {fmtTime(e.start_at)}–{fmtTime(e.end_at)}
+          {e.all_day ? 'Todo el día' : `${fmtTime(e.start_at)}–${fmtTime(e.end_at)}`}
         </div>
       </div>
     </li>
@@ -276,6 +277,8 @@ function QuickCapture() {
         end_at: end,
         category: 'personal',
         is_completed: false,
+        all_day: false,
+        series_id: null,
       })
       if (ok) toast('success', 'Tarea añadida a hoy')
     } else {
@@ -343,8 +346,11 @@ function HoursNudge({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
   const perDay = hoursByDay(inLogMonth(data.work_logs, now))
   const todayKey = toDateKey(now)
   const todayH = perDay.get(todayKey) ?? 0
-  const missing = monthDays(now).filter((d) => !d.weekend && d.key < todayKey && !perDay.get(d.key)).length
-  const weekend = now.getDay() === 0 || now.getDay() === 6
+  const offDays = useOffDays(now)
+  const days = monthDays(now, offDays)
+  const missing = days.filter((d) => !d.rest && d.key < todayKey && !perDay.get(d.key)).length
+  const todayInfo = days.find((d) => d.key === todayKey)
+  const weekend = todayInfo?.rest ?? false
   if (weekend && missing === 0) return null
 
   return (

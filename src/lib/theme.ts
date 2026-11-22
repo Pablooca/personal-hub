@@ -32,6 +32,18 @@ export const CATEGORY_STYLES: Record<EventCategory, { dot: string; chip: string;
     bar: 'border-l-rose-500',
     chip: 'bg-rose-500/12 text-rose-700 dark:text-rose-300 border-rose-500/25',
   },
+  vacation: {
+    label: 'Vacaciones',
+    dot: 'bg-teal-500',
+    bar: 'border-l-teal-500',
+    chip: 'bg-teal-500/14 text-teal-700 dark:text-teal-300 border-teal-500/30',
+  },
+  holiday: {
+    label: 'Festivo',
+    dot: 'bg-orange-500',
+    bar: 'border-l-orange-500',
+    chip: 'bg-orange-500/14 text-orange-700 dark:text-orange-300 border-orange-500/30',
+  },
 }
 
 export const AREA_STYLES: Record<ProjectArea, string> = {

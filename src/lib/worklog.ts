@@ -38,13 +38,26 @@ export function parseHours(raw: string): number | null {
   return Math.round(h * 20) / 20
 }
 
-/** Every day of the month (local), flagged as weekend or not. */
-export function monthDays(month: Date): { date: Date; key: string; weekend: boolean }[] {
+export interface MonthDay {
+  date: Date
+  key: string
+  weekend: boolean
+  /** Why it's not a working day besides weekends: holiday name or "Vacaciones". */
+  off: string | null
+  /** weekend or off → no hours expected */
+  rest: boolean
+}
+
+/** Every day of the month (local). `offDays` marks holidays/vacations as non-working. */
+export function monthDays(month: Date, offDays: Map<string, string> = new Map()): MonthDay[] {
   const first = startOfMonth(month)
-  const out = []
+  const out: MonthDay[] = []
   for (let d = first; d.getMonth() === first.getMonth(); d = addDays(d, 1)) {
     const dow = d.getDay()
-    out.push({ date: d, key: toDateKey(d), weekend: dow === 0 || dow === 6 })
+    const key = toDateKey(d)
+    const weekend = dow === 0 || dow === 6
+    const off = offDays.get(key) ?? null
+    out.push({ date: d, key, weekend, off, rest: weekend || off !== null })
   }
   return out
 }

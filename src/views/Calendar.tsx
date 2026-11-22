@@ -8,6 +8,10 @@ import { capitalize, fmtDate, fmtMonth, fmtTime, fmtWeekday } from '../lib/forma
 import { CATEGORY_STYLES } from '../lib/theme'
 import { EVENT_CATEGORIES, type CalendarEvent, type EventCategory } from '../lib/types'
 import { useData } from '../state/data'
+import { REGION_OPTIONS, SCOPE_LABELS, holidayLabel, type Holiday, type HolidayRegion } from '../lib/holidays'
+import { useHolidayRegion, useHolidays } from '../lib/useHolidays'
+
+const timeLabel = (e: CalendarEvent) => (e.all_day ? 'Todo el día' : `${fmtTime(e.start_at)}–${fmtTime(e.end_at)}`)
 
 type Mode = 'month' | 'week'
 const HOUR_PX = 44
@@ -21,6 +25,8 @@ export function CalendarView() {
   const [selected, setSelected] = useState(() => startOfDay(new Date()))
   const [hidden, setHidden] = useState<Set<EventCategory>>(new Set())
   const [draft, setDraft] = useState<EventDraft | null>(null)
+  const [region, setRegion] = useHolidayRegion()
+  const holidays = useHolidays(cursor)
 
   const visible = useMemo(() => data.events.filter((e) => !hidden.has(e.category)), [data.events, hidden])
 
@@ -33,7 +39,8 @@ export function CalendarView() {
       if (list) list.push(e)
       else m.set(k, [e])
     }
-    for (const list of m.values()) list.sort((a, b) => a.start_at.localeCompare(b.start_at))
+    // All-day first, then by start time.
+    for (const list of m.values()) list.sort((a, b) => Number(b.all_day) - Number(a.all_day) || a.start_at.localeCompare(b.start_at))
     return m
   }, [visible])
 
@@ -51,7 +58,9 @@ export function CalendarView() {
       : `${fmtDate(week[0], { day: 'numeric', month: 'short' })} – ${fmtDate(week[6], { day: 'numeric', month: 'short', year: 'numeric' })}`
 
   const selectedEvents = byDay.get(toDateKey(selected)) ?? []
-  const doneCount = selectedEvents.filter((e) => e.is_completed).length
+  const checkable = selectedEvents.filter((e) => e.category !== 'holiday' && e.category !== 'vacation')
+  const doneCount = checkable.filter((e) => e.is_completed).length
+  const selectedHolidays = holidays.get(toDateKey(selected))
 
   const toggleCategory = (c: EventCategory) =>
     setHidden((h) => {
@@ -65,9 +74,22 @@ export function CalendarView() {
     <>
       <PageHeader
         eyebrow="Calendario y agenda"
-        title={<span className="capitalize">{title}</span>}
+        title={title}
         actions={
           <>
+            <select
+              className="field h-8 w-auto text-xs"
+              value={region}
+              onChange={(e) => setRegion(e.target.value as HolidayRegion)}
+              aria-label="Festivos que se aplican"
+              title="Festivos que se aplican"
+            >
+              {REGION_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  Festivos: {o.label}
+                </option>
+              ))}
+            </select>
             <Segmented value={mode} onChange={setMode} options={[{ value: 'month', label: 'Mes' }, { value: 'week', label: 'Semana' }]} />
             <div className="flex items-center rounded-lg border border-line bg-surface">
               <Button variant="ghost" size="icon" onClick={() => step(-1)} aria-label="Anterior">
@@ -113,6 +135,7 @@ export function CalendarView() {
               selected={selected}
               today={today}
               byDay={byDay}
+              holidays={holidays}
               onSelect={setSelected}
               onCreate={(d) => setDraft({ dateKey: toDateKey(d) })}
               onOpen={setDraft}
@@ -122,6 +145,7 @@ export function CalendarView() {
               days={week}
               today={today}
               byDay={byDay}
+              holidays={holidays}
               onOpen={setDraft}
               onCreate={(d, hour) =>
                 setDraft({
@@ -142,9 +166,22 @@ export function CalendarView() {
               {isSameDay(selected, today) && <span className="eyebrow text-accent">Hoy</span>}
             </span>
           }
-          action={<span className="num text-xs text-muted">{doneCount}/{selectedEvents.length}</span>}
+          action={<span className="num text-xs text-muted">{doneCount}/{checkable.length}</span>}
           className="xl:sticky xl:top-6 xl:self-start"
         >
+          {selectedHolidays && (
+            <div className="mb-3 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm text-orange-800 dark:text-orange-200">
+              {selectedHolidays.map((h) => (
+                <div key={h.name + h.scope}>
+                  <span className="font-semibold">Festivo</span> · {h.name}{' '}
+                  <span className="text-xs opacity-75">
+                    ({SCOPE_LABELS[h.scope]}
+                    {h.estimated ? ', estimado' : ''})
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           {selectedEvents.length === 0 ? (
             <Empty>
               Día libre.
@@ -164,12 +201,17 @@ export function CalendarView() {
                   )}
                 >
                   <div className="pt-0.5">
-                    <Check checked={e.is_completed} onChange={(v) => update('events', e.id, { is_completed: v })} label={`Completar ${e.title}`} />
+                    {e.category === 'holiday' || e.category === 'vacation' ? (
+                      <span className={cx('mt-1 block size-[18px] rounded-[5px]', CATEGORY_STYLES[e.category].dot)} />
+                    ) : (
+                      <Check checked={e.is_completed} onChange={(v) => update('events', e.id, { is_completed: v })} label={`Completar ${e.title}`} />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className={cx('text-sm font-medium', e.is_completed && 'text-faint line-through')}>{e.title}</div>
                     <div className="num text-[11px] text-muted">
-                      {fmtTime(e.start_at)}–{fmtTime(e.end_at)} · {CATEGORY_STYLES[e.category].label}
+                      {timeLabel(e)} · {CATEGORY_STYLES[e.category].label}
+                      {e.series_id && ' · serie'}
                     </div>
                     {e.description && <p className="mt-1 line-clamp-2 text-xs text-muted">{e.description}</p>}
                   </div>
@@ -177,9 +219,9 @@ export function CalendarView() {
               ))}
             </ul>
           )}
-          {selectedEvents.length > 0 && (
+          {checkable.length > 0 && (
             <div className="mt-4 h-1 overflow-hidden rounded-full bg-line">
-              <div className="h-full bg-emerald-500 transition-[width]" style={{ width: `${(doneCount / selectedEvents.length) * 100}%` }} />
+              <div className="h-full bg-emerald-500 transition-[width]" style={{ width: `${(doneCount / checkable.length) * 100}%` }} />
             </div>
           )}
         </Card>
@@ -196,6 +238,7 @@ function MonthGrid({
   selected,
   today,
   byDay,
+  holidays,
   onSelect,
   onCreate,
   onOpen,
@@ -204,6 +247,7 @@ function MonthGrid({
   selected: Date
   today: Date
   byDay: Map<string, CalendarEvent[]>
+  holidays: Map<string, Holiday[]>
   onSelect: (d: Date) => void
   onCreate: (d: Date) => void
   onOpen: (e: CalendarEvent) => void
@@ -222,6 +266,7 @@ function MonthGrid({
       <div className="grid grid-cols-7">
         {days.map((d, i) => {
           const events = byDay.get(toDateKey(d)) ?? []
+          const hol = holidays.get(toDateKey(d))
           const outside = d.getMonth() !== cursor.getMonth()
           const isSel = isSameDay(d, selected)
           const isToday = isSameDay(d, today)
@@ -234,19 +279,21 @@ function MonthGrid({
                 'group relative min-h-16 cursor-pointer border-line p-1 transition sm:min-h-24 sm:p-1.5',
                 i % 7 !== 6 && 'border-r',
                 i < 35 && 'border-b',
-                outside ? 'bg-surface-2/60' : 'bg-surface',
+                hol ? 'bg-orange-500/[0.07]' : outside ? 'bg-surface-2/60' : 'bg-surface',
                 isSel ? 'ring-2 ring-accent ring-inset' : 'hover:bg-surface-2',
               )}
+              title={hol ? `Festivo: ${holidayLabel(hol)}` : undefined}
             >
               <div className="flex items-center justify-between">
                 <span
                   className={cx(
                     'num grid size-6 place-items-center rounded-md text-xs',
-                    isToday ? 'bg-accent font-semibold text-accent-fg' : outside ? 'text-faint' : 'text-fg',
+                    isToday ? 'bg-accent font-semibold text-accent-fg' : hol ? 'font-semibold text-orange-600 dark:text-orange-400' : outside ? 'text-faint' : 'text-fg',
                   )}
                 >
                   {d.getDate()}
                 </span>
+                {hol && <span className="hidden min-w-0 flex-1 truncate px-1 text-[10px] font-medium text-orange-700 sm:block dark:text-orange-300">{holidayLabel(hol)}</span>}
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -281,7 +328,7 @@ function MonthGrid({
                       e.is_completed && 'line-through opacity-50',
                     )}
                   >
-                    <span className="num shrink-0 opacity-70">{fmtTime(e.start_at)}</span>
+                    {!e.all_day && <span className="num shrink-0 opacity-70">{fmtTime(e.start_at)}</span>}
                     <span className="truncate">{e.title}</span>
                   </button>
                 ))}
@@ -300,6 +347,7 @@ function WeekGrid({
   days,
   today,
   byDay,
+  holidays,
   onOpen,
   onCreate,
   onSelect,
@@ -307,6 +355,7 @@ function WeekGrid({
   days: Date[]
   today: Date
   byDay: Map<string, CalendarEvent[]>
+  holidays: Map<string, Holiday[]>
   onOpen: (e: CalendarEvent) => void
   onCreate: (d: Date, hour: number) => void
   onSelect: (d: Date) => void
@@ -321,13 +370,40 @@ function WeekGrid({
         <div className="grid grid-cols-[52px_repeat(7,1fr)] border-b border-line bg-surface-2">
           <div />
           {days.map((d) => (
-            <button key={d.toISOString()} onClick={() => onSelect(d)} className="border-l border-line py-2 text-center">
+            <button key={d.toISOString()} onClick={() => onSelect(d)} className={cx('border-l border-line py-2 text-center', holidays.get(toDateKey(d)) && 'bg-orange-500/[0.07]')}>
               <div className="eyebrow">{fmtWeekday(d)}</div>
               <div className={cx('num mx-auto mt-0.5 grid size-7 place-items-center rounded-md text-sm', isSameDay(d, today) && 'bg-accent font-semibold text-accent-fg')}>
                 {d.getDate()}
               </div>
             </button>
           ))}
+        </div>
+
+        {/* all-day row: holidays + all-day events */}
+        <div className="grid grid-cols-[52px_repeat(7,1fr)] border-b border-line">
+          <div className="px-1 py-1.5 text-right font-mono text-[9px] leading-tight text-faint uppercase">Todo el día</div>
+          {days.map((d) => {
+            const hol = holidays.get(toDateKey(d))
+            const allDay = (byDay.get(toDateKey(d)) ?? []).filter((e) => e.all_day)
+            return (
+              <div key={d.toISOString()} className="min-h-7 space-y-0.5 border-l border-line p-0.5">
+                {hol && !allDay.some((e) => e.category === 'holiday') && (
+                  <div className="truncate rounded border border-orange-500/30 bg-orange-500/14 px-1 text-[10px] leading-4 text-orange-700 dark:text-orange-300" title={holidayLabel(hol)}>
+                    {holidayLabel(hol)}
+                  </div>
+                )}
+                {allDay.map((e) => (
+                  <button
+                    key={e.id}
+                    onClick={() => onOpen(e)}
+                    className={cx('block w-full truncate rounded border px-1 text-left text-[10px] leading-4', CATEGORY_STYLES[e.category].chip)}
+                  >
+                    {e.title}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
         </div>
 
         <div className="scrollbar-thin max-h-[640px] overflow-y-auto">
@@ -342,10 +418,10 @@ function WeekGrid({
             </div>
 
             {days.map((d) => {
-              const events = byDay.get(toDateKey(d)) ?? []
+              const events = (byDay.get(toDateKey(d)) ?? []).filter((e) => !e.all_day)
               const isToday = isSameDay(d, today)
               return (
-                <div key={d.toISOString()} className={cx('relative border-l border-line', isToday && 'bg-accent/[0.03]')}>
+                <div key={d.toISOString()} className={cx('relative border-l border-line', isToday && 'bg-accent/[0.03]', holidays.get(toDateKey(d)) && 'bg-orange-500/[0.04]')}>
                   {hours.map((h, i) => (
                     <div
                       key={h}
