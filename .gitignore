@@ -36,3 +36,6 @@ pnpm-debug.log*
 # Supabase CLI local state (project ref, pooler URL, linked project)
 supabase/.temp/
 supabase/.branches/
+
+# Local notes with real commands/secrets — never commit
+comando.txt
