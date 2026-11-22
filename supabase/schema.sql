@@ -209,3 +209,9 @@ begin
   end loop;
 end;
 $$;
+
+-- =============================================================================
+--  Refresh the PostgREST schema cache so the API sees the new tables at once
+--  (avoids "Could not find the table 'public.events' in the schema cache").
+-- =============================================================================
+notify pgrst, 'reload schema';
