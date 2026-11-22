@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Repository } from '../data/repository'
+import { completeDataset, emptyDataset, type Repository } from '../data/repository'
 import { uid } from '../lib/format'
 import type { Dataset, NewRow, TableName, Tables } from '../lib/types'
 import { useToast } from './toast'
@@ -8,6 +8,8 @@ interface DataApi {
   data: Dataset
   loading: boolean
   error: string | null
+  /** Tables the database doesn't have yet (schema.sql needs re-running). */
+  missingTables: TableName[]
   source: Repository['kind']
   create<K extends TableName>(table: K, row: NewRow<K>): Promise<Tables[K] | null>
   createMany<K extends TableName>(table: K, rows: NewRow<K>[]): Promise<Tables[K][] | null>
@@ -17,7 +19,6 @@ interface DataApi {
   reload(): Promise<void>
 }
 
-const EMPTY: Dataset = { events: [], projects: [], project_tasks: [], transactions: [], categories: [], accounts: [], work_logs: [] }
 const Ctx = createContext<DataApi | null>(null)
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : 'Error inesperado')
@@ -27,24 +28,33 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'o
  * updates instantly and rolls back if the repository (Supabase / local) fails.
  */
 export function DataProvider({ repo, children }: { repo: Repository; children: ReactNode }) {
-  const [data, setData] = useState<Dataset>(EMPTY)
+  const [data, setDataRaw] = useState<Dataset>(emptyDataset)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [missingTables, setMissingTables] = useState<TableName[]>([])
+  // Every state update goes through completeDataset so no table can ever be undefined.
+  const setData = useCallback((next: Dataset | ((d: Dataset) => Dataset)) => {
+    setDataRaw((d) => completeDataset(typeof next === 'function' ? next(completeDataset(d)) : next))
+  }, [])
   const toast = useToast()
-  const dataRef = useRef(data)
-  dataRef.current = data
+  // Read side is normalised too (covers state kept across hot reloads by an older version).
+  const safeData = useMemo(() => completeDataset(data), [data])
+  const dataRef = useRef(safeData)
+  dataRef.current = safeData
 
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      setData(await repo.loadAll())
+      const res = await repo.loadAll()
+      setData(res.data)
+      setMissingTables(res.missing)
       setError(null)
     } catch (e) {
       setError(errMsg(e))
     } finally {
       setLoading(false)
     }
-  }, [repo])
+  }, [repo, setData])
 
   useEffect(() => {
     void reload()
@@ -55,7 +65,7 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
     if (!repo.subscribe) return
     return repo.subscribe((e) => {
       setData((d) => {
-        const rows = d[e.table] as { id: string }[]
+        const rows = (d[e.table] ?? []) as { id: string }[]
         if (e.kind === 'delete') {
           const next = { ...d, [e.table]: rows.filter((r) => r.id !== e.id) }
           if (e.table === 'projects') next.project_tasks = next.project_tasks.filter((t) => t.project_id !== e.id)
@@ -161,8 +171,8 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
   )
 
   const value = useMemo<DataApi>(
-    () => ({ data, loading, error, source: repo.kind, create, createMany, update, remove, setPrimaryAccount, reload }),
-    [data, loading, error, repo.kind, create, createMany, update, remove, setPrimaryAccount, reload],
+    () => ({ data: safeData, loading, error, missingTables, source: repo.kind, create, createMany, update, remove, setPrimaryAccount, reload }),
+    [safeData, loading, error, missingTables, repo.kind, create, createMany, update, remove, setPrimaryAccount, reload],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

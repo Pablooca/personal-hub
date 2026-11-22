@@ -10,9 +10,15 @@ export type ChangeEvent =
  * Storage abstraction. The UI never talks to Supabase or localStorage directly:
  * it receives one of these, so Demo Mode and the real database share every code path.
  */
+/** Result of a full load. `missing` lists tables the database doesn't have yet. */
+export interface LoadResult {
+  data: Dataset
+  missing: TableName[]
+}
+
 export interface Repository {
   readonly kind: 'supabase' | 'local'
-  loadAll(): Promise<Dataset>
+  loadAll(): Promise<LoadResult>
   insert<K extends TableName>(table: K, row: Tables[K]): Promise<Tables[K]>
   insertMany<K extends TableName>(table: K, rows: Tables[K][]): Promise<Tables[K][]>
   update<K extends TableName>(table: K, id: string, patch: Partial<Tables[K]>): Promise<Tables[K]>
@@ -24,6 +30,32 @@ export interface Repository {
 }
 
 const TABLES: TableName[] = ['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs']
+
+/** A dataset with every table present (empty). Always merge loaded data over this. */
+export const emptyDataset = (): Dataset => ({
+  events: [],
+  projects: [],
+  project_tasks: [],
+  transactions: [],
+  categories: [],
+  accounts: [],
+  work_logs: [],
+})
+
+/** Fill in any table missing from an older/partial dataset (e.g. demo data saved by a previous version). */
+export function completeDataset(partial: Partial<Dataset> | null | undefined): Dataset {
+  const out = emptyDataset()
+  if (!partial) return out
+  for (const t of TABLES) {
+    const rows = (partial as Record<string, unknown>)[t]
+    if (Array.isArray(rows)) (out as Record<TableName, unknown[]>)[t] = rows
+  }
+  return out
+}
+
+/** PostgREST "relation not found" — the table hasn't been created (schema.sql not re-run). */
+const isMissingTable = (e: { code?: string; message?: string }) =>
+  e.code === 'PGRST205' || e.code === '42P01' || /schema cache|does not exist/i.test(e.message ?? '')
 
 const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   events: { column: 'start_at', ascending: true },
@@ -71,15 +103,24 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
             .limit(5000),
         ),
       )
-      const out = {} as Dataset
+      const out = emptyDataset()
+      const missing: TableName[] = []
       results.forEach((res, i) => {
-        if (res.error) throw res.error
         const table = TABLES[i]
+        if (res.error) {
+          // One table not created yet must not take the whole app down.
+          if (isMissingTable(res.error)) {
+            missing.push(table)
+            return
+          }
+          throw res.error
+        }
         ;(out as Record<TableName, unknown[]>)[table] = (res.data ?? []).map((r) =>
           normalise(table, r as Tables[typeof table]),
         )
       })
-      return out
+      if (missing.length === TABLES.length) throw new Error('No se encuentra ninguna tabla. Ejecuta supabase/schema.sql en el SQL Editor.')
+      return { data: out, missing }
     },
 
     async insert(table, row) {
@@ -149,7 +190,7 @@ const DEMO_KEY = 'ph-demo-dataset-v5'
 function readDemo(): Dataset {
   try {
     const raw = localStorage.getItem(DEMO_KEY)
-    if (raw) return JSON.parse(raw) as Dataset
+    if (raw) return completeDataset(JSON.parse(raw) as Partial<Dataset>)
   } catch {
     /* corrupted or unavailable storage → reseed */
   }
@@ -183,7 +224,7 @@ export function createLocalRepository(): Repository {
 
     async loadAll() {
       db = readDemo()
-      return structuredClone(db)
+      return { data: structuredClone(db), missing: [] }
     },
 
     async insert(table, row) {

@@ -8,6 +8,7 @@ import { useTheme } from './state/theme'
 import { Login } from './components/Login'
 import { Shell, type ViewId } from './components/Shell'
 import { Button } from './components/ui'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { Overview } from './views/Overview'
 import { CalendarView } from './views/Calendar'
 import { ProjectsView } from './views/Projects'
@@ -124,7 +125,7 @@ function Workspace(props: {
       return 'overview'
     }
   })
-  const { loading, error, reload } = useData()
+  const { loading, error, reload, missingTables } = useData()
   const [openProjectId, setOpenProjectId] = useState<string | null>(null)
 
   const navigate = useCallback((v: ViewId) => {
@@ -165,12 +166,25 @@ function Workspace(props: {
         </div>
       ) : (
         <>
-          {view === 'overview' && <Overview onNavigate={navigate} onOpenProject={openProject} />}
-          {view === 'calendar' && <CalendarView />}
-          {view === 'projects' && <ProjectsView openProjectId={openProjectId} onOpenHandled={clearOpenProject} />}
-          {view === 'tasks' && <TasksView onOpenProject={openProject} />}
-          {view === 'hours' && <HoursView />}
-          {view === 'finance' && <FinanceView />}
+          {missingTables.length > 0 && (
+            <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+              <strong>Falta actualizar la base de datos.</strong> No existen todavía:{' '}
+              <span className="font-mono text-xs">{missingTables.join(', ')}</span>. Vuelve a ejecutar{' '}
+              <code className="font-mono text-xs">supabase/schema.sql</code> en el SQL Editor de Supabase y pulsa{' '}
+              <button className="font-semibold underline" onClick={() => void reload()}>
+                recargar
+              </button>
+              .
+            </div>
+          )}
+          <ErrorBoundary resetKey={view}>
+            {view === 'overview' && <Overview onNavigate={navigate} onOpenProject={openProject} />}
+            {view === 'calendar' && <CalendarView />}
+            {view === 'projects' && <ProjectsView openProjectId={openProjectId} onOpenHandled={clearOpenProject} />}
+            {view === 'tasks' && <TasksView onOpenProject={openProject} />}
+            {view === 'hours' && <HoursView />}
+            {view === 'finance' && <FinanceView />}
+          </ErrorBoundary>
         </>
       )}
     </Shell>
