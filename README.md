@@ -91,6 +91,12 @@ Si faltan las variables, la app compila igualmente pero solo ofrece el modo demo
 
 - **Vercel:** importa el repositorio (preset Vite) y añade las dos variables. `vercel.json` ya redirige las rutas a la SPA.
 - **Cloudflare Pages:** comando de build `npm run build`, directorio de salida `dist`, y añade las dos variables. `public/_redirects` se encarga del enrutado de la SPA.
+- **GitHub Pages:** el workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) compila y publica en cada push a `main`.
+  1. En **Settings → Pages**, elige como fuente **GitHub Actions**.
+  2. En **Settings → Secrets and variables → Actions**, crea `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`. Si no existen, se publica solo el modo demo.
+  3. El `base` de Vite se calcula solo: `/<repo>/`. En local se puede forzar con `VITE_BASE_PATH`.
+
+> En cualquier despliegue público, desactiva el registro de usuarios en Supabase (**Authentication → Providers → Email → Allow new users to sign up**). Si no, cualquiera podría crearse una cuenta con tu anon key y guardar datos en tu proyecto, aunque RLS le impediría ver los tuyos.
 
 ---
 
