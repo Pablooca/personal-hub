@@ -17,7 +17,7 @@ interface DataApi {
   reload(): Promise<void>
 }
 
-const EMPTY: Dataset = { events: [], projects: [], project_tasks: [], transactions: [], categories: [], accounts: [] }
+const EMPTY: Dataset = { events: [], projects: [], project_tasks: [], transactions: [], categories: [], accounts: [], work_logs: [] }
 const Ctx = createContext<DataApi | null>(null)
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : 'Error inesperado')
@@ -133,6 +133,7 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
       setData((d) => {
         const next = { ...d, [table]: (d[table] as { id: string }[]).filter((r) => r.id !== id) }
         if (table === 'projects') next.project_tasks = d.project_tasks.filter((t) => t.project_id !== id)
+        if (table === 'project_tasks') next.work_logs = d.work_logs.map((w) => (w.task_id === id ? { ...w, task_id: null } : w))
         return next
       })
       try {

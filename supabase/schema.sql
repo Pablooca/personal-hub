@@ -4,7 +4,7 @@
 --  Paste this whole file into Supabase → SQL Editor → Run.
 --  It is idempotent: safe to run more than once.
 --
---  Tables:   events · projects · project_tasks · transactions · categories · accounts
+--  Tables:   events · projects · project_tasks · transactions · categories · accounts · work_logs
 --  Security: Row Level Security on every table. Each row belongs to exactly
 --            one auth user (user_id) and is only visible/editable by them.
 -- =============================================================================
@@ -92,18 +92,84 @@ create trigger projects_set_updated_at
   for each row execute function public.set_updated_at();
 
 -- =============================================================================
---  3. PROJECT_TASKS — sub-tasks / milestones per project
+--  3. PROJECT_TASKS — tasks shown on the Kanban
+--  Either a sub-task of a project (project_id) or a standalone task with a
+--  category ('work' = day-job backlog, 'personal' = errands).
 -- =============================================================================
 create table if not exists public.project_tasks (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  project_id  uuid not null references public.projects (id) on delete cascade,
+  project_id  uuid references public.projects (id) on delete cascade,
+  category    text check (category in ('work', 'personal')),
   title       text not null check (char_length(title) between 1 and 300),
-  is_done     boolean not null default false,
-  created_at  timestamptz not null default now()
+  status      text not null default 'todo'
+              check (status in ('todo', 'in_progress', 'review', 'done')),
+  is_done     boolean not null default false,  -- kept in sync with status = 'done'
+  jira_key    text check (jira_key is null or char_length(jira_key) between 1 and 40),
+  created_at  timestamptz not null default now(),
+  constraint project_tasks_has_owner check (project_id is not null or category is not null)
 );
 
-comment on table public.project_tasks is 'Sub-tasks and milestones belonging to a project.';
+comment on table public.project_tasks is 'Kanban tasks: project sub-tasks or standalone work/personal tasks.';
+comment on column public.project_tasks.jira_key is 'Optional Jira issue key (e.g. PLAT-142), used by the work log.';
+
+-- Upgrade path: standalone tasks + Jira key.
+alter table public.project_tasks alter column project_id drop not null;
+alter table public.project_tasks add column if not exists category text;
+alter table public.project_tasks add column if not exists jira_key text;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'project_tasks_category_check') then
+    alter table public.project_tasks
+      add constraint project_tasks_category_check check (category in ('work', 'personal'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'project_tasks_has_owner') then
+    alter table public.project_tasks
+      add constraint project_tasks_has_owner check (project_id is not null or category is not null);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'project_tasks_jira_key_check') then
+    alter table public.project_tasks
+      add constraint project_tasks_jira_key_check check (jira_key is null or char_length(jira_key) between 1 and 40);
+  end if;
+end;
+$$;
+
+-- Upgrade path for databases created before the task Kanban existed.
+alter table public.project_tasks add column if not exists status text not null default 'todo';
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'project_tasks_status_check') then
+    alter table public.project_tasks
+      add constraint project_tasks_status_check check (status in ('todo', 'in_progress', 'review', 'done'));
+  end if;
+end;
+$$;
+update public.project_tasks set status = 'done' where is_done and status <> 'done';
+
+create index if not exists project_tasks_user_status_idx on public.project_tasks (user_id, status);
+
+-- Keep is_done and status consistent whichever one the client changes.
+create or replace function public.sync_task_status()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.is_done and new.status <> 'done' then new.status := 'done'; end if;
+    new.is_done := new.status = 'done';
+  elsif new.status is distinct from old.status then
+    new.is_done := new.status = 'done';
+  elsif new.is_done is distinct from old.is_done then
+    new.status := case when new.is_done then 'done' when old.status = 'done' then 'todo' else old.status end;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists project_tasks_sync_status on public.project_tasks;
+create trigger project_tasks_sync_status
+  before insert or update on public.project_tasks
+  for each row execute function public.sync_task_status();
 
 create index if not exists project_tasks_project_idx on public.project_tasks (project_id, created_at);
 create index if not exists project_tasks_user_idx on public.project_tasks (user_id);
@@ -172,6 +238,25 @@ create unique index if not exists accounts_one_primary_idx on public.accounts (u
 create index if not exists accounts_user_idx on public.accounts (user_id);
 
 -- =============================================================================
+--  7. WORK_LOGS — daily work diary for filling in Jira hours at month end
+-- =============================================================================
+create table if not exists public.work_logs (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  date         date not null default current_date,
+  hours        numeric(4, 2) not null check (hours > 0 and hours <= 24),
+  description  text not null default '' check (char_length(description) <= 2000),
+  jira_key     text check (jira_key is null or char_length(jira_key) between 1 and 40),
+  task_id      uuid references public.project_tasks (id) on delete set null,
+  created_at   timestamptz not null default now()
+);
+
+comment on table public.work_logs is 'What was worked on each day, how long and on which Jira issue.';
+
+create index if not exists work_logs_user_date_idx on public.work_logs (user_id, date desc);
+create index if not exists work_logs_task_idx on public.work_logs (task_id);
+
+-- =============================================================================
 --  ROW LEVEL SECURITY
 --  Strict per-user isolation: auth.uid() = user_id for every operation.
 --  The anon key alone can read nothing.
@@ -182,6 +267,7 @@ alter table public.project_tasks  enable row level security;
 alter table public.transactions   enable row level security;
 alter table public.categories     enable row level security;
 alter table public.accounts       enable row level security;
+alter table public.work_logs      enable row level security;
 
 -- ---- events -----------------------------------------------------------------
 drop policy if exists "events_select_own" on public.events;
@@ -214,8 +300,8 @@ create policy "projects_delete_own" on public.projects
   for delete to authenticated using ((select auth.uid()) = user_id);
 
 -- ---- project_tasks ----------------------------------------------------------
--- Insert/update also require the parent project to belong to the same user,
--- so nobody can attach tasks to someone else's project id.
+-- Insert/update also require the parent project (when there is one) to belong
+-- to the same user, so nobody can attach tasks to someone else's project id.
 drop policy if exists "project_tasks_select_own" on public.project_tasks;
 drop policy if exists "project_tasks_insert_own" on public.project_tasks;
 drop policy if exists "project_tasks_update_own" on public.project_tasks;
@@ -226,12 +312,14 @@ create policy "project_tasks_select_own" on public.project_tasks
 create policy "project_tasks_insert_own" on public.project_tasks
   for insert to authenticated with check (
     (select auth.uid()) = user_id
-    and exists (select 1 from public.projects p where p.id = project_id and p.user_id = (select auth.uid()))
+    and (project_id is null
+         or exists (select 1 from public.projects p where p.id = project_id and p.user_id = (select auth.uid())))
   );
 create policy "project_tasks_update_own" on public.project_tasks
   for update to authenticated using ((select auth.uid()) = user_id) with check (
     (select auth.uid()) = user_id
-    and exists (select 1 from public.projects p where p.id = project_id and p.user_id = (select auth.uid()))
+    and (project_id is null
+         or exists (select 1 from public.projects p where p.id = project_id and p.user_id = (select auth.uid())))
   );
 create policy "project_tasks_delete_own" on public.project_tasks
   for delete to authenticated using ((select auth.uid()) = user_id);
@@ -281,6 +369,29 @@ create policy "accounts_update_own" on public.accounts
 create policy "accounts_delete_own" on public.accounts
   for delete to authenticated using ((select auth.uid()) = user_id);
 
+-- ---- work_logs --------------------------------------------------------------
+drop policy if exists "work_logs_select_own" on public.work_logs;
+drop policy if exists "work_logs_insert_own" on public.work_logs;
+drop policy if exists "work_logs_update_own" on public.work_logs;
+drop policy if exists "work_logs_delete_own" on public.work_logs;
+
+create policy "work_logs_select_own" on public.work_logs
+  for select to authenticated using ((select auth.uid()) = user_id);
+create policy "work_logs_insert_own" on public.work_logs
+  for insert to authenticated with check (
+    (select auth.uid()) = user_id
+    and (task_id is null
+         or exists (select 1 from public.project_tasks t where t.id = task_id and t.user_id = (select auth.uid())))
+  );
+create policy "work_logs_update_own" on public.work_logs
+  for update to authenticated using ((select auth.uid()) = user_id) with check (
+    (select auth.uid()) = user_id
+    and (task_id is null
+         or exists (select 1 from public.project_tasks t where t.id = task_id and t.user_id = (select auth.uid())))
+  );
+create policy "work_logs_delete_own" on public.work_logs
+  for delete to authenticated using ((select auth.uid()) = user_id);
+
 -- Atomically switch the primary account (avoids a window with two primaries).
 create or replace function public.set_primary_account(account_id uuid)
 returns void
@@ -306,7 +417,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts'] loop
+  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

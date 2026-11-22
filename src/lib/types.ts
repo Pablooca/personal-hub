@@ -7,6 +7,12 @@ export type ProjectArea = (typeof PROJECT_AREAS)[number]
 export const PROJECT_STATUSES = ['backlog', 'in_progress', 'review', 'completed'] as const
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number]
 
+export const TASK_STATUSES = ['todo', 'in_progress', 'review', 'done'] as const
+export type TaskStatus = (typeof TASK_STATUSES)[number]
+
+export const TASK_CATEGORIES = ['work', 'personal'] as const
+export type TaskCategory = (typeof TASK_CATEGORIES)[number]
+
 export const PRIORITIES = ['low', 'medium', 'high'] as const
 export type Priority = (typeof PRIORITIES)[number]
 
@@ -44,9 +50,12 @@ export interface Project {
 export interface ProjectTask {
   id: string
   user_id?: string
-  project_id: string
+  project_id: string | null // null → standalone task with a category
+  category: TaskCategory | null
   title: string
-  is_done: boolean
+  status: TaskStatus
+  is_done: boolean // always status === 'done'
+  jira_key: string | null
   created_at: string
 }
 
@@ -87,6 +96,17 @@ export interface Account {
   created_at: string
 }
 
+export interface WorkLog {
+  id: string
+  user_id?: string
+  date: string // YYYY-MM-DD
+  hours: number
+  description: string
+  jira_key: string | null
+  task_id: string | null
+  created_at: string
+}
+
 export interface Tables {
   events: CalendarEvent
   projects: Project
@@ -94,6 +114,7 @@ export interface Tables {
   transactions: Transaction
   categories: Category
   accounts: Account
+  work_logs: WorkLog
 }
 
 export type TableName = keyof Tables

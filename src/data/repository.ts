@@ -23,7 +23,7 @@ export interface Repository {
   subscribe?(onChange: (e: ChangeEvent) => void): () => void
 }
 
-const TABLES: TableName[] = ['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts']
+const TABLES: TableName[] = ['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs']
 
 const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   events: { column: 'start_at', ascending: true },
@@ -32,6 +32,7 @@ const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   transactions: { column: 'date', ascending: false },
   categories: { column: 'name', ascending: true },
   accounts: { column: 'created_at', ascending: true },
+  work_logs: { column: 'date', ascending: false },
 }
 
 /** Postgres `numeric` arrives as a string — normalise it. */
@@ -39,6 +40,10 @@ function normalise<K extends TableName>(table: K, row: Tables[K]): Tables[K] {
   if (table === 'transactions') {
     const tx = row as Tables['transactions']
     return { ...tx, amount: Number(tx.amount) } as Tables[K]
+  }
+  if (table === 'work_logs') {
+    const wl = row as Tables['work_logs']
+    return { ...wl, hours: Number(wl.hours) } as Tables[K]
   }
   return row
 }
@@ -139,7 +144,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v3'
+const DEMO_KEY = 'ph-demo-dataset-v5'
 
 function readDemo(): Dataset {
   try {
@@ -207,6 +212,7 @@ export function createLocalRepository(): Repository {
     async remove(table, id) {
       ;(db as Record<TableName, { id: string }[]>)[table] = db[table].filter((r) => r.id !== id)
       if (table === 'projects') db.project_tasks = db.project_tasks.filter((t) => t.project_id !== id)
+      if (table === 'project_tasks') db.work_logs = db.work_logs.map((w) => (w.task_id === id ? { ...w, task_id: null } : w))
       commit()
     },
 

@@ -1,4 +1,4 @@
-import type { AccountKind, EventCategory, Priority, ProjectArea, ProjectStatus, TxType } from './types'
+import type { AccountKind, EventCategory, Priority, ProjectArea, ProjectStatus, TaskStatus, TxType } from './types'
 
 /** Category palette — Tailwind classes kept literal so they are not purged. */
 export const CATEGORY_STYLES: Record<EventCategory, { dot: string; chip: string; bar: string; label: string }> = {
@@ -46,6 +46,21 @@ export const STATUS_STYLES: Record<ProjectStatus, { label: string; dot: string }
   in_progress: { label: 'En curso', dot: 'bg-sky-500' },
   review: { label: 'En revisión', dot: 'bg-amber-500' },
   completed: { label: 'Completado', dot: 'bg-emerald-500' },
+}
+
+export const TASK_STATUS_STYLES: Record<TaskStatus, { label: string; dot: string }> = {
+  todo: { label: 'Por hacer', dot: 'bg-slate-400' },
+  in_progress: { label: 'En curso', dot: 'bg-sky-500' },
+  review: { label: 'En revisión', dot: 'bg-amber-500' },
+  done: { label: 'Hecho', dot: 'bg-emerald-500' },
+}
+
+/** Solid colour per project area, used as the project tag on task cards. */
+export const AREA_DOT: Record<ProjectArea, string> = {
+  research: 'bg-emerald-500',
+  engineering: 'bg-sky-500',
+  academic: 'bg-violet-500',
+  personal: 'bg-rose-500',
 }
 
 export const PRIORITY_STYLES: Record<Priority, string> = {

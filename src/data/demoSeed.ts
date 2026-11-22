@@ -1,6 +1,6 @@
 import { addDays, combineDateTime, toDateKey } from '../lib/dates'
 import { uid } from '../lib/format'
-import type { Account, CalendarEvent, Category, Dataset, Project, ProjectTask, Transaction } from '../lib/types'
+import type { Account, CalendarEvent, Category, Dataset, Project, ProjectTask, Transaction, WorkLog } from '../lib/types'
 import { defaultCategories } from '../lib/categories'
 
 /**
@@ -154,32 +154,80 @@ export function buildDemoDataset(today = new Date()): Dataset {
     }),
   ]
 
-  const tk = (projectIdx: number, title: string, is_done: boolean): ProjectTask => ({
+  const tk = (projectIdx: number, title: string, done: boolean | ProjectTask['status']): ProjectTask => {
+    const status = done === true ? 'done' : done === false ? 'todo' : done
+    return { id: uid(), project_id: projects[projectIdx].id, category: null, title, status, is_done: status === 'done', jira_key: null, created_at: now }
+  }
+
+  // Day-job backlog: standalone "Trabajo" tasks with (fictional) Jira keys.
+  const wk = (title: string, status: ProjectTask['status'], jira: string | null, category: 'work' | 'personal' = 'work'): ProjectTask => ({
     id: uid(),
-    project_id: projects[projectIdx].id,
+    project_id: null,
+    category,
     title,
-    is_done,
+    status,
+    is_done: status === 'done',
+    jira_key: jira,
     created_at: now,
   })
 
   const project_tasks: ProjectTask[] = [
     tk(0, 'Reproducir baseline densa', true),
     tk(0, 'Implementar kernel block-sparse', true),
-    tk(0, 'Barrido de longitudes de secuencia', false),
+    tk(0, 'Barrido de longitudes de secuencia', 'in_progress'),
     tk(0, 'Redactar sección de resultados', false),
     tk(1, 'Esquema + políticas RLS', true),
     tk(1, 'Vistas de mes/semana del calendario', true),
     tk(1, 'Exportación CSV de finanzas', true),
-    tk(1, 'Desplegar en Vercel', false),
+    tk(1, 'Desplegar en Vercel', 'review'),
     tk(2, 'Revisión bibliográfica', true),
     tk(2, 'Sección de metodología', true),
-    tk(2, 'Aplicar correcciones', false),
+    tk(2, 'Aplicar correcciones', 'in_progress'),
     tk(3, 'Escribir ADR del motor de almacenamiento', false),
     tk(4, 'Semanas 1–4: base aeróbica', true),
-    tk(4, 'Semanas 5–8: tempo', false),
+    tk(4, 'Semanas 5–8: tempo', 'in_progress'),
     tk(5, 'Elección de líder', true),
     tk(5, 'Replicación de log', true),
+    tk(3, 'Prototipo de ingesta con Kafka', false),
+    tk(6, 'Leer capítulos 1–3', false),
+    tk(1, 'Webhook de Apple Pay', 'in_progress'),
+    wk('Migrar endpoints de facturación a v2', 'in_progress', 'PLAT-142'),
+    wk('Corregir timeout en el job de conciliación', 'review', 'PLAT-151'),
+    wk('Dashboard de latencias en Grafana', 'todo', 'OBS-37'),
+    wk('Revisar PR de autenticación SSO', 'todo', 'PLAT-158'),
+    wk('Documentar runbook de incidentes', 'todo', 'OPS-12'),
+    wk('Spike: evaluar colas con SQS', 'done', 'PLAT-133'),
+    wk('Renovar DNI', 'todo', null, 'personal'),
   ]
+
+  // Work diary for the last weeks (weekdays only, a few days deliberately missing).
+  const byKey = new Map(project_tasks.filter((t) => t.jira_key).map((t) => [t.jira_key!, t.id]))
+  const work_logs: WorkLog[] = []
+  const plan: [string, number, string][][] = [
+    [['PLAT-142', 5, 'Migración de endpoints de facturación'], ['MEET', 1, 'Daily + refinamiento'], ['PLAT-151', 2, 'Análisis del timeout de conciliación']],
+    [['PLAT-142', 6, 'Tests de integración de facturación v2'], ['MEET', 2, 'Planning del sprint']],
+    [['PLAT-151', 4, 'Fix del timeout y PR'], ['PLAT-158', 2, 'Revisión PR SSO'], ['MEET', 1.5, 'Daily + 1:1']],
+    [['PLAT-133', 6, 'Spike SQS: pruebas de rendimiento'], ['MEET', 1, 'Daily']],
+    [['OBS-37', 3, 'Paneles de latencia p95/p99'], ['PLAT-142', 4, 'Feedback de la revisión'], ['MEET', 1, 'Daily']],
+  ]
+  for (let back = 1, n = 0; back <= 24; back++) {
+    const d = addDays(today, -back)
+    const dow = d.getDay()
+    if (dow === 0 || dow === 6) continue
+    n++
+    if (n === 4 || n === 9) continue // forgotten days → highlighted as "sin registrar"
+    for (const [key, hours, description] of plan[n % plan.length]) {
+      work_logs.push({
+        id: uid(),
+        date: toDateKey(d),
+        hours,
+        description,
+        jira_key: key === 'MEET' ? 'PLAT-1' : key,
+        task_id: byKey.get(key) ?? null,
+        created_at: now,
+      })
+    }
+  }
 
   // ---------------------------------------------------------- transactions
   const transactions: Transaction[] = []
@@ -240,5 +288,6 @@ export function buildDemoDataset(today = new Date()): Dataset {
     transactions: transactions.filter((t) => t.amount > 0),
     categories,
     accounts,
+    work_logs,
   }
 }

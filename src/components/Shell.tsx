@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import {
   CalendarDays,
+  Clock,
+  FolderKanban,
   FlaskConical,
   KanbanSquare,
   LayoutDashboard,
@@ -16,12 +18,14 @@ import { Logo } from './Logo'
 import { Button, cx } from './ui'
 import type { Theme } from '../state/theme'
 
-export type ViewId = 'overview' | 'calendar' | 'projects' | 'finance'
+export type ViewId = 'overview' | 'calendar' | 'projects' | 'tasks' | 'hours' | 'finance'
 
 export const NAV: { id: ViewId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'overview', label: 'Resumen', icon: LayoutDashboard },
   { id: 'calendar', label: 'Agenda', icon: CalendarDays },
-  { id: 'projects', label: 'Proyectos', icon: KanbanSquare },
+  { id: 'projects', label: 'Proyectos', icon: FolderKanban },
+  { id: 'tasks', label: 'Tareas', icon: KanbanSquare },
+  { id: 'hours', label: 'Horas', icon: Clock },
   { id: 'finance', label: 'Finanzas', icon: Wallet },
 ]
 
@@ -162,12 +166,12 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
 
       {/* ---------------------------------------------- mobile bottom nav */}
       <nav className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/90 backdrop-blur-md md:hidden">
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-6">
           {NAV.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => onNavigate(id)}
-              className={cx('flex h-14 flex-col items-center justify-center gap-1 text-[10px] font-medium', view === id ? 'text-accent' : 'text-muted')}
+              className={cx('flex h-14 min-w-0 flex-col items-center justify-center gap-1 text-[10px] font-medium', view === id ? 'text-accent' : 'text-muted')}
             >
               <Icon className="size-5" />
               {label}

@@ -13,7 +13,9 @@ React + TypeScript en el frontend y **Supabase** (PostgreSQL + Auth + Row Level 
 | --- | --- |
 | **Resumen** | Agenda de hoy con checklist, próximos 7 días, proyectos activos con su progreso, finanzas del mes, **tasa de ahorro acumulada del año** y captura rápida de tareas y gastos. |
 | **Agenda** | Vistas de mes y semana (rejilla horaria con solapamientos y línea de «ahora»), categorías por colores con filtro, crear/editar/eliminar eventos y checklist del día seleccionado. |
-| **Proyectos** | Tablero Kanban (arrastrar y soltar) y vista de lista. Cada proyecto tiene su propia página con descripción, fechas de inicio y fin, cronograma, subtareas/hitos editables, progreso (manual o calculado a partir de las subtareas), notas técnicas y enlace al repositorio. |
+| **Proyectos** | Cartera de proyectos en tarjetas o lista, con filtros por estado y área. Cada proyecto tiene su propia página con descripción, fechas de inicio y fin, cronograma, subtareas con estado, progreso (manual o calculado a partir de las subtareas), notas técnicas y enlace al repositorio. |
+| **Tareas** | Kanban (Por hacer · En curso · En revisión · Hecho) con las subtareas de todos los proyectos más tareas sueltas de **Trabajo** y **Personal**. Filtros por categoría o proyecto, arrastrar y soltar, clave de Jira opcional (escribe `PLAT-142 Título` y se separa sola) y registro de horas desde cada tarjeta. |
+| **Horas** | Diario de trabajo: qué hiciste cada día, cuántas horas y en qué issue de Jira. Resalta los días laborables sin registrar, calcula el total por issue y genera una **hoja de horas issue × día** que puedes copiar o exportar a CSV para imputar en Jira a final de mes. |
 | **Finanzas** | Registro rápido de ingresos, gastos y ahorro, **varias cuentas bancarias con una cuenta principal**, saldo por cuenta y patrimonio, **categorías propias**, KPIs del mes, tasa de ahorro anual, evolución de 12 meses, movimientos filtrables con exportación a CSV y bandeja **«Por revisar»** para los pagos de Apple Pay sin categoría. |
 | **Apple Pay** | Una Edge Function de Supabase recibe cada pago hecho con Apple Pay desde un Atajo de iPhone y lo registra como gasto, categorizado automáticamente. |
 
@@ -39,7 +41,7 @@ src/
 ├── lib/                    # tipos, fechas, finanzas, categorías, formato (es-ES)
 ├── components/             # Shell, Login, EventModal, primitivas de UI
 └── views/
-    ├── Overview.tsx · Calendar.tsx · Projects.tsx · ProjectDetail.tsx
+    ├── Overview.tsx · Calendar.tsx · Projects.tsx · ProjectDetail.tsx · Tasks.tsx · Hours.tsx
     └── finance/            # FinanceView, Ledger, TxForms, Manage (cuentas y categorías)
 supabase/
 ├── schema.sql              # tablas, restricciones, índices, RLS, RPC y realtime (idempotente)
@@ -52,7 +54,10 @@ La interfaz solo habla con un `Repository`. El modo demo y la base de datos real
 
 ### Modelo de datos
 
-`events` · `projects` · `project_tasks` · `transactions` · `categories` · `accounts`
+`events` · `projects` · `project_tasks` · `transactions` · `categories` · `accounts` · `work_logs`
+
+- `project_tasks` alimenta el Kanban de tareas: o pertenece a un proyecto (`project_id`) o es una tarea suelta con `category` (`work` / `personal`). `status` e `is_done` se mantienen sincronizados mediante un trigger.
+- `work_logs` guarda cada entrada del diario de horas (`date`, `hours`, `description`, `jira_key`, `task_id` opcional).
 
 - Los importes siempre son positivos y el `type` indica el signo: `income` (ingreso), `expense` (gasto) o `investment` (en la interfaz aparece como **Ahorro**).
 - Un movimiento de **Ahorro** es una transferencia desde la cuenta principal hacia la cuenta en la que se registra.

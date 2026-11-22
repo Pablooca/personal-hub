@@ -9,11 +9,14 @@ import { capitalize, fmtDate, fmtMoney, fmtMonth, fmtPct, fmtTime, fmtWeekday } 
 import { AREA_LABELS, AREA_STYLES, CATEGORY_STYLES, STATUS_STYLES } from '../lib/theme'
 import { categoryLabel, categoryNames } from '../lib/categories'
 import { usePrimaryAccountName } from './finance/TxForms'
+import { LogHoursModal, type LogDraft } from '../components/LogHoursModal'
+import { fmtHours, hoursByDay, inLogMonth, monthDays, readDailyTarget } from '../lib/worklog'
+import { Clock } from 'lucide-react'
 import type { CalendarEvent } from '../lib/types'
 import { useData } from '../state/data'
 import { useToast } from '../state/toast'
 
-export function Overview({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
+export function Overview({ onNavigate, onOpenProject }: { onNavigate: (v: ViewId) => void; onOpenProject: (id: string) => void }) {
   const { data, update } = useData()
   const [draft, setDraft] = useState<EventDraft | null>(null)
   const now = new Date()
@@ -73,6 +76,8 @@ export function Overview({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
           icon={<PiggyBank className="size-4" />}
         />
       </div>
+
+      <HoursNudge onNavigate={onNavigate} />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         {/* ------------------------------------------------ agenda */}
@@ -139,7 +144,11 @@ export function Overview({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
                 const tasks = data.project_tasks.filter((t) => t.project_id === p.id)
                 const due = p.deadline ? daysUntil(p.deadline) : null
                 return (
-                  <li key={p.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:gap-4">
+                  <li
+                    key={p.id}
+                    onClick={() => onOpenProject(p.id)}
+                    className="-mx-2 flex cursor-pointer flex-col gap-2 rounded-lg px-2 py-3 hover:bg-surface-2 sm:flex-row sm:items-center sm:gap-4"
+                  >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className={cx('size-1.5 rounded-full', STATUS_STYLES[p.status].dot)} />
@@ -322,5 +331,40 @@ function QuickCapture() {
         </p>
       </form>
     </Card>
+  )
+}
+
+/** Reminder strip: today's logged hours and forgotten days this month. */
+function HoursNudge({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
+  const { data } = useData()
+  const [draft, setDraft] = useState<LogDraft | null>(null)
+  const now = new Date()
+  const target = readDailyTarget()
+  const perDay = hoursByDay(inLogMonth(data.work_logs, now))
+  const todayKey = toDateKey(now)
+  const todayH = perDay.get(todayKey) ?? 0
+  const missing = monthDays(now).filter((d) => !d.weekend && d.key < todayKey && !perDay.get(d.key)).length
+  const weekend = now.getDay() === 0 || now.getDay() === 6
+  if (weekend && missing === 0) return null
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm">
+      <Clock className="size-4 text-accent" />
+      {!weekend && (
+        <span>
+          Hoy llevas <span className="num font-semibold">{fmtHours(todayH)}</span>
+          <span className="text-muted"> de {fmtHours(target)} registradas</span>
+        </span>
+      )}
+      {missing > 0 && (
+        <button onClick={() => onNavigate('hours')} className="text-amber-700 hover:underline dark:text-amber-300">
+          {missing} {missing === 1 ? 'día' : 'días'} sin registrar este mes
+        </button>
+      )}
+      <Button size="sm" variant="primary" className="ml-auto" onClick={() => setDraft({ date: todayKey })}>
+        <Plus className="size-3.5" /> Registrar horas
+      </Button>
+      <LogHoursModal draft={draft} onClose={() => setDraft(null)} />
+    </div>
   )
 }

@@ -3,8 +3,9 @@ import { ArrowLeft, CalendarRange, ExternalLink, Loader2, Plus, Trash2, Wand2, X
 import { Badge, Button, Card, Check, Field, ProgressBar, cx } from '../components/ui'
 import { daysUntil, fromDateKey, startOfDay } from '../lib/dates'
 import { fmtDate, uid } from '../lib/format'
-import { AREA_LABELS, AREA_STYLES, PRIORITY_LABELS, STATUS_STYLES } from '../lib/theme'
-import { PRIORITIES, PROJECT_AREAS, PROJECT_STATUSES, type Project, type ProjectArea, type ProjectStatus, type ProjectTask } from '../lib/types'
+import { AREA_LABELS, AREA_STYLES, PRIORITY_LABELS, STATUS_STYLES, TASK_STATUS_STYLES } from '../lib/theme'
+import { PRIORITIES, PROJECT_AREAS, PROJECT_STATUSES, TASK_STATUSES, type Project, type ProjectArea, type ProjectStatus, type ProjectTask, type TaskStatus } from '../lib/types'
+import { newTask as buildTask, taskStatusPatch } from '../lib/tasks'
 import { useData } from '../state/data'
 import { useToast } from '../state/toast'
 
@@ -50,7 +51,7 @@ export function ProjectDetail({
   const toast = useToast()
   const isNew = project === null
   const [form, setForm] = useState<Form>(() => (project ? { ...project } : blank(initialStatus, initialArea)))
-  const [draftTasks, setDraftTasks] = useState<{ id: string; title: string; is_done: boolean }[]>([])
+  const [draftTasks, setDraftTasks] = useState<{ id: string; title: string; status: TaskStatus; is_done: boolean }[]>([])
   const [newTask, setNewTask] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -85,7 +86,7 @@ export function ProjectDetail({
       if (created && draftTasks.length) {
         await createMany(
           'project_tasks',
-          draftTasks.map((t) => ({ project_id: created.id, title: t.title, is_done: t.is_done })),
+          draftTasks.map((t) => buildTask(t.title, { projectId: created.id }, t.status)),
         )
       }
       setSaving(false)
@@ -104,12 +105,15 @@ export function ProjectDetail({
     const title = newTask.trim()
     if (!title) return
     setNewTask('')
-    if (isNew) setDraftTasks((t) => [...t, { id: uid(), title, is_done: false }])
-    else await create('project_tasks', { project_id: project.id, title, is_done: false })
+    if (isNew) setDraftTasks((t) => [...t, { id: uid(), title, ...taskStatusPatch('todo') }])
+    else await create('project_tasks', buildTask(title, { projectId: project.id }))
   }
 
-  const toggleTask = (id: string, v: boolean) =>
-    isNew ? setDraftTasks((ts) => ts.map((t) => (t.id === id ? { ...t, is_done: v } : t))) : update('project_tasks', id, { is_done: v })
+  const setTaskStatus = (id: string, status: TaskStatus) =>
+    isNew
+      ? setDraftTasks((ts) => ts.map((t) => (t.id === id ? { ...t, ...taskStatusPatch(status) } : t)))
+      : update('project_tasks', id, taskStatusPatch(status))
+  const toggleTask = (id: string, v: boolean) => setTaskStatus(id, v ? 'done' : 'todo')
   const deleteTask = (id: string) => (isNew ? setDraftTasks((ts) => ts.filter((t) => t.id !== id)) : remove('project_tasks', id))
   const renameTask = (id: string, title: string) => {
     const t = title.trim()
@@ -211,6 +215,18 @@ export function ProjectDetail({
                     onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
                     aria-label="Título de la subtarea"
                   />
+                  <select
+                    className="h-7 shrink-0 rounded-md border border-line bg-surface-2 px-1.5 text-[11px] text-muted outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                    value={t.status}
+                    onChange={(e) => setTaskStatus(t.id, e.target.value as TaskStatus)}
+                    aria-label="Estado de la subtarea"
+                  >
+                    {TASK_STATUSES.map((st) => (
+                      <option key={st} value={st}>
+                        {TASK_STATUS_STYLES[st].label}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     onClick={() => deleteTask(t.id)}
                     className="text-faint opacity-0 group-hover:opacity-100 hover:text-rose-500 focus:opacity-100 max-md:opacity-100"

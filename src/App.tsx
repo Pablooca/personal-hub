@@ -12,6 +12,8 @@ import { Overview } from './views/Overview'
 import { CalendarView } from './views/Calendar'
 import { ProjectsView } from './views/Projects'
 import { FinanceView } from './views/finance/FinanceView'
+import { TasksView } from './views/Tasks'
+import { HoursView } from './views/Hours'
 
 type Mode = { kind: 'loading' } | { kind: 'login' } | { kind: 'demo' } | { kind: 'supabase'; session: Session }
 
@@ -117,12 +119,13 @@ function Workspace(props: {
   const [view, setView] = useState<ViewId>(() => {
     try {
       const v = localStorage.getItem(VIEW_KEY) as ViewId | null
-      return v && ['overview', 'calendar', 'projects', 'finance'].includes(v) ? v : 'overview'
+      return v && ['overview', 'calendar', 'projects', 'tasks', 'hours', 'finance'].includes(v) ? v : 'overview'
     } catch {
       return 'overview'
     }
   })
   const { loading, error, reload } = useData()
+  const [openProjectId, setOpenProjectId] = useState<string | null>(null)
 
   const navigate = useCallback((v: ViewId) => {
     setView(v)
@@ -133,6 +136,15 @@ function Workspace(props: {
       /* ignore */
     }
   }, [])
+
+  const openProject = useCallback(
+    (id: string) => {
+      setOpenProjectId(id)
+      navigate('projects')
+    },
+    [navigate],
+  )
+  const clearOpenProject = useCallback(() => setOpenProjectId(null), [])
 
   return (
     <Shell view={view} onNavigate={navigate} {...props}>
@@ -153,9 +165,11 @@ function Workspace(props: {
         </div>
       ) : (
         <>
-          {view === 'overview' && <Overview onNavigate={navigate} />}
+          {view === 'overview' && <Overview onNavigate={navigate} onOpenProject={openProject} />}
           {view === 'calendar' && <CalendarView />}
-          {view === 'projects' && <ProjectsView />}
+          {view === 'projects' && <ProjectsView openProjectId={openProjectId} onOpenHandled={clearOpenProject} />}
+          {view === 'tasks' && <TasksView onOpenProject={openProject} />}
+          {view === 'hours' && <HoursView />}
           {view === 'finance' && <FinanceView />}
         </>
       )}
