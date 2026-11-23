@@ -1,15 +1,41 @@
 import { useState } from 'react'
-import { ArrowLeft, CalendarRange, ExternalLink, Loader2, Plus, Trash2, Wand2, X } from 'lucide-react'
+import { ArrowLeft, CalendarRange, ExternalLink, Loader2, Maximize2, Plus, Trash2, Wand2, X } from 'lucide-react'
 import { Badge, Button, Card, Check, Field, ProgressBar, cx } from '../components/ui'
 import { daysUntil, fromDateKey, startOfDay } from '../lib/dates'
 import { fmtDate, uid } from '../lib/format'
-import { AREA_LABELS, AREA_STYLES, PRIORITY_LABELS, STATUS_STYLES, TASK_STATUS_STYLES } from '../lib/theme'
+import { AREA_LABELS, AREA_STYLES, PRIORITY_LABELS, PRIORITY_STYLES, STATUS_STYLES, TASK_STATUS_STYLES } from '../lib/theme'
+import { TaskModal } from '../components/TaskModal'
+import { LogHoursModal, type LogDraft } from '../components/LogHoursModal'
 import { PRIORITIES, PROJECT_AREAS, PROJECT_STATUSES, TASK_STATUSES, type Project, type ProjectArea, type ProjectStatus, type ProjectTask, type TaskStatus } from '../lib/types'
 import { newTask as buildTask, taskStatusPatch } from '../lib/tasks'
 import { useData } from '../state/data'
 import { useToast } from '../state/toast'
 
 type Form = Omit<Project, 'id' | 'user_id' | 'created_at' | 'updated_at'>
+
+/** Textarea that grows with its content (long project names wrap instead of being cut). */
+const autoGrow = (el: HTMLTextAreaElement | null) => {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+
+function StatusSelect({ value, onChange }: { value: TaskStatus; onChange: (v: TaskStatus) => void }) {
+  return (
+    <select
+      className="mt-0.5 h-7 shrink-0 rounded-md border border-line bg-surface-2 px-1.5 text-[11px] text-muted outline-none focus:ring-2 focus:ring-[var(--ring)]"
+      value={value}
+      onChange={(e) => onChange(e.target.value as TaskStatus)}
+      aria-label="Estado de la subtarea"
+    >
+      {TASK_STATUSES.map((st) => (
+        <option key={st} value={st}>
+          {TASK_STATUS_STYLES[st].label}
+        </option>
+      ))}
+    </select>
+  )
+}
 
 const EDITABLE = ['title', 'description', 'area', 'status', 'priority', 'start_date', 'deadline', 'repo_url', 'notes', 'progress'] as const
 
@@ -54,6 +80,8 @@ export function ProjectDetail({
   const [draftTasks, setDraftTasks] = useState<{ id: string; title: string; status: TaskStatus; is_done: boolean }[]>([])
   const [newTask, setNewTask] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [detailTask, setDetailTask] = useState<ProjectTask | null>(null)
+  const [logDraft, setLogDraft] = useState<LogDraft | null>(null)
   const [saving, setSaving] = useState(false)
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }))
@@ -146,11 +174,17 @@ export function ProjectDetail({
             {isNew ? 'Nuevo proyecto' : STATUS_STYLES[form.status].label}
             <Badge className={AREA_STYLES[form.area]}>{AREA_LABELS[form.area]}</Badge>
           </div>
-          <input
+          <textarea
             autoFocus={isNew}
-            className="w-full bg-transparent text-xl font-semibold tracking-tight outline-none placeholder:text-faint sm:text-2xl"
+            rows={1}
+            ref={autoGrow}
+            className="w-full resize-none overflow-hidden bg-transparent text-xl leading-snug font-semibold tracking-tight outline-none placeholder:text-faint sm:text-2xl"
             value={form.title}
-            onChange={(e) => set('title', e.target.value)}
+            onChange={(e) => {
+              set('title', e.target.value.replace(/\n/g, ' '))
+              autoGrow(e.target)
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
             placeholder="Nombre del proyecto"
             maxLength={200}
             aria-label="Nombre del proyecto"
@@ -205,37 +239,80 @@ export function ProjectDetail({
           >
             {allTasks.length > 0 && <ProgressBar value={(done / allTasks.length) * 100} tone="emerald" className="mb-3" />}
             <ul className="space-y-0.5">
-              {allTasks.map((t) => (
-                <li key={t.id} className="group flex items-center gap-2.5 rounded-lg px-2 py-1 hover:bg-surface-2">
-                  <Check checked={t.is_done} onChange={(v) => toggleTask(t.id, v)} label={t.title} />
-                  <input
-                    className={cx('h-7 flex-1 rounded bg-transparent px-1 text-sm outline-none focus:bg-surface focus:ring-1 focus:ring-line', t.is_done && 'text-faint line-through')}
+              {allTasks.map((t) => {
+                const full = 'due_date' in t ? (t as ProjectTask) : null
+                const due = full?.due_date ? daysUntil(full.due_date) : null
+                const overdue = due !== null && due < 0 && !t.is_done
+                return (
+                <li key={t.id} className="group flex items-start gap-2.5 rounded-lg px-2 py-1 hover:bg-surface-2">
+                  <div className="pt-1.5">
+                    <Check checked={t.is_done} onChange={(v) => toggleTask(t.id, v)} label={t.title} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                  <textarea
+                    key={t.title}
+                    rows={1}
+                    ref={autoGrow}
+                    className={cx(
+                      'block w-full resize-none overflow-hidden rounded bg-transparent px-1 py-1 text-sm leading-snug outline-none focus:bg-surface focus:ring-1 focus:ring-line',
+                      t.is_done && 'text-faint line-through',
+                    )}
                     defaultValue={t.title}
-                    onBlur={(e) => renameTask(t.id, e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                    onInput={(e) => autoGrow(e.currentTarget)}
+                    onBlur={(e) => renameTask(t.id, e.target.value.replace(/\n/g, ' '))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        e.currentTarget.blur()
+                      }
+                    }}
                     aria-label="Título de la subtarea"
                   />
-                  <select
-                    className="h-7 shrink-0 rounded-md border border-line bg-surface-2 px-1.5 text-[11px] text-muted outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                    value={t.status}
-                    onChange={(e) => setTaskStatus(t.id, e.target.value as TaskStatus)}
-                    aria-label="Estado de la subtarea"
-                  >
-                    {TASK_STATUSES.map((st) => (
-                      <option key={st} value={st}>
-                        {TASK_STATUS_STYLES[st].label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="px-1 pt-0.5 pb-1 sm:hidden">
+                    <StatusSelect value={t.status} onChange={(v) => setTaskStatus(t.id, v)} />
+                  </div>
+                  {full && (full.due_date || full.start_date || full.priority !== 'medium' || full.description) && (
+                    <button
+                      type="button"
+                      onClick={() => setDetailTask(full)}
+                      className="flex w-full flex-wrap items-center gap-x-2.5 gap-y-0.5 px-1 pb-0.5 text-left text-[11px] text-muted"
+                    >
+                      {full.priority !== 'medium' && (
+                        <span className={cx('font-mono font-semibold uppercase', PRIORITY_STYLES[full.priority])}>{PRIORITY_LABELS[full.priority]}</span>
+                      )}
+                      {(full.start_date || full.due_date) && (
+                        <span className={cx('num', overdue ? 'text-rose-600 dark:text-rose-400' : '')}>
+                          {full.start_date ? fmtDate(fromDateKey(full.start_date)) : '…'} → {full.due_date ? fmtDate(fromDateKey(full.due_date)) : '…'}
+                          {overdue && ' · vencida'}
+                        </span>
+                      )}
+                      {full.description && <span className="min-w-0 flex-1 truncate">{full.description}</span>}
+                    </button>
+                  )}
+                  </div>
+                  <div className="hidden sm:block">
+                    <StatusSelect value={t.status} onChange={(v) => setTaskStatus(t.id, v)} />
+                  </div>
+                  {full && (
+                    <button
+                      onClick={() => setDetailTask(full)}
+                      className="mt-1 shrink-0 rounded p-1 text-faint hover:bg-surface hover:text-fg"
+                      aria-label={`Detalles de ${t.title}`}
+                      title="Fechas, prioridad y descripción"
+                    >
+                      <Maximize2 className="size-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => deleteTask(t.id)}
-                    className="text-faint opacity-0 group-hover:opacity-100 hover:text-rose-500 focus:opacity-100 max-md:opacity-100"
+                    className="mt-1.5 text-faint opacity-0 group-hover:opacity-100 hover:text-rose-500 focus:opacity-100 max-md:opacity-100"
                     aria-label={`Eliminar ${t.title}`}
                   >
                     <X className="size-3.5" />
                   </button>
                 </li>
-              ))}
+                )
+              })}
             </ul>
             <form
               className="mt-2 flex gap-2"
@@ -382,6 +459,16 @@ export function ProjectDetail({
           </Card>
         </div>
       </div>
+
+      {detailTask && (
+        <TaskModal
+          key={detailTask.id}
+          task={tasks.find((x) => x.id === detailTask.id) ?? detailTask}
+          onClose={() => setDetailTask(null)}
+          onLogHours={(t) => setLogDraft({ task_id: t.id })}
+        />
+      )}
+      <LogHoursModal draft={logDraft} onClose={() => setLogDraft(null)} />
 
       {/* --------------------------------------------------- save bar */}
       {dirty && (

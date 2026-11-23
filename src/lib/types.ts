@@ -59,6 +59,10 @@ export interface ProjectTask {
   status: TaskStatus
   is_done: boolean // always status === 'done'
   jira_key: string | null
+  description: string
+  priority: Priority
+  start_date: string | null // YYYY-MM-DD
+  due_date: string | null // YYYY-MM-DD
   created_at: string
 }
 

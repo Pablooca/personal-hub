@@ -1,11 +1,13 @@
 import { useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
-import { Briefcase, Clock, Plus, Search, User } from 'lucide-react'
+import { Briefcase, CalendarDays, Clock, Plus, Search, User } from 'lucide-react'
 import { PageHeader } from '../components/Shell'
 import { LogHoursModal, type LogDraft } from '../components/LogHoursModal'
 import { TaskModal } from '../components/TaskModal'
 import { Button, Check, cx } from '../components/ui'
 import { TASK_CATEGORY_LABELS, newTask, taskStatusPatch } from '../lib/tasks'
-import { AREA_DOT, TASK_STATUS_STYLES } from '../lib/theme'
+import { AREA_DOT, PRIORITY_LABELS, PRIORITY_STYLES, TASK_STATUS_STYLES } from '../lib/theme'
+import { daysUntil, fromDateKey } from '../lib/dates'
+import { fmtDate } from '../lib/format'
 import { TASK_STATUSES, type Project, type ProjectTask, type TaskCategory, type TaskStatus } from '../lib/types'
 import { fmtHours } from '../lib/worklog'
 import { useData } from '../state/data'
@@ -259,6 +261,19 @@ function TaskCard({
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <OwnerTag t={t} project={project} />
             {t.jira_key && <span className="font-mono text-[10px] text-muted">{t.jira_key}</span>}
+            {t.priority !== 'medium' && <span className={cx('font-mono text-[10px] font-semibold uppercase', PRIORITY_STYLES[t.priority])}>{PRIORITY_LABELS[t.priority]}</span>}
+            {t.due_date && (
+              <span
+                className={cx(
+                  'num inline-flex items-center gap-1 text-[10px]',
+                  !t.is_done && daysUntil(t.due_date) < 0 ? 'text-rose-600 dark:text-rose-400' : !t.is_done && daysUntil(t.due_date) <= 2 ? 'text-amber-600 dark:text-amber-400' : 'text-muted',
+                )}
+                title="Fecha de fin"
+              >
+                <CalendarDays className="size-3" />
+                {fmtDate(fromDateKey(t.due_date))}
+              </span>
+            )}
           </div>
         </div>
       </div>

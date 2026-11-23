@@ -191,9 +191,22 @@ export function buildDemoDataset(today = new Date()): Dataset {
     }),
   ]
 
+  // Open tasks get a staggered start/end and a rotating priority so the demo shows dates on cards.
+  let taskN = 0
+  const taskExtras = (status: ProjectTask['status']): Pick<ProjectTask, 'description' | 'priority' | 'start_date' | 'due_date'> => {
+    const n = taskN++
+    if (status === 'done') return { description: '', priority: 'medium', start_date: day(-20 - n), due_date: day(-5 - n) }
+    return {
+      description: '',
+      priority: (['high', 'medium', 'low'] as const)[n % 3],
+      start_date: day(-3 + (n % 4)),
+      due_date: day(2 + ((n * 3) % 14)),
+    }
+  }
+
   const tk = (projectIdx: number, title: string, done: boolean | ProjectTask['status']): ProjectTask => {
     const status = done === true ? 'done' : done === false ? 'todo' : done
-    return { id: uid(), project_id: projects[projectIdx].id, category: null, title, status, is_done: status === 'done', jira_key: null, created_at: now }
+    return { id: uid(), project_id: projects[projectIdx].id, category: null, title, status, is_done: status === 'done', jira_key: null, ...taskExtras(status), created_at: now }
   }
 
   // Day-job backlog: standalone "Trabajo" tasks with (fictional) Jira keys.
@@ -205,6 +218,7 @@ export function buildDemoDataset(today = new Date()): Dataset {
     status,
     is_done: status === 'done',
     jira_key: jira,
+    ...taskExtras(status),
     created_at: now,
   })
 

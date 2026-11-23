@@ -120,8 +120,13 @@ create table if not exists public.project_tasks (
               check (status in ('todo', 'in_progress', 'review', 'done')),
   is_done     boolean not null default false,  -- kept in sync with status = 'done'
   jira_key    text check (jira_key is null or char_length(jira_key) between 1 and 40),
+  description text not null default '',
+  priority    text not null default 'medium' check (priority in ('low', 'medium', 'high')),
+  start_date  date,
+  due_date    date,
   created_at  timestamptz not null default now(),
-  constraint project_tasks_has_owner check (project_id is not null or category is not null)
+  constraint project_tasks_has_owner check (project_id is not null or category is not null),
+  constraint project_tasks_dates_order check (due_date is null or start_date is null or due_date >= start_date)
 );
 
 comment on table public.project_tasks is 'Kanban tasks: project sub-tasks or standalone work/personal tasks.';
@@ -131,6 +136,10 @@ comment on column public.project_tasks.jira_key is 'Optional Jira issue key (e.g
 alter table public.project_tasks alter column project_id drop not null;
 alter table public.project_tasks add column if not exists category text;
 alter table public.project_tasks add column if not exists jira_key text;
+alter table public.project_tasks add column if not exists description text not null default '';
+alter table public.project_tasks add column if not exists priority text not null default 'medium';
+alter table public.project_tasks add column if not exists start_date date;
+alter table public.project_tasks add column if not exists due_date date;
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'project_tasks_category_check') then
@@ -140,6 +149,14 @@ begin
   if not exists (select 1 from pg_constraint where conname = 'project_tasks_has_owner') then
     alter table public.project_tasks
       add constraint project_tasks_has_owner check (project_id is not null or category is not null);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'project_tasks_priority_check') then
+    alter table public.project_tasks
+      add constraint project_tasks_priority_check check (priority in ('low', 'medium', 'high'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'project_tasks_dates_order') then
+    alter table public.project_tasks
+      add constraint project_tasks_dates_order check (due_date is null or start_date is null or due_date >= start_date);
   end if;
   if not exists (select 1 from pg_constraint where conname = 'project_tasks_jira_key_check') then
     alter table public.project_tasks

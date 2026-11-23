@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { Clock, ExternalLink, Trash2 } from 'lucide-react'
 import { TASK_CATEGORY_LABELS, normaliseJiraKey, taskStatusPatch } from '../lib/tasks'
-import { TASK_STATUS_STYLES } from '../lib/theme'
-import { TASK_STATUSES, type ProjectTask, type TaskCategory, type TaskStatus } from '../lib/types'
+import { PRIORITY_LABELS, TASK_STATUS_STYLES } from '../lib/theme'
+import { PRIORITIES, TASK_STATUSES, type Priority, type ProjectTask, type TaskCategory, type TaskStatus } from '../lib/types'
 import { fmtHours } from '../lib/worklog'
 import { useData } from '../state/data'
 import { useToast } from '../state/toast'
-import { Button, Field, Modal } from './ui'
+import { Button, Field, Modal, cx } from './ui'
 
 /** Owner select value: "cat:work" | "cat:personal" | "<project id>" */
 const ownerValue = (t: Pick<ProjectTask, 'project_id' | 'category'>) => (t.project_id ? t.project_id : `cat:${t.category ?? 'work'}`)
@@ -19,8 +19,10 @@ export function TaskModal({
 }: {
   task: ProjectTask
   onClose: () => void
-  onLogHours: (t: ProjectTask) => void
-  onOpenProject: (projectId: string) => void
+  /** Omitted → the "Registrar horas" button is hidden. */
+  onLogHours?: (t: ProjectTask) => void
+  /** Omitted (e.g. already on the project page) → no "Abrir proyecto" link. */
+  onOpenProject?: (projectId: string) => void
 }) {
   const { data, update, remove } = useData()
   const toast = useToast()
@@ -28,10 +30,15 @@ export function TaskModal({
   const [owner, setOwner] = useState(ownerValue(task))
   const [status, setStatus] = useState<TaskStatus>(task.status)
   const [jira, setJira] = useState(task.jira_key ?? '')
+  const [description, setDescription] = useState(task.description ?? '')
+  const [priority, setPriority] = useState<Priority>(task.priority ?? 'medium')
+  const [startDate, setStartDate] = useState(task.start_date ?? '')
+  const [dueDate, setDueDate] = useState(task.due_date ?? '')
+  const datesValid = !startDate || !dueDate || dueDate >= startDate
   const logged = data.work_logs.filter((l) => l.task_id === task.id).reduce((a, l) => a + l.hours, 0)
 
   async function save() {
-    if (!title.trim()) return
+    if (!title.trim() || !datesValid) return
     const isCat = owner.startsWith('cat:')
     onClose()
     await update('project_tasks', task.id, {
@@ -39,6 +46,10 @@ export function TaskModal({
       project_id: isCat ? null : owner,
       category: isCat ? (owner.slice(4) as TaskCategory) : null,
       jira_key: normaliseJiraKey(jira),
+      description,
+      priority,
+      start_date: startDate || null,
+      due_date: dueDate || null,
       ...taskStatusPatch(status),
     })
   }
@@ -64,7 +75,7 @@ export function TaskModal({
           <Button variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
-          <Button variant="primary" onClick={save} disabled={!title.trim()}>
+          <Button variant="primary" onClick={save} disabled={!title.trim() || !datesValid}>
             Guardar
           </Button>
         </>
@@ -109,8 +120,42 @@ export function TaskModal({
             </select>
           </Field>
         </div>
-        <Field label="Clave de Jira (opcional)">
-          <input className="field num uppercase" placeholder="PROJ-123" value={jira} onChange={(e) => setJira(e.target.value)} maxLength={40} />
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Fecha de inicio">
+            <input type="date" className="field num" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          </Field>
+          <Field label="Fecha de fin">
+            <input
+              type="date"
+              className={cx('field num', !datesValid && 'border-rose-500')}
+              value={dueDate}
+              min={startDate || undefined}
+              onChange={(e) => setDueDate(e.target.value)}
+            />
+          </Field>
+          <Field label="Prioridad">
+            <select className="field" value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
+              {PRIORITIES.map((p) => (
+                <option key={p} value={p}>
+                  {PRIORITY_LABELS[p]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Clave de Jira (opcional)">
+            <input className="field num uppercase" placeholder="PROJ-123" value={jira} onChange={(e) => setJira(e.target.value)} maxLength={40} />
+          </Field>
+        </div>
+        {!datesValid && <p className="-mt-2 text-xs text-rose-500">La fecha de fin debe ser igual o posterior a la de inicio.</p>}
+        <Field label="Descripción">
+          <textarea
+            className="field min-h-24 text-sm leading-relaxed"
+            rows={4}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Detalles, criterios de aceptación, enlaces…"
+            maxLength={5000}
+          />
         </Field>
 
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2.5 text-sm">
@@ -118,19 +163,21 @@ export function TaskModal({
           <span className="text-muted">
             Horas registradas: <span className="num font-medium text-fg">{fmtHours(logged)}</span>
           </span>
-          <Button
-            type="button"
-            size="sm"
-            className="ml-auto"
-            onClick={() => {
-              onClose()
-              onLogHours(task)
-            }}
-          >
-            Registrar horas
-          </Button>
+          {onLogHours && (
+            <Button
+              type="button"
+              size="sm"
+              className="ml-auto"
+              onClick={() => {
+                onClose()
+                onLogHours(task)
+              }}
+            >
+              Registrar horas
+            </Button>
+          )}
         </div>
-        {task.project_id && (
+        {task.project_id && onOpenProject && (
           <button
             type="button"
             className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
