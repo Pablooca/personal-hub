@@ -7,7 +7,9 @@
  *
  * For each timed event: one message per reminder slot before it starts
  * (default 10 and 5 minutes, EVENT_REMINDERS="10,5") and one when it ends.
- * public.notification_log guarantees each message is sent once.
+ * For each study deadline not yet delivered/graded: one message per slot
+ * (default 1 day, 3 h, 1 h, 30 min, 5 min; DELIVERY_REMINDERS="1440,180,60,30,5").
+ * notification_log / study_notification_log guarantee each message is sent once.
  *
  * Auth: `Authorization: Bearer <NOTIFY_SECRET>` (the database reads the same
  * value from Supabase Vault). Deployed with --no-verify-jwt.
@@ -15,7 +17,7 @@
  * EVENT_REMINDERS, TIMEZONE. SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected.
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { eventEndMessage, eventStartMessage, parseSlots, reminderSlot, sendTelegram } from '../_shared/telegram.ts'
+import { deadlineMessage, eventEndMessage, eventStartMessage, parseSlots, reminderSlot, sendTelegram } from '../_shared/telegram.ts'
 
 const json = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -39,6 +41,7 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const timeZone = Deno.env.get('TIMEZONE') || 'Europe/Madrid'
   const slots = parseSlots(Deno.env.get('EVENT_REMINDERS'))
+  const deadlineSlots = parseSlots(Deno.env.get('DELIVERY_REMINDERS'), [1440, 180, 60, 30, 5])
 
   if (!secret || secret.length < 24 || !url || !serviceKey) {
     console.error('telegram-notify: missing NOTIFY_SECRET or Supabase env')
@@ -67,12 +70,21 @@ Deno.serve(async (req) => {
     const iso = (ms: number) => new Date(ms).toISOString()
     const maxLead = Math.max(...slots)
     const cols = 'id, title, start_at, end_at, category'
-    const [starting, ending] = await Promise.all([
+    const maxDeadline = Math.max(...deadlineSlots)
+    const [starting, ending, deadlines] = await Promise.all([
       db.from('events').select(cols).eq('all_day', false).gt('start_at', iso(now)).lte('start_at', iso(now + maxLead * 60_000)),
       db.from('events').select(cols).eq('all_day', false).gt('end_at', iso(now - 5 * 60_000)).lte('end_at', iso(now)),
+      db
+        .from('study_assessments')
+        .select('id, name, due_at, weight, subject:study_subjects(name)')
+        .eq('is_done', false)
+        .is('grade', null)
+        .gt('due_at', iso(now))
+        .lte('due_at', iso(now + maxDeadline * 60_000)),
     ])
     if (starting.error) throw starting.error
     if (ending.error) throw ending.error
+    if (deadlines.error) throw deadlines.error
 
     let sent = 0
     // Claim first (insert … on conflict do nothing), send only if we won the claim.
@@ -91,6 +103,20 @@ Deno.serve(async (req) => {
       if (slot !== null) await once(e.id, `start${slot}`, eventStartMessage(e, minutesLeft, timeZone))
     }
     for (const e of ending.data ?? []) await once(e.id, 'end', eventEndMessage(e, timeZone))
+
+    for (const a of deadlines.data ?? []) {
+      const minutesLeft = Math.max(1, Math.ceil((new Date(a.due_at as string).getTime() - now) / 60_000))
+      const slot = reminderSlot(minutesLeft, deadlineSlots)
+      if (slot === null) continue
+      const { data: claimed, error } = await db
+        .from('study_notification_log')
+        .upsert({ assessment_id: a.id, kind: `before${slot}` }, { onConflict: 'assessment_id,kind', ignoreDuplicates: true })
+        .select('assessment_id')
+      if (error) throw error
+      const subject = Array.isArray(a.subject) ? a.subject[0] : a.subject
+      const text = deadlineMessage({ name: a.name, due_at: a.due_at as string, weight: Number(a.weight) }, (subject as { name?: string } | null)?.name ?? 'Estudios', minutesLeft, timeZone)
+      if (claimed && claimed.length && (await sendTelegram(token, chatId, text))) sent++
+    }
     return json(200, { ok: true, sent })
   } catch (err) {
     console.error('telegram-notify: error', err)

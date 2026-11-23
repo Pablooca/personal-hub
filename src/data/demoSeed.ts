@@ -1,7 +1,7 @@
 import { addDays, combineDateTime, startOfWeek, toDateKey } from '../lib/dates'
 import { holidayMap } from '../lib/holidays'
 import { uid } from '../lib/format'
-import type { Account, CalendarEvent, Category, Dataset, Project, ProjectTask, Transaction, WorkLog } from '../lib/types'
+import type { Account, CalendarEvent, Category, Dataset, Project, ProjectTask, StudyAssessment, StudyFile, StudyProgram, StudySubject, Transaction, WorkLog } from '../lib/types'
 import { defaultCategories } from '../lib/categories'
 
 /**
@@ -317,6 +317,45 @@ export function buildDemoDataset(today = new Date()): Dataset {
 
   const categories: Category[] = defaultCategories().map((c) => ({ ...c, id: uid(), created_at: now }))
 
+  // ---------------------------------------------------------------- studies
+  const program: StudyProgram = {
+    id: uid(), name: 'Máster en Ingeniería Informática', institution: 'Universidad de ejemplo',
+    academic_year: `${today.getFullYear()}/${today.getFullYear() + 1}`, total_credits: 60, created_at: now,
+  }
+  const subject = (name: string, credits: number, semester: string, color: StudySubject['color'], extra: Partial<StudySubject> = {}): StudySubject => ({
+    id: uid(), program_id: program.id, name, code: '', credits, semester, professor: '', color,
+    status: 'in_progress', final_grade: null, target_grade: 5, created_at: now, ...extra,
+  })
+  const study_subjects: StudySubject[] = [
+    subject('Sistemas Distribuidos', 6, '1º cuatrimestre', 'violet'),
+    subject('Aprendizaje Automático Avanzado', 6, '1º cuatrimestre', 'emerald', { target_grade: 7 }),
+    subject('Seguridad en Redes', 4.5, '1º cuatrimestre', 'rose', { status: 'passed', final_grade: 8.4 }),
+    subject('Trabajo Fin de Máster', 12, '2º cuatrimestre', 'amber'),
+  ]
+  const as = (si: number, name: string, weight: number, grade: number | null, dueOffset: number | null = null): StudyAssessment => ({
+    id: uid(), subject_id: study_subjects[si].id, name, weight, grade,
+    due_at: dueOffset === null ? null : combineDateTime(day(dueOffset), '23:59'),
+    is_done: grade !== null || (dueOffset !== null && dueOffset < 0), created_at: now,
+  })
+  const study_assessments: StudyAssessment[] = [
+    as(0, 'Práctica 1 · Relojes lógicos', 15, 8.5, -40),
+    as(0, 'Práctica 2 · Raft', 25, 9, -4),
+    as(0, 'Examen final', 60, null, 24),
+    as(1, 'Proyecto Kaggle', 40, 7.2, -10),
+    as(1, 'Presentación paper', 20, null, 9),
+    as(1, 'Examen final', 40, null, 30),
+    as(2, 'Laboratorio', 50, 8, -60),
+    as(2, 'Examen', 50, 8.8, -30),
+    as(3, 'Memoria', 70, null, 200),
+    as(3, 'Defensa', 30, null, 215),
+  ]
+  // File rows only: Demo Mode has no storage, so opening them shows a notice.
+  const study_files: StudyFile[] = [
+    { id: uid(), subject_id: study_subjects[0].id, name: 'Tema 1 - Tiempo y relojes', topic: 'Tema 1', storage_path: 'demo/1.pdf', size_bytes: 654_336, created_at: now },
+    { id: uid(), subject_id: study_subjects[0].id, name: 'Tema 2 - Consenso', topic: 'Tema 2', storage_path: 'demo/2.pdf', size_bytes: 1_182_310, created_at: now },
+    { id: uid(), subject_id: study_subjects[1].id, name: 'Apuntes completos', topic: '', storage_path: 'demo/3.pdf', size_bytes: 2_831_155, created_at: now },
+  ]
+
   return {
     events,
     projects,
@@ -325,5 +364,9 @@ export function buildDemoDataset(today = new Date()): Dataset {
     categories,
     accounts,
     work_logs,
+    study_programs: [program],
+    study_subjects,
+    study_assessments,
+    study_files,
   }
 }

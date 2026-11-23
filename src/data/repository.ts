@@ -28,11 +28,19 @@ export interface Repository {
   updateWhere<K extends TableName>(table: K, column: keyof Tables[K] & string, value: string, patch: Partial<Tables[K]>): Promise<void>
   /** Make one account the primary one (and un-flag the previous). */
   setPrimaryAccount(id: string): Promise<void>
+  /** Study PDFs (private storage). Returns the storage path. Unsupported in Demo Mode. */
+  uploadStudyFile(subjectId: string, fileId: string, file: File): Promise<string>
+  /** Short-lived signed URL to open a PDF. */
+  studyFileUrl(path: string): Promise<string>
+  removeStudyFiles(paths: string[]): Promise<void>
   /** Live changes from other devices/tabs. Returns an unsubscribe function. */
   subscribe?(onChange: (e: ChangeEvent) => void): () => void
 }
 
-const TABLES: TableName[] = ['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs']
+const TABLES: TableName[] = [
+  'events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs',
+  'study_programs', 'study_subjects', 'study_assessments', 'study_files',
+]
 
 /** A dataset with every table present (empty). Always merge loaded data over this. */
 export const emptyDataset = (): Dataset => ({
@@ -43,6 +51,10 @@ export const emptyDataset = (): Dataset => ({
   categories: [],
   accounts: [],
   work_logs: [],
+  study_programs: [],
+  study_subjects: [],
+  study_assessments: [],
+  study_files: [],
 })
 
 /** Fill in any table missing from an older/partial dataset (e.g. demo data saved by a previous version). */
@@ -68,6 +80,29 @@ const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   categories: { column: 'name', ascending: true },
   accounts: { column: 'created_at', ascending: true },
   work_logs: { column: 'date', ascending: false },
+  study_programs: { column: 'created_at', ascending: true },
+  study_subjects: { column: 'created_at', ascending: true },
+  study_assessments: { column: 'created_at', ascending: true },
+  study_files: { column: 'created_at', ascending: false },
+}
+
+/**
+ * Child rows that disappear with their parent (mirrors the ON DELETE CASCADE
+ * foreign keys), so local state and Demo Mode behave like Postgres.
+ */
+export function cascadeRemove(d: Dataset, table: TableName, ids: Set<string>): Dataset {
+  const next = { ...d, [table]: (d[table] as { id: string }[]).filter((r) => !ids.has(r.id)) } as Dataset
+  if (table === 'projects') next.project_tasks = next.project_tasks.filter((t) => !t.project_id || !ids.has(t.project_id))
+  if (table === 'project_tasks') next.work_logs = next.work_logs.map((w) => (w.task_id && ids.has(w.task_id) ? { ...w, task_id: null } : w))
+  if (table === 'study_programs') {
+    const subjects = new Set(next.study_subjects.filter((s) => ids.has(s.program_id)).map((s) => s.id))
+    return subjects.size ? cascadeRemove(next, 'study_subjects', subjects) : next
+  }
+  if (table === 'study_subjects') {
+    next.study_assessments = next.study_assessments.filter((a) => !ids.has(a.subject_id))
+    next.study_files = next.study_files.filter((f) => !ids.has(f.subject_id))
+  }
+  return next
 }
 
 /** Postgres `numeric` arrives as a string — normalise it. */
@@ -79,6 +114,23 @@ function normalise<K extends TableName>(table: K, row: Tables[K]): Tables[K] {
   if (table === 'work_logs') {
     const wl = row as Tables['work_logs']
     return { ...wl, hours: Number(wl.hours) } as Tables[K]
+  }
+  const num = (v: unknown) => (v === null || v === undefined ? null : Number(v))
+  if (table === 'study_programs') {
+    const p = row as Tables['study_programs']
+    return { ...p, total_credits: num(p.total_credits) } as Tables[K]
+  }
+  if (table === 'study_subjects') {
+    const s = row as Tables['study_subjects']
+    return { ...s, credits: Number(s.credits), final_grade: num(s.final_grade), target_grade: Number(s.target_grade) } as Tables[K]
+  }
+  if (table === 'study_assessments') {
+    const a = row as Tables['study_assessments']
+    return { ...a, weight: Number(a.weight), grade: num(a.grade) } as Tables[K]
+  }
+  if (table === 'study_files') {
+    const f = row as Tables['study_files']
+    return { ...f, size_bytes: Number(f.size_bytes) } as Tables[K]
   }
   return row
 }
@@ -178,6 +230,25 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
       if (error) throw error
     },
 
+    async uploadStudyFile(subjectId, fileId, file) {
+      const path = `${userId}/${subjectId}/${fileId}.pdf`
+      const { error } = await client.storage.from(STUDY_BUCKET).upload(path, file, { contentType: 'application/pdf', upsert: false })
+      if (error) throw error
+      return path
+    },
+
+    async studyFileUrl(path) {
+      const { data, error } = await client.storage.from(STUDY_BUCKET).createSignedUrl(path, 600)
+      if (error) throw error
+      return data.signedUrl
+    },
+
+    async removeStudyFiles(paths) {
+      if (!paths.length) return
+      const { error } = await client.storage.from(STUDY_BUCKET).remove(paths)
+      if (error) throw error
+    },
+
     subscribe(onChange) {
       const channel = client.channel(`hub-${userId}`)
       for (const table of TABLES) {
@@ -201,7 +272,8 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v6'
+const DEMO_KEY = 'ph-demo-dataset-v8'
+export const STUDY_BUCKET = 'study-files'
 
 function readDemo(): Dataset {
   try {
@@ -267,15 +339,12 @@ export function createLocalRepository(): Repository {
     },
 
     async remove(table, id) {
-      ;(db as Record<TableName, { id: string }[]>)[table] = db[table].filter((r) => r.id !== id)
-      if (table === 'projects') db.project_tasks = db.project_tasks.filter((t) => t.project_id !== id)
-      if (table === 'project_tasks') db.work_logs = db.work_logs.map((w) => (w.task_id === id ? { ...w, task_id: null } : w))
+      db = cascadeRemove(db, table, new Set([id]))
       commit()
     },
 
     async removeMany(table, ids) {
-      const set = new Set(ids)
-      ;(db as Record<TableName, { id: string }[]>)[table] = db[table].filter((r) => !set.has(r.id))
+      db = cascadeRemove(db, table, new Set(ids))
       commit()
     },
 
@@ -289,6 +358,18 @@ export function createLocalRepository(): Repository {
     async setPrimaryAccount(id) {
       db.accounts = db.accounts.map((a) => ({ ...a, is_primary: a.id === id }))
       commit()
+    },
+
+    async uploadStudyFile() {
+      throw new Error('En el modo demo no se pueden subir archivos. Inicia sesión para guardar tus apuntes.')
+    },
+
+    async studyFileUrl() {
+      throw new Error('Los PDF de ejemplo del modo demo no tienen contenido.')
+    },
+
+    async removeStudyFiles() {
+      /* nothing stored in Demo Mode */
     },
   }
 }

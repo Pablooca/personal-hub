@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { completeDataset, emptyDataset, type Repository } from '../data/repository'
+import { cascadeRemove, completeDataset, emptyDataset, type Repository } from '../data/repository'
 import { uid } from '../lib/format'
 import type { Dataset, NewRow, TableName, Tables } from '../lib/types'
 import { useToast } from './toast'
@@ -18,6 +18,11 @@ interface DataApi {
   removeMany(table: TableName, ids: string[]): Promise<void>
   updateWhere<K extends TableName>(table: K, column: keyof Tables[K] & string, value: string, patch: Partial<Tables[K]>): Promise<void>
   setPrimaryAccount(id: string): Promise<void>
+  /** Upload a PDF to private storage and register it. */
+  uploadStudyFile(subjectId: string, file: File, topic: string): Promise<boolean>
+  openStudyFile(path: string): Promise<string | null>
+  /** Delete the given study files (storage objects + rows). */
+  deleteStudyFiles(files: { id: string; storage_path: string }[]): Promise<void>
   reload(): Promise<void>
 }
 
@@ -68,11 +73,7 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
     return repo.subscribe((e) => {
       setData((d) => {
         const rows = (d[e.table] ?? []) as { id: string }[]
-        if (e.kind === 'delete') {
-          const next = { ...d, [e.table]: rows.filter((r) => r.id !== e.id) }
-          if (e.table === 'projects') next.project_tasks = next.project_tasks.filter((t) => t.project_id !== e.id)
-          return next
-        }
+        if (e.kind === 'delete') return cascadeRemove(d, e.table, new Set([e.id]))
         const exists = rows.some((r) => r.id === e.row.id)
         return {
           ...d,
@@ -142,12 +143,7 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
   const remove = useCallback<DataApi['remove']>(
     async (table, id) => {
       const snapshot = dataRef.current
-      setData((d) => {
-        const next = { ...d, [table]: (d[table] as { id: string }[]).filter((r) => r.id !== id) }
-        if (table === 'projects') next.project_tasks = d.project_tasks.filter((t) => t.project_id !== id)
-        if (table === 'project_tasks') next.work_logs = d.work_logs.map((w) => (w.task_id === id ? { ...w, task_id: null } : w))
-        return next
-      })
+      setData((d) => cascadeRemove(d, table, new Set([id])))
       try {
         await repo.remove(table, id)
       } catch (e) {
@@ -162,8 +158,7 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
     async (table, ids) => {
       if (!ids.length) return
       const snapshot = dataRef.current
-      const set = new Set(ids)
-      setData((d) => ({ ...d, [table]: (d[table] as { id: string }[]).filter((r) => !set.has(r.id)) }))
+      setData((d) => cascadeRemove(d, table, new Set(ids)))
       try {
         await repo.removeMany(table, ids)
       } catch (e) {
@@ -205,9 +200,59 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
     [repo, toast],
   )
 
+  const uploadStudyFile = useCallback<DataApi['uploadStudyFile']>(
+    async (subjectId, file, topic) => {
+      const id = uid()
+      try {
+        const storage_path = await repo.uploadStudyFile(subjectId, id, file)
+        const row = await repo.insert('study_files', {
+          id,
+          subject_id: subjectId,
+          name: file.name.replace(/\.pdf$/i, '').slice(0, 200) || 'Apuntes',
+          topic: topic.trim(),
+          storage_path,
+          size_bytes: file.size,
+          created_at: new Date().toISOString(),
+        })
+        setData((d) => ({ ...d, study_files: [row, ...d.study_files.filter((f) => f.id !== row.id)] }))
+        return true
+      } catch (e) {
+        toast('error', `No se ha podido subir «${file.name}»: ${errMsg(e)}`)
+        return false
+      }
+    },
+    [repo, toast, setData],
+  )
+
+  const openStudyFile = useCallback<DataApi['openStudyFile']>(
+    async (path) => {
+      try {
+        return await repo.studyFileUrl(path)
+      } catch (e) {
+        toast('error', errMsg(e))
+        return null
+      }
+    },
+    [repo, toast],
+  )
+
+  const deleteStudyFiles = useCallback<DataApi['deleteStudyFiles']>(
+    async (files) => {
+      if (!files.length) return
+      try {
+        await repo.removeStudyFiles(files.map((f) => f.storage_path))
+      } catch (e) {
+        toast('error', `No se han podido borrar los PDF: ${errMsg(e)}`)
+        return
+      }
+      await removeMany('study_files', files.map((f) => f.id))
+    },
+    [repo, toast, removeMany],
+  )
+
   const value = useMemo<DataApi>(
-    () => ({ data: safeData, loading, error, missingTables, source: repo.kind, create, createMany, update, remove, removeMany, updateWhere, setPrimaryAccount, reload }),
-    [safeData, loading, error, missingTables, repo.kind, create, createMany, update, remove, removeMany, updateWhere, setPrimaryAccount, reload],
+    () => ({ data: safeData, loading, error, missingTables, source: repo.kind, create, createMany, update, remove, removeMany, updateWhere, setPrimaryAccount, uploadStudyFile, openStudyFile, deleteStudyFiles, reload }),
+    [safeData, loading, error, missingTables, repo.kind, create, createMany, update, remove, removeMany, updateWhere, setPrimaryAccount, uploadStudyFile, openStudyFile, deleteStudyFiles, reload],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

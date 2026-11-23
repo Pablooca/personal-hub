@@ -4,7 +4,8 @@
 --  Paste this whole file into Supabase → SQL Editor → Run.
 --  It is idempotent: safe to run more than once.
 --
---  Tables:   events · projects · project_tasks · transactions · categories · accounts · work_logs · notification_log
+--  Tables:   events · projects · project_tasks · transactions · categories · accounts · work_logs ·
+--            study_programs · study_subjects · study_assessments · study_files · notification_log
 --  Security: Row Level Security on every table. Each row belongs to exactly
 --            one auth user (user_id) and is only visible/editable by them.
 -- =============================================================================
@@ -420,6 +421,118 @@ revoke all on function public.set_primary_account(uuid) from public, anon;
 grant execute on function public.set_primary_account(uuid) to authenticated;
 
 -- =============================================================================
+--  8. STUDIES — programs (e.g. "Máster") → subjects → assessments + PDF notes
+-- =============================================================================
+create table if not exists public.study_programs (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name           text not null check (char_length(name) between 1 and 120),
+  institution    text not null default '',
+  academic_year  text not null default '',
+  total_credits  numeric(5, 1) check (total_credits is null or total_credits >= 0),
+  created_at     timestamptz not null default now()
+);
+
+create table if not exists public.study_subjects (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  program_id    uuid not null references public.study_programs (id) on delete cascade,
+  name          text not null check (char_length(name) between 1 and 160),
+  code          text not null default '',
+  credits       numeric(4, 1) not null default 6 check (credits >= 0),
+  semester      text not null default '',
+  professor     text not null default '',
+  color         text not null default 'violet',
+  status        text not null default 'in_progress' check (status in ('in_progress', 'passed', 'failed')),
+  final_grade   numeric(4, 2) check (final_grade is null or final_grade between 0 and 10),  -- official grade, overrides the calculation
+  target_grade  numeric(4, 2) not null default 5 check (target_grade between 0 and 10),
+  created_at    timestamptz not null default now()
+);
+
+create table if not exists public.study_assessments (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  subject_id  uuid not null references public.study_subjects (id) on delete cascade,
+  name        text not null check (char_length(name) between 1 and 120),
+  weight      numeric(5, 2) not null check (weight > 0 and weight <= 100),  -- % of the final grade
+  grade       numeric(4, 2) check (grade is null or grade between 0 and 10),
+  due_at      timestamptz,  -- deadline (date + time); drives the Telegram reminders
+  is_done     boolean not null default false,  -- delivered / sat: stops reminders
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists public.study_files (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  subject_id    uuid not null references public.study_subjects (id) on delete cascade,
+  name          text not null check (char_length(name) between 1 and 200),
+  topic         text not null default '',
+  storage_path  text not null unique,  -- <user_id>/<subject_id>/<file id>.pdf in bucket "study-files"
+  size_bytes    bigint not null check (size_bytes > 0 and size_bytes <= 52428800),
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists study_programs_user_idx on public.study_programs (user_id);
+create index if not exists study_subjects_program_idx on public.study_subjects (program_id);
+create index if not exists study_assessments_subject_idx on public.study_assessments (subject_id);
+create index if not exists study_assessments_due_idx on public.study_assessments (due_at) where due_at is not null and not is_done;
+create index if not exists study_files_subject_idx on public.study_files (subject_id);
+
+alter table public.study_programs    enable row level security;
+alter table public.study_subjects    enable row level security;
+alter table public.study_assessments enable row level security;
+alter table public.study_files       enable row level security;
+
+-- Own rows only; children also require the parent to be yours.
+do $$
+declare
+  spec record;
+begin
+  for spec in
+    select * from (values
+      ('study_programs',    null::text,         null::text),
+      ('study_subjects',    'program_id',       'study_programs'),
+      ('study_assessments', 'subject_id',       'study_subjects'),
+      ('study_files',       'subject_id',       'study_subjects')
+    ) as v(tbl, parent_col, parent_tbl)
+  loop
+    execute format('drop policy if exists %I on public.%I', spec.tbl || '_select_own', spec.tbl);
+    execute format('drop policy if exists %I on public.%I', spec.tbl || '_insert_own', spec.tbl);
+    execute format('drop policy if exists %I on public.%I', spec.tbl || '_update_own', spec.tbl);
+    execute format('drop policy if exists %I on public.%I', spec.tbl || '_delete_own', spec.tbl);
+    execute format('create policy %I on public.%I for select to authenticated using ((select auth.uid()) = user_id)', spec.tbl || '_select_own', spec.tbl);
+    execute format('create policy %I on public.%I for delete to authenticated using ((select auth.uid()) = user_id)', spec.tbl || '_delete_own', spec.tbl);
+    if spec.parent_col is null then
+      execute format('create policy %I on public.%I for insert to authenticated with check ((select auth.uid()) = user_id)', spec.tbl || '_insert_own', spec.tbl);
+      execute format('create policy %I on public.%I for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id)', spec.tbl || '_update_own', spec.tbl);
+    else
+      execute format(
+        'create policy %I on public.%I for insert to authenticated with check ((select auth.uid()) = user_id and exists (select 1 from public.%I p where p.id = %I and p.user_id = (select auth.uid())))',
+        spec.tbl || '_insert_own', spec.tbl, spec.parent_tbl, spec.parent_col);
+      execute format(
+        'create policy %I on public.%I for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id and exists (select 1 from public.%I p where p.id = %I and p.user_id = (select auth.uid())))',
+        spec.tbl || '_update_own', spec.tbl, spec.parent_tbl, spec.parent_col);
+    end if;
+  end loop;
+end;
+$$;
+
+-- Private storage for the PDFs: 50 MB max, PDF only, each user in their own folder.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('study-files', 'study-files', false, 52428800, array['application/pdf'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "study_files_storage_select" on storage.objects;
+drop policy if exists "study_files_storage_insert" on storage.objects;
+drop policy if exists "study_files_storage_delete" on storage.objects;
+create policy "study_files_storage_select" on storage.objects for select to authenticated
+  using (bucket_id = 'study-files' and (storage.foldername(name))[1] = (select auth.uid())::text);
+create policy "study_files_storage_insert" on storage.objects for insert to authenticated
+  with check (bucket_id = 'study-files' and (storage.foldername(name))[1] = (select auth.uid())::text);
+create policy "study_files_storage_delete" on storage.objects for delete to authenticated
+  using (bucket_id = 'study-files' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+-- =============================================================================
 --  REALTIME (optional but recommended)
 --  Lets the app receive live changes across devices (MacBook ⇄ iPhone).
 --  RLS still applies to realtime: you only receive your own rows.
@@ -428,7 +541,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs'] loop
+  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
@@ -441,8 +554,9 @@ $$;
 
 -- =============================================================================
 --  TELEGRAM NOTIFICATIONS (optional)
---  Event reminders (10 and 5 minutes before, and at the end) are sent by the
---  Edge Function `telegram-notify`, called every minute by pg_cron. Its URL
+--  Event reminders (10 and 5 minutes before, and at the end) and study deadline
+--  reminders (1 day, 3 h, 1 h, 30 min and 5 min before) are sent by the Edge
+--  Function `telegram-notify`, called every minute by pg_cron. Its URL
 --  and shared secret live in Supabase Vault, never in this file:
 --    select vault.create_secret('https://<ref>.supabase.co/functions/v1/telegram-notify', 'telegram_notify_url');
 --    select vault.create_secret('<same value as the NOTIFY_SECRET function secret>', 'telegram_notify_secret');
@@ -450,6 +564,15 @@ $$;
 -- =============================================================================
 create extension if not exists pg_net with schema extensions;
 create extension if not exists pg_cron with schema pg_catalog;
+
+-- Which reminders each study deadline already got ('before1440', 'before180', …).
+create table if not exists public.study_notification_log (
+  assessment_id  uuid not null references public.study_assessments (id) on delete cascade,
+  kind           text not null check (kind ~ '^before[0-9]{1,5}$'),
+  sent_at        timestamptz not null default now(),
+  primary key (assessment_id, kind)
+);
+alter table public.study_notification_log enable row level security;  -- no policies: server-only
 
 -- Which reminders each event already got ('start10', 'start5', 'end'): prevents duplicates.
 create table if not exists public.notification_log (
@@ -501,7 +624,10 @@ do $$
 begin
   perform cron.unschedule(jobid) from cron.job where jobname in ('telegram-events-tick', 'telegram-log-cleanup');
   perform cron.schedule('telegram-events-tick', '* * * * *', $job$ select public.notify_telegram('{"kind":"tick"}'::jsonb) $job$);
-  perform cron.schedule('telegram-log-cleanup', '17 4 * * *', $job$ delete from public.notification_log where sent_at < now() - interval '30 days' $job$);
+  perform cron.schedule('telegram-log-cleanup', '17 4 * * *', $job$
+    delete from public.notification_log where sent_at < now() - interval '30 days';
+    delete from public.study_notification_log where sent_at < now() - interval '60 days';
+  $job$);
 end;
 $$;
 

@@ -109,6 +109,61 @@ export interface WorkLog {
   created_at: string
 }
 
+export const SUBJECT_STATUSES = ['in_progress', 'passed', 'failed'] as const
+export type SubjectStatus = (typeof SUBJECT_STATUSES)[number]
+
+export interface StudyProgram {
+  id: string
+  user_id?: string
+  name: string
+  institution: string
+  academic_year: string
+  total_credits: number | null
+  created_at: string
+}
+
+export interface StudySubject {
+  id: string
+  user_id?: string
+  program_id: string
+  name: string
+  code: string
+  credits: number
+  semester: string
+  professor: string
+  color: CategoryColor
+  status: SubjectStatus
+  /** Official grade (e.g. from the acta). Overrides the calculated one. */
+  final_grade: number | null
+  target_grade: number
+  created_at: string
+}
+
+export interface StudyAssessment {
+  id: string
+  user_id?: string
+  subject_id: string
+  name: string
+  weight: number // % of the final grade
+  grade: number | null // 0–10, null = not graded yet
+  /** Deadline (ISO timestamp). Drives the Telegram reminders. */
+  due_at: string | null
+  /** Delivered / sat: no more reminders. */
+  is_done: boolean
+  created_at: string
+}
+
+export interface StudyFile {
+  id: string
+  user_id?: string
+  subject_id: string
+  name: string
+  topic: string
+  storage_path: string
+  size_bytes: number
+  created_at: string
+}
+
 export interface Tables {
   events: CalendarEvent
   projects: Project
@@ -117,6 +172,10 @@ export interface Tables {
   categories: Category
   accounts: Account
   work_logs: WorkLog
+  study_programs: StudyProgram
+  study_subjects: StudySubject
+  study_assessments: StudyAssessment
+  study_files: StudyFile
 }
 
 export type TableName = keyof Tables

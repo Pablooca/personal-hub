@@ -15,6 +15,7 @@ import { ProjectsView } from './views/Projects'
 import { FinanceView } from './views/finance/FinanceView'
 import { TasksView } from './views/Tasks'
 import { HoursView } from './views/Hours'
+import { StudiesView } from './views/studies/StudiesView'
 
 type Mode = { kind: 'loading' } | { kind: 'login' } | { kind: 'demo' } | { kind: 'supabase'; session: Session }
 
@@ -120,7 +121,7 @@ function Workspace(props: {
   const [view, setView] = useState<ViewId>(() => {
     try {
       const v = localStorage.getItem(VIEW_KEY) as ViewId | null
-      return v && ['overview', 'calendar', 'projects', 'tasks', 'hours', 'finance'].includes(v) ? v : 'overview'
+      return v && ['overview', 'calendar', 'projects', 'tasks', 'studies', 'hours', 'finance'].includes(v) ? v : 'overview'
     } catch {
       return 'overview'
     }
@@ -182,6 +183,7 @@ function Workspace(props: {
             {view === 'calendar' && <CalendarView />}
             {view === 'projects' && <ProjectsView openProjectId={openProjectId} onOpenHandled={clearOpenProject} />}
             {view === 'tasks' && <TasksView onOpenProject={openProject} />}
+            {view === 'studies' && <StudiesView />}
             {view === 'hours' && <HoursView />}
             {view === 'finance' && <FinanceView />}
           </ErrorBoundary>

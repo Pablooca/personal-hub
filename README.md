@@ -15,6 +15,7 @@ React + TypeScript en el frontend y **Supabase** (PostgreSQL + Auth + Row Level 
 | **Agenda** | Vistas de mes y semana (rejilla horaria, fila de «todo el día» y línea de «ahora»), categorías por colores con filtro (incluidas **Vacaciones** y **Festivo**) y checklist del día. **Eventos repetidos**: eliges días de la semana y un rango (p. ej. L–J 8:00–17:30) y se crean de golpe como una serie, que luego puedes editar o borrar entera. Los **festivos oficiales** del BOE (nacionales, Andalucía y C. Valenciana) se muestran siempre en el calendario. Al crear una serie solo se saltan los que afectan a su categoría (**Máster** → nacionales + C. Valenciana; **resto**, incluido Trabajo → nacionales + Andalucía, configurable), y en su lugar se añade un evento «Festivo». |
 | **Proyectos** | Cartera de proyectos en tarjetas o lista, con filtros por estado y área. Cada proyecto tiene su propia página con descripción, fechas de inicio y fin, cronograma, subtareas con estado, progreso (manual o calculado a partir de las subtareas), notas técnicas y enlace al repositorio. |
 | **Tareas** | Kanban (Por hacer · En curso · En revisión · Hecho) con las subtareas de todos los proyectos más tareas sueltas de **Trabajo** y **Personal**. Filtros por categoría o proyecto, arrastrar y soltar, clave de Jira opcional (escribe `PLAT-142 Título` y se separa sola) y registro de horas desde cada tarjeta. |
+| **Estudios** | **Programas** (p. ej. Máster) → **asignaturas** con créditos ECTS. Cada asignatura tiene su **evaluación** (partes con su % de la nota, nota y fecha y hora de entrega), con la nota actual, la media hasta ahora, **qué necesitas sacar en lo que queda** para tu objetivo y nota oficial opcional. Los programas muestran la **media ponderada por ECTS** y los créditos aprobados. **Apuntes en PDF** (hasta 50 MB) por tema, guardados en almacenamiento privado. Las entregas pueden añadirse a la Agenda y avisan por Telegram 1 día, 3 h, 1 h, 30 min y 5 min antes. |
 | **Horas** | Diario de trabajo: qué hiciste cada día, cuántas horas y en qué issue de Jira. Resalta los días laborables sin registrar, calcula el total por issue y genera una **hoja de horas issue × día** que puedes copiar o exportar a CSV para imputar en Jira a final de mes. |
 | **Finanzas** | Registro rápido de ingresos, gastos y ahorro, **varias cuentas bancarias con una cuenta principal**, saldo por cuenta y patrimonio, **categorías propias**, KPIs del mes, tasa de ahorro anual, evolución de 12 meses, movimientos filtrables con exportación a CSV y bandeja **«Por revisar»** para los pagos de Apple Pay sin categoría. |
 | **Apple Pay** | Una Edge Function de Supabase recibe cada pago hecho con Apple Pay desde un Atajo de iPhone y lo registra como gasto, categorizado automáticamente. |
@@ -56,7 +57,7 @@ La interfaz solo habla con un `Repository`. El modo demo y la base de datos real
 
 ### Modelo de datos
 
-`events` · `projects` · `project_tasks` · `transactions` · `categories` · `accounts` · `work_logs`
+`events` · `projects` · `project_tasks` · `transactions` · `categories` · `accounts` · `work_logs` · `study_programs` · `study_subjects` · `study_assessments` · `study_files`
 
 - `project_tasks` alimenta el Kanban de tareas: o pertenece a un proyecto (`project_id`) o es una tarea suelta con `category` (`work` / `personal`). `status` e `is_done` se mantienen sincronizados mediante un trigger.
 - `events.series_id` agrupa los eventos creados con «Repetir»; `events.all_day` marca los de todo el día.
@@ -199,7 +200,8 @@ curl -X POST "https://<project-ref>.supabase.co/functions/v1/apple-pay-webhook" 
 ## Notificaciones por Telegram
 
 - **Cada gasto que entra por Apple Pay** → mensaje al instante, enviado por `apple-pay-webhook` tras registrarlo. Las importaciones y los gastos manuales no avisan.
-- **Eventos con hora** → avisos **10 y 5 minutos antes** y **al terminar**. `pg_cron` llama cada minuto a la función `telegram-notify` y `notification_log` garantiza que cada aviso se envía una sola vez. Los eventos de todo el día no avisan.
+- **Eventos con hora** → avisos **10 y 5 minutos antes** y **al terminar**.
+- **Entregas de Estudios** (evaluaciones con fecha y hora, no marcadas como entregadas ni calificadas) → avisos **1 día, 3 h, 1 h, 30 min y 5 min antes** (`DELIVERY_REMINDERS="1440,180,60,30,5"`). `pg_cron` llama cada minuto a la función `telegram-notify` y `notification_log` garantiza que cada aviso se envía una sola vez. Los eventos de todo el día no avisan.
 
 Configuración (una vez):
 
@@ -220,7 +222,7 @@ Configuración (una vez):
    ```
 5. Ejecuta `supabase/schema.sql` (crea `notification_log` y la tarea de `pg_cron`). Prueba: `select public.notify_telegram('{"kind":"test"}');`
 
-Opcional: `EVENT_REMINDERS="15,5"` cambia los minutos de aviso; `TIMEZONE` (por defecto `Europe/Madrid`).
+Opcional: `EVENT_REMINDERS="15,5"` y `DELIVERY_REMINDERS="1440,180,60,30,5"` cambian los minutos de aviso; `TIMEZONE` (por defecto `Europe/Madrid`).
 
 ## Modelo de seguridad
 
@@ -239,6 +241,7 @@ Opcional: `EVENT_REMINDERS="15,5"` cambia los minutos de aviso; `TIMEZONE` (por 
 | `npm run build` | Comprobación de tipos (`tsc -b`) y build de producción |
 | `npm run preview` | Sirve el build de producción en local |
 | `npm run typecheck` | Solo comprobación de tipos |
+| `npm test` | Tests unitarios (notas de Estudios, webhook de Apple Pay y mensajes de Telegram) |
 
 ## Licencia
 

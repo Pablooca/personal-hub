@@ -69,7 +69,7 @@ export function parseSlots(raw: string | undefined, fallback = [10, 5]): number[
   const slots = (raw ?? '')
     .split(',')
     .map((x) => Math.round(Number(x.trim())))
-    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 240)
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 10080) // up to one week
   return slots.length ? [...new Set(slots)].sort((a, b) => b - a) : fallback
 }
 
@@ -96,4 +96,35 @@ export function eventStartMessage(e: EventRow, minutesLeft: number, timeZone: st
 
 export function eventEndMessage(e: EventRow, timeZone: string): string {
   return `✅ <b>Ha terminado: ${escapeHtml(e.title)}</b>\n${time(e.start_at, timeZone)}–${time(e.end_at, timeZone)}`
+}
+
+// ---------------------------------------------------------------- study deadlines
+/** 1440 → "1 día" · 180 → "3 h" · 90 → "1 h 30 min" · 30 → "30 min" */
+export function humanMinutes(m: number): string {
+  if (m >= 1440 && m % 1440 === 0) return m === 1440 ? '1 día' : `${m / 1440} días`
+  if (m >= 1440) {
+    const d = Math.floor(m / 1440)
+    const h = Math.round((m % 1440) / 60)
+    return h ? `${d} día${d > 1 ? 's' : ''} y ${h} h` : `${d} día${d > 1 ? 's' : ''}`
+  }
+  if (m >= 60) {
+    const h = Math.floor(m / 60)
+    const r = m % 60
+    return r ? `${h} h ${r} min` : `${h} h`
+  }
+  return `${m} min`
+}
+
+export interface DeadlineRow {
+  name: string
+  due_at: string
+  weight: number
+}
+
+const dateTime = (iso: string, timeZone: string) =>
+  new Intl.DateTimeFormat('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone }).format(new Date(iso))
+
+export function deadlineMessage(a: DeadlineRow, subjectName: string, minutesLeft: number, timeZone: string): string {
+  const urgent = minutesLeft <= 30 ? '🚨' : minutesLeft <= 180 ? '⏳' : '📚'
+  return `${urgent} <b>Entrega en ${humanMinutes(minutesLeft)}: ${escapeHtml(a.name)}</b>\n${escapeHtml(subjectName)} · ${a.weight.toLocaleString('es-ES')} % de la nota\nVence: ${dateTime(a.due_at, timeZone)}`
 }
