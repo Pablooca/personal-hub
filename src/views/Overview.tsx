@@ -191,6 +191,7 @@ export function Overview({ onNavigate, onOpenProject }: { onNavigate: (v: ViewId
             <Row icon={<TrendingUp className="size-4 text-emerald-500" />} label="Ingresos" value={fmtMoney(month.income)} />
             <Row icon={<TrendingDown className="size-4 text-rose-500" />} label="Gastos" value={fmtMoney(month.expense)} />
             <Row icon={<PiggyBank className="size-4 text-sky-500" />} label="Ahorrado" value={fmtMoney(month.investment)} />
+            {month.withdrawn > 0 && <Row icon={<PiggyBank className="size-4 text-faint" />} label="Retirado del ahorro" value={fmtMoney(month.withdrawn)} />}
           </dl>
           <div className="mt-4 border-t border-line pt-4">
             <div className="flex items-baseline justify-between text-xs text-muted">

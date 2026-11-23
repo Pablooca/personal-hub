@@ -119,7 +119,13 @@ export function FinanceView() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="Ingresos" value={fmtMoney(s.income)} tone={TX_STYLES.income.text} hint={delta(s.income, prev.income)} icon={<TrendingUp className="size-4" />} />
         <Stat label="Gastos" value={fmtMoney(s.expense)} tone={TX_STYLES.expense.text} hint={delta(s.expense, prev.expense)} icon={<TrendingDown className="size-4" />} />
-        <Stat label="Ahorrado" value={fmtMoney(s.investment)} tone={TX_STYLES.investment.text} hint={delta(s.investment, prev.investment)} icon={<PiggyBank className="size-4" />} />
+        <Stat
+          label="Ahorrado"
+          value={fmtMoney(s.investment)}
+          tone={TX_STYLES.investment.text}
+          hint={s.withdrawn > 0 ? `retirado del ahorro: ${fmtMoney(s.withdrawn)}` : delta(s.investment, prev.investment)}
+          icon={<PiggyBank className="size-4" />}
+        />
         <Stat
           label="Balance neto"
           value={fmtMoney(s.net)}
@@ -242,6 +248,7 @@ export function FinanceView() {
             <Row label="Ingresos" value={fmtMoney(ytd.income)} tone={TX_STYLES.income.text} />
             <Row label="Gastos" value={fmtMoney(ytd.expense)} tone={TX_STYLES.expense.text} />
             <Row label="Ahorrado" value={fmtMoney(ytd.investment)} tone={TX_STYLES.investment.text} />
+            {ytd.withdrawn > 0 && <Row label="Retirado del ahorro" value={fmtMoney(ytd.withdrawn)} />}
             <div className="border-t border-line pt-2.5">
               <Row label="Tasa de ahorro" value={fmtPct(ytd.savingsRate)} />
             </div>

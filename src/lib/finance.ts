@@ -9,14 +9,18 @@ export const OPENING_BALANCE = 'opening_balance'
 /**
  * Money moved back from a savings account to the primary one. Stored as a pair:
  * an income on the primary account and an expense on the savings account (so
- * balances stay right). Neither counts as income/expense; it reduces "Ahorrado".
+ * balances stay right). Neither counts as income/expense nor reduces "Ahorrado";
+ * it is reported separately as `withdrawn`.
  */
 export const SAVINGS_WITHDRAWAL = 'savings_withdrawal'
 
 export interface MonthSummary {
   income: number
   expense: number
+  /** Money moved INTO savings. Never negative: withdrawals are tracked apart. */
   investment: number
+  /** Money taken back out of savings (informative; doesn't reduce `investment`). */
+  withdrawn: number
   /**
    * income − expense: what you actually gained or lost this period, wherever
    * the money sits. Moving money into savings doesn't change it ("saved" is
@@ -31,10 +35,11 @@ export function summarise(txs: Transaction[]): MonthSummary {
   let income = 0
   let expense = 0
   let investment = 0
+  let withdrawn = 0
   for (const t of txs) {
     if (t.category === OPENING_BALANCE) continue
     if (t.category === SAVINGS_WITHDRAWAL) {
-      if (t.type === 'income') investment -= t.amount
+      if (t.type === 'income') withdrawn += t.amount
       continue
     }
     if (t.type === 'income') income += t.amount
@@ -45,6 +50,7 @@ export function summarise(txs: Transaction[]): MonthSummary {
     income,
     expense,
     investment,
+    withdrawn,
     net: income - expense,
     savingsRate: income > 0 ? ((income - expense) / income) * 100 : 0,
   }
