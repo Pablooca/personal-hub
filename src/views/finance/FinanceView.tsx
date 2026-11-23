@@ -124,7 +124,7 @@ export function FinanceView() {
           label="Balance neto"
           value={fmtMoney(s.net)}
           tone={s.net >= 0 ? 'text-fg' : 'text-rose-600 dark:text-rose-400'}
-          hint="ingresos − gastos − ahorrado"
+          hint="ingresos − gastos (lo ahorrado sigue contando)"
           icon={<Scale className="size-4" />}
         />
         <div className="col-span-2 lg:col-span-1">

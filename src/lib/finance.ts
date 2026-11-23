@@ -17,7 +17,11 @@ export interface MonthSummary {
   income: number
   expense: number
   investment: number
-  /** income − expense − saved: cash left in the current account. */
+  /**
+   * income − expense: what you actually gained or lost this period, wherever
+   * the money sits. Moving money into savings doesn't change it ("saved" is
+   * the part of `net` you set aside, not a cost).
+   */
   net: number
   /** (income − expense) / income: share of income not spent (money moved to savings counts as saved). */
   savingsRate: number
@@ -41,7 +45,7 @@ export function summarise(txs: Transaction[]): MonthSummary {
     income,
     expense,
     investment,
-    net: income - expense - investment,
+    net: income - expense,
     savingsRate: income > 0 ? ((income - expense) / income) * 100 : 0,
   }
 }

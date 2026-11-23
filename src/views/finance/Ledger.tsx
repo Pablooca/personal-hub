@@ -214,8 +214,8 @@ export function Ledger({
             <span className="flex flex-wrap gap-x-4">
               <span className={TX_STYLES.income.text}>+{fmtMoneyShort(totals.income)}</span>
               <span className={TX_STYLES.expense.text}>−{fmtMoneyShort(totals.expense)}</span>
-              <span className={TX_STYLES.investment.text}>→{fmtMoneyShort(totals.investment)}</span>
               <span className="text-fg">= {fmtMoneyShort(totals.net)}</span>
+              <span className={TX_STYLES.investment.text}>(ahorrado {fmtMoneyShort(totals.investment)})</span>
             </span>
           </footer>
         </>
