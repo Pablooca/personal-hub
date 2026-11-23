@@ -123,7 +123,7 @@ Los pagos sin categoría aparecen en **Finanzas** con el badge **«Por revisar»
 ### Tests
 
 ```bash
-npm run test:webhook   # node:test sobre supabase/functions/tests/ (también: deno test supabase/functions/tests)
+npm run test:webhook   # node:test sobre supabase/functions/tests/ (webhook + Telegram; también: deno test)
 ```
 
 ### Despliegue de la función (Supabase CLI)
@@ -195,6 +195,32 @@ curl -X POST "https://<project-ref>.supabase.co/functions/v1/apple-pay-webhook" 
 > 💡 Si llamas a tus cuentas en la app igual que a tus tarjetas en Wallet (p. ej. «Visa Nómina»), cada pago se asignará a la cuenta correcta.
 
 ---
+
+## Notificaciones por Telegram
+
+- **Cada gasto que entra por Apple Pay** → mensaje al instante, enviado por `apple-pay-webhook` tras registrarlo. Las importaciones y los gastos manuales no avisan.
+- **Eventos con hora** → avisos **10 y 5 minutos antes** y **al terminar**. `pg_cron` llama cada minuto a la función `telegram-notify` y `notification_log` garantiza que cada aviso se envía una sola vez. Los eventos de todo el día no avisan.
+
+Configuración (una vez):
+
+1. En Telegram, habla con **@BotFather** → `/newbot` → guarda el *token*. Escribe cualquier cosa a tu bot nuevo.
+2. Obtén tu *chat id* hablando con **@userinfobot**.
+3. Guarda ambos como secretos de las funciones:
+   ```bash
+   supabase secrets set TELEGRAM_BOT_TOKEN=<token> TELEGRAM_CHAT_ID=<chat-id>
+   ```
+4. Despliega y conecta la base de datos (la URL y la clave compartida van en **Vault**, nunca en el repo):
+   ```bash
+   supabase functions deploy telegram-notify --no-verify-jwt
+   openssl rand -hex 32                     # → <notify-secret>
+   supabase secrets set NOTIFY_SECRET=<notify-secret>
+   # SQL Editor:
+   #   select vault.create_secret('https://<ref>.supabase.co/functions/v1/telegram-notify', 'telegram_notify_url');
+   #   select vault.create_secret('<notify-secret>', 'telegram_notify_secret');
+   ```
+5. Ejecuta `supabase/schema.sql` (crea `notification_log` y la tarea de `pg_cron`). Prueba: `select public.notify_telegram('{"kind":"test"}');`
+
+Opcional: `EVENT_REMINDERS="15,5"` cambia los minutos de aviso; `TIMEZONE` (por defecto `Europe/Madrid`).
 
 ## Modelo de seguridad
 

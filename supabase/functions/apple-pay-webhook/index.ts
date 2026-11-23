@@ -18,9 +18,11 @@
  *   OWNER_USER_ID             UUID of your user in auth.users
  *   TIMEZONE                  optional, IANA zone for "today" (default Europe/Madrid)
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  injected automatically by Supabase
+ *   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID      optional: announce each payment on Telegram
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { categorize, categoryLabel, extractPayment, formatEuro, parseAmount, parseDate } from './normalize.ts'
+import { expensesMessage, sendTelegram } from '../_shared/telegram.ts'
 
 const MAX_BODY_BYTES = 8 * 1024
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -148,6 +150,14 @@ Deno.serve(async (req) => {
       account,
     })
     if (insErr) throw insErr
+
+    // Telegram notice for every Apple Pay expense (best effort: never fails the request).
+    const tgToken = Deno.env.get('TELEGRAM_BOT_TOKEN')
+    const tgChat = Deno.env.get('TELEGRAM_CHAT_ID')
+    if (tgToken && tgChat) {
+      const text = expensesMessage([{ amount, concept: merchant, category, account, date }])
+      if (text) await sendTelegram(tgToken, tgChat, `${text}\n<i>vía Apple Pay</i>`)
+    }
 
     return json(200, {
       ok: true,

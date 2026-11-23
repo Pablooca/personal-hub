@@ -4,7 +4,7 @@
 --  Paste this whole file into Supabase → SQL Editor → Run.
 --  It is idempotent: safe to run more than once.
 --
---  Tables:   events · projects · project_tasks · transactions · categories · accounts · work_logs
+--  Tables:   events · projects · project_tasks · transactions · categories · accounts · work_logs · notification_log
 --  Security: Row Level Security on every table. Each row belongs to exactly
 --            one auth user (user_id) and is only visible/editable by them.
 -- =============================================================================
@@ -436,6 +436,72 @@ begin
       execute format('alter publication supabase_realtime add table public.%I', t);
     end if;
   end loop;
+end;
+$$;
+
+-- =============================================================================
+--  TELEGRAM NOTIFICATIONS (optional)
+--  Event reminders (10 and 5 minutes before, and at the end) are sent by the
+--  Edge Function `telegram-notify`, called every minute by pg_cron. Its URL
+--  and shared secret live in Supabase Vault, never in this file:
+--    select vault.create_secret('https://<ref>.supabase.co/functions/v1/telegram-notify', 'telegram_notify_url');
+--    select vault.create_secret('<same value as the NOTIFY_SECRET function secret>', 'telegram_notify_secret');
+--  If either secret is missing, everything below is a silent no-op.
+-- =============================================================================
+create extension if not exists pg_net with schema extensions;
+create extension if not exists pg_cron with schema pg_catalog;
+
+-- Which reminders each event already got ('start10', 'start5', 'end'): prevents duplicates.
+create table if not exists public.notification_log (
+  event_id  uuid not null references public.events (id) on delete cascade,
+  kind      text not null check (kind ~ '^(start[0-9]{1,3}|end)$'),
+  sent_at   timestamptz not null default now(),
+  primary key (event_id, kind)
+);
+alter table public.notification_log enable row level security;  -- no policies: server-only
+create index if not exists notification_log_sent_idx on public.notification_log (sent_at);
+
+-- Fire-and-forget POST to the notifier. SECURITY DEFINER so cron jobs can read Vault.
+create or replace function public.notify_telegram(payload jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions, vault
+as $$
+declare
+  fn_url text;
+  fn_secret text;
+begin
+  select decrypted_secret into fn_url from vault.decrypted_secrets where name = 'telegram_notify_url' limit 1;
+  select decrypted_secret into fn_secret from vault.decrypted_secrets where name = 'telegram_notify_secret' limit 1;
+  if fn_url is null or fn_secret is null then
+    return;
+  end if;
+  perform net.http_post(
+    url := fn_url,
+    body := payload,
+    headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || fn_secret),
+    timeout_milliseconds := 5000
+  );
+exception when others then
+  -- Notifications must never break a write.
+  raise warning 'notify_telegram failed: %', sqlerrm;
+end;
+$$;
+
+revoke all on function public.notify_telegram(jsonb) from public, anon, authenticated;
+
+-- Apple Pay expenses are announced by the apple-pay-webhook function itself,
+-- so imports and manual entries never notify. Remove any older trigger version.
+drop trigger if exists transactions_notify_telegram on public.transactions;
+drop function if exists public.notify_new_transactions();
+
+-- Every minute: event reminders. Daily: trim the log.
+do $$
+begin
+  perform cron.unschedule(jobid) from cron.job where jobname in ('telegram-events-tick', 'telegram-log-cleanup');
+  perform cron.schedule('telegram-events-tick', '* * * * *', $job$ select public.notify_telegram('{"kind":"tick"}'::jsonb) $job$);
+  perform cron.schedule('telegram-log-cleanup', '17 4 * * *', $job$ delete from public.notification_log where sent_at < now() - interval '30 days' $job$);
 end;
 $$;
 
