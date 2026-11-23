@@ -247,8 +247,17 @@ export function FinanceView() {
             <div className="eyebrow">Acumulado {ytdLabel}</div>
             <Row label="Ingresos" value={fmtMoney(ytd.income)} tone={TX_STYLES.income.text} />
             <Row label="Gastos" value={fmtMoney(ytd.expense)} tone={TX_STYLES.expense.text} />
-            <Row label="Ahorrado" value={fmtMoney(ytd.investment)} tone={TX_STYLES.investment.text} />
-            {ytd.withdrawn > 0 && <Row label="Retirado del ahorro" value={fmtMoney(ytd.withdrawn)} />}
+            {/* Year to date: net savings (deposits − withdrawals), so no maths needed. */}
+            <Row
+              label={ytd.withdrawn > 0 ? 'Ahorrado (neto)' : 'Ahorrado'}
+              value={fmtMoney(ytd.investment - ytd.withdrawn)}
+              tone={ytd.investment - ytd.withdrawn >= 0 ? TX_STYLES.investment.text : 'text-rose-600 dark:text-rose-400'}
+            />
+            {ytd.withdrawn > 0 && (
+              <div className="-mt-1.5 text-right font-mono text-[11px] text-muted">
+                {fmtMoney(ytd.investment)} ingresado − {fmtMoney(ytd.withdrawn)} retirado
+              </div>
+            )}
             <div className="border-t border-line pt-2.5">
               <Row label="Tasa de ahorro" value={fmtPct(ytd.savingsRate)} />
             </div>
