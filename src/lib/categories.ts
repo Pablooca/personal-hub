@@ -74,6 +74,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   freelance: 'Freelance',
   refund: 'Devolución',
   opening_balance: 'Saldo inicial',
+  savings_withdrawal: 'Retirada de ahorro',
   groceries: 'Supermercado',
   dining: 'Restaurantes',
   transport: 'Transporte',

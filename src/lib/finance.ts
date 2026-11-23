@@ -6,6 +6,13 @@ import type { Account, Transaction } from './types'
  */
 export const OPENING_BALANCE = 'opening_balance'
 
+/**
+ * Money moved back from a savings account to the primary one. Stored as a pair:
+ * an income on the primary account and an expense on the savings account (so
+ * balances stay right). Neither counts as income/expense; it reduces "Ahorrado".
+ */
+export const SAVINGS_WITHDRAWAL = 'savings_withdrawal'
+
 export interface MonthSummary {
   income: number
   expense: number
@@ -22,6 +29,10 @@ export function summarise(txs: Transaction[]): MonthSummary {
   let investment = 0
   for (const t of txs) {
     if (t.category === OPENING_BALANCE) continue
+    if (t.category === SAVINGS_WITHDRAWAL) {
+      if (t.type === 'income') investment -= t.amount
+      continue
+    }
     if (t.type === 'income') income += t.amount
     else if (t.type === 'expense') expense += t.amount
     else investment += t.amount
@@ -48,7 +59,7 @@ export const yearToDate = (txs: Transaction[], ym: string) => {
 
 export function byCategory(txs: Transaction[], type: Transaction['type']) {
   const map = new Map<string, number>()
-  for (const t of txs) if (t.type === type) map.set(t.category, (map.get(t.category) ?? 0) + t.amount)
+  for (const t of txs) if (t.type === type && t.category !== SAVINGS_WITHDRAWAL && t.category !== OPENING_BALANCE) map.set(t.category, (map.get(t.category) ?? 0) + t.amount)
   return [...map.entries()].map(([category, total]) => ({ category, total })).sort((a, b) => b.total - a.total)
 }
 
