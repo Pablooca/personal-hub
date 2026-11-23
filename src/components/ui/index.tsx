@@ -123,6 +123,7 @@ export function Modal({
   children,
   footer,
   wide,
+  full,
 }: {
   open: boolean
   onClose: () => void
@@ -130,6 +131,8 @@ export function Modal({
   children: ReactNode
   footer?: ReactNode
   wide?: boolean
+  /** Full screen on phones; almost full screen (96 % × 94 %) on desktop. */
+  full?: boolean
 }) {
   const panel = useRef<HTMLDivElement>(null)
 
@@ -148,18 +151,23 @@ export function Modal({
 
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-[2px] sm:items-center sm:p-6" onMouseDown={onClose}>
+    <div
+      className={cx('fixed inset-0 z-50 flex justify-center bg-black/40 backdrop-blur-[2px]', full ? 'items-stretch sm:items-center sm:p-4' : 'items-end sm:items-center sm:p-6')}
+      onMouseDown={onClose}
+    >
       <div
         ref={panel}
         role="dialog"
         aria-modal="true"
         onMouseDown={(e) => e.stopPropagation()}
         className={cx(
-          'flex max-h-[92dvh] w-full flex-col rounded-t-2xl border border-line bg-surface shadow-2xl sm:rounded-2xl',
-          wide ? 'sm:max-w-2xl' : 'sm:max-w-md',
+          'flex w-full flex-col border-line bg-surface shadow-2xl',
+          full
+            ? 'h-dvh sm:h-[94dvh] sm:max-w-[min(1600px,96vw)] sm:rounded-2xl sm:border'
+            : cx('max-h-[92dvh] rounded-t-2xl border sm:rounded-2xl', wide ? 'sm:max-w-2xl' : 'sm:max-w-md'),
         )}
       >
-        <header className="flex items-center justify-between border-b border-line px-5 py-3.5">
+        <header className={cx('flex items-center justify-between border-b border-line px-5 py-3.5', full && 'pt-[max(0.875rem,env(safe-area-inset-top))]')}>
           <h2 className="text-sm font-semibold">{title}</h2>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Cerrar">
             <X className="size-4" />
