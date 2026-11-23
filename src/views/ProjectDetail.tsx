@@ -9,7 +9,7 @@ import { newTask as buildTask, taskStatusPatch } from '../lib/tasks'
 import { useData } from '../state/data'
 import { useToast } from '../state/toast'
 
-type Form = Omit<Project, 'id' | 'user_id' | 'updated_at'>
+type Form = Omit<Project, 'id' | 'user_id' | 'created_at' | 'updated_at'>
 
 const EDITABLE = ['title', 'description', 'area', 'status', 'priority', 'start_date', 'deadline', 'repo_url', 'notes', 'progress'] as const
 

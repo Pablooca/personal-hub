@@ -76,6 +76,7 @@ create table if not exists public.projects (
   deadline    date,  -- end date
   repo_url    text,
   notes       text not null default '',
+  created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   constraint projects_dates_order check (deadline is null or start_date is null or deadline >= start_date)
 );
@@ -86,6 +87,7 @@ comment on column public.projects.deadline is 'End date of the project.';
 -- Upgrade path for databases created before description/start_date existed.
 alter table public.projects add column if not exists description text not null default '';
 alter table public.projects add column if not exists start_date date;
+alter table public.projects add column if not exists created_at timestamptz not null default now();
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'projects_dates_order') then

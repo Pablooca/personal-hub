@@ -97,11 +97,12 @@ export function buildDemoDataset(today = new Date()): Dataset {
     })
   }
   // -------------------------------------------------------------- projects
-  const pj = (p: Omit<Project, 'id' | 'updated_at' | 'description' | 'start_date'> & Partial<Pick<Project, 'description' | 'start_date'>>): Project => ({
+  const pj = (p: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'description' | 'start_date'> & Partial<Pick<Project, 'description' | 'start_date'>>): Project => ({
     description: '',
     start_date: null,
     ...p,
     id: uid(),
+    created_at: now,
     updated_at: now,
   })
 

@@ -46,6 +46,7 @@ export interface Project {
   deadline: string | null // YYYY-MM-DD — end date
   repo_url: string | null
   notes: string
+  created_at: string
   updated_at: string
 }
 
