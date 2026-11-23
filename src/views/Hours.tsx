@@ -138,7 +138,7 @@ export function HoursView() {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_360px]">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         {/* ---------------------------------------------------- diary */}
         <Card title="Diario" bodyClass="p-0">
           {visibleDays.length === 0 ? (

@@ -225,7 +225,7 @@ export function FinanceView() {
 
       {/* ---------------------------------------------------- year trend */}
       <Card className="mt-4" title={`Evolución ${year}`} action={<Legend />}>
-        <div className="grid gap-6 md:grid-cols-[1fr_220px]">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_220px]">
           <div className="flex h-44 items-end gap-1.5 sm:gap-3">
             {trend.map((t) => {
               const sel = monthKey(t.m) === ym

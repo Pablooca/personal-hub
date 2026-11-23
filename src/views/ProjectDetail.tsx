@@ -182,7 +182,7 @@ export function ProjectDetail({
           ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* ------------------------------------------------- main column */}
         <div className="space-y-4">
           <Card title="Descripción">

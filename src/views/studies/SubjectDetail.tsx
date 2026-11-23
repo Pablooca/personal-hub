@@ -5,7 +5,7 @@ import { COLOR_BG } from '../../lib/categories'
 import { combineDateTime, toDateKey, toTimeValue } from '../../lib/dates'
 import { fmtDate } from '../../lib/format'
 import { MAX_PDF_BYTES, fmtBytes, fmtGrade, gradeLabel, gradeTone, subjectGrade } from '../../lib/studies'
-import { SUBJECT_STATUSES, type StudyAssessment, type StudyFile, type StudySubject, type SubjectStatus } from '../../lib/types'
+import { SUBJECT_STATUSES, type AssessmentKind, type StudyAssessment, type StudyFile, type StudySubject, type SubjectStatus } from '../../lib/types'
 import { useData } from '../../state/data'
 import { useToast } from '../../state/toast'
 import { STATUS_LABELS, STATUS_STYLES, SubjectModal } from './StudiesView'
@@ -18,6 +18,31 @@ function parseNum(raw: string, min: number, max: number): number | null | undefi
   return Number.isFinite(n) && n >= min && n <= max ? Math.round(n * 100) / 100 : undefined
 }
 const show = (n: number | null) => (n === null ? '' : String(n).replace('.', ','))
+
+const KIND_LABEL: Record<AssessmentKind, string> = { delivery: 'Entrega', exam: 'Examen' }
+const KIND_DEFAULT_TIME: Record<AssessmentKind, string> = { delivery: '23:59', exam: '09:00' }
+const KIND_REMINDERS: Record<AssessmentKind, string> = {
+  delivery: '1 día, 3 h, 1 h, 30 min y 5 min antes de la entrega',
+  exam: '1 mes, 2 semanas, 1 semana, 2 días, 1 día, 3 h y 1 h antes del examen',
+}
+
+function KindToggle({ a }: { a: StudyAssessment }) {
+  const { update } = useData()
+  const exam = a.kind === 'exam'
+  return (
+    <button
+      type="button"
+      onClick={() => update('study_assessments', a.id, { kind: exam ? 'delivery' : 'exam' })}
+      title="Cambiar entre entrega y examen"
+      className={cx(
+        'shrink-0 self-start rounded-md border px-1.5 py-0.5 text-[10px] leading-none font-semibold',
+        exam ? 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300' : 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300',
+      )}
+    >
+      {KIND_LABEL[a.kind]}
+    </button>
+  )
+}
 
 /** ISO → "YYYY-MM-DDTHH:mm" in local time, for <input type="datetime-local">. */
 const toLocalInput = (iso: string | null) => (iso ? `${toDateKey(new Date(iso))}T${toTimeValue(new Date(iso))}` : '')
@@ -50,14 +75,18 @@ export function SubjectDetail({ subject, onBack }: { subject: StudySubject; onBa
         <ArrowLeft className="size-4" /> {program?.name ?? 'Programa'}
       </button>
 
-      <div className="mb-5 flex flex-wrap items-start gap-3">
-        <span className={cx('mt-1.5 size-3 shrink-0 rounded', COLOR_BG[subject.color])} />
-        <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{subject.name}</h1>
-          <p className="mt-0.5 text-sm text-muted">
-            {[`${subject.credits.toLocaleString('es-ES')} ECTS`, subject.semester, subject.code, subject.professor].filter(Boolean).join(' · ')}
-          </p>
+      {/* Title takes the full width on phones; actions wrap onto their own row. */}
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <span className={cx('mt-2 size-3 shrink-0 rounded', COLOR_BG[subject.color])} />
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight break-words sm:text-2xl">{subject.name}</h1>
+            <p className="mt-0.5 text-sm text-muted">
+              {[`${subject.credits.toLocaleString('es-ES')} ECTS`, subject.semester, subject.code, subject.professor].filter(Boolean).join(' · ')}
+            </p>
+          </div>
         </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 pl-6 sm:pl-0">
         <select
           className={cx('h-8 rounded-md border px-2 text-xs font-medium', STATUS_STYLES[subject.status])}
           value={subject.status}
@@ -87,6 +116,7 @@ export function SubjectDetail({ subject, onBack }: { subject: StudySubject; onBa
             <Trash2 className="size-3.5" />
           </Button>
         )}
+        </div>
       </div>
       {confirmDelete && <p className="-mt-3 mb-4 text-xs text-rose-600 dark:text-rose-400">Se borrarán sus notas y {files.length} PDF.</p>}
 
@@ -158,7 +188,7 @@ export function SubjectDetail({ subject, onBack }: { subject: StudySubject; onBa
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_400px]">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
         <Assessments subject={subject} assessments={assessments} totalWeight={g.totalWeight} weightsOk={g.weightsOk} />
         <Files subject={subject} files={files} />
       </div>
@@ -176,7 +206,14 @@ function Assessments({ subject, assessments, totalWeight, weightsOk }: { subject
   const [weight, setWeight] = useState('')
   const [grade, setGrade] = useState('')
   const [date, setDate] = useState('')
-  const [time, setTime] = useState('23:59')
+  const [kind, setKind] = useState<AssessmentKind>('delivery')
+  const [time, setTime] = useState(KIND_DEFAULT_TIME.delivery)
+  const [timeTouched, setTimeTouched] = useState(false)
+  const chooseKind = (k: AssessmentKind) => {
+    setKind(k)
+    if (!timeTouched) setTime(KIND_DEFAULT_TIME[k])
+    if (k === 'exam' && !name.trim()) setName('Examen')
+  }
   const [toAgenda, setToAgenda] = useState(true)
 
   const w = parseNum(weight, 0.01, 100)
@@ -186,20 +223,24 @@ function Assessments({ subject, assessments, totalWeight, weightsOk }: { subject
   async function add(e: FormEvent) {
     e.preventDefault()
     if (!valid) return
-    const dueAt = date ? combineDateTime(date, time || '23:59') : null
+    const dueAt = date ? combineDateTime(date, time || KIND_DEFAULT_TIME[kind]) : null
     const ok = await create('study_assessments', {
       subject_id: subject.id,
       name: name.trim(),
       weight: w as number,
       grade: gr ?? null,
       due_at: dueAt,
+      kind,
       is_done: gr !== null && gr !== undefined,
     })
     if (ok && date && toAgenda) {
       // All-day agenda entry (event reminders skip all-day; the deadline has its own reminders).
       await create('events', {
-        title: `${name.trim()} · ${subject.name} (hasta las ${time || '23:59'})`,
-        description: `Evaluación (${w}% de la nota)`,
+        title:
+          kind === 'exam'
+            ? `Examen: ${name.trim()} · ${subject.name} (${time || KIND_DEFAULT_TIME.exam})`
+            : `${name.trim()} · ${subject.name} (hasta las ${time || KIND_DEFAULT_TIME.delivery})`,
+        description: `${KIND_LABEL[kind]} (${w}% de la nota)`,
         start_at: combineDateTime(date, '00:00'),
         end_at: combineDateTime(date, '23:59'),
         category: 'master',
@@ -213,7 +254,9 @@ function Assessments({ subject, assessments, totalWeight, weightsOk }: { subject
     setWeight('')
     setGrade('')
     setDate('')
-    setTime('23:59')
+    setKind('delivery')
+    setTime(KIND_DEFAULT_TIME.delivery)
+    setTimeTouched(false)
   }
 
   const patch = (a: StudyAssessment, field: 'name' | 'weight' | 'grade' | 'due_at', raw: string) => {
@@ -250,14 +293,82 @@ function Assessments({ subject, assessments, totalWeight, weightsOk }: { subject
           <Empty>Añade las partes de la nota (examen, prácticas…) con su porcentaje.</Empty>
         </div>
       ) : (
-        <div className="scrollbar-thin overflow-x-auto">
+        <>
+        {/* Phones: one card per assessment, full name visible, fields in two columns. */}
+        <ul className="divide-y divide-line md:hidden">
+          {assessments.map((a) => (
+            <li key={`m-${a.id}-${a.weight}-${a.grade}-${a.due_at}-${a.name}`} className={cx('space-y-2.5 p-4', a.is_done && 'opacity-75')}>
+              <div className="flex items-start gap-3">
+                <div className="pt-1.5">
+                  <Check checked={a.is_done} onChange={(v) => update('study_assessments', a.id, { is_done: v })} label={`${a.name} entregada`} />
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <KindToggle a={a} />
+                <input
+                  className="field h-9 font-medium"
+                  defaultValue={a.name}
+                  onBlur={(e) => {
+                    const r = patch(a, 'name', e.target.value)
+                    if (r !== null) e.target.value = r
+                  }}
+                  aria-label="Nombre de la evaluación"
+                />
+                </div>
+                <Button variant="ghost" size="icon" className="mt-0.5 shrink-0" onClick={() => remove('study_assessments', a.id)} aria-label={`Eliminar ${a.name}`}>
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pl-[30px]">
+                <label className="block">
+                  <span className="label">Peso %</span>
+                  <input
+                    className="field num text-right"
+                    inputMode="decimal"
+                    defaultValue={show(a.weight)}
+                    onBlur={(e) => {
+                      const r = patch(a, 'weight', e.target.value)
+                      if (r !== null) e.target.value = r
+                    }}
+                  />
+                </label>
+                <label className="block">
+                  <span className="label">Nota</span>
+                  <input
+                    className={cx('field num text-right font-semibold', gradeTone(a.grade))}
+                    inputMode="decimal"
+                    placeholder="—"
+                    defaultValue={show(a.grade)}
+                    onBlur={(e) => {
+                      const r = patch(a, 'grade', e.target.value)
+                      if (r !== null) e.target.value = r
+                    }}
+                  />
+                </label>
+                <div>
+                  <span className="label">Aporta</span>
+                  <div className="num flex h-9 items-center justify-end text-sm text-muted">{a.grade !== null ? fmtGrade((a.weight * a.grade) / 100) : '—'}</div>
+                </div>
+                <label className="col-span-3 block">
+                  <span className="label">{a.kind === 'exam' ? 'Fecha del examen' : 'Fecha límite de entrega'}</span>
+                  <input
+                    type="datetime-local"
+                    className={cx('field num', !a.is_done && a.due_at && new Date(a.due_at) < new Date() && 'text-rose-600 dark:text-rose-400')}
+                    defaultValue={toLocalInput(a.due_at)}
+                    onBlur={(e) => patch(a, 'due_at', e.target.value)}
+                  />
+                </label>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="scrollbar-thin hidden overflow-x-auto md:block">
           <table className="w-full min-w-[640px] text-sm">
             <thead className="border-b border-line bg-surface-2 text-left">
               <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-[11px] [&>th]:font-semibold [&>th]:tracking-wider [&>th]:text-muted [&>th]:uppercase">
                 <th>Evaluación</th>
                 <th className="w-20">Peso %</th>
                 <th className="w-20">Nota</th>
-                <th className="w-44">Entrega</th>
+                <th className="w-44">Fecha y hora</th>
                 <th className="w-16 text-center">Hecha</th>
                 <th className="w-20 text-right">Aporta</th>
                 <th className="w-9" />
@@ -267,6 +378,8 @@ function Assessments({ subject, assessments, totalWeight, weightsOk }: { subject
               {assessments.map((a) => (
                 <tr key={`${a.id}-${a.weight}-${a.grade}-${a.due_at}-${a.name}`} className={cx('group', a.is_done && 'opacity-70')}>
                   <td className="px-2 py-1.5">
+                    <div className="flex items-center gap-1.5">
+                    <KindToggle a={a} />
                     <input
                       className="h-8 w-full rounded bg-transparent px-1 outline-none focus:bg-surface-2 focus:ring-1 focus:ring-line"
                       defaultValue={a.name}
@@ -276,6 +389,7 @@ function Assessments({ subject, assessments, totalWeight, weightsOk }: { subject
                       }}
                       aria-label="Nombre de la evaluación"
                     />
+                    </div>
                   </td>
                   <td className="px-2 py-1.5">
                     <input
@@ -336,21 +450,46 @@ function Assessments({ subject, assessments, totalWeight, weightsOk }: { subject
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       <form onSubmit={add} className="space-y-2 border-t border-line bg-surface-2 p-3">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_72px_72px_136px_110px_auto]">
-          <input className="field col-span-2 sm:col-span-1" placeholder="Nueva evaluación (p. ej. Examen final)" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+        <div className="flex gap-1.5" role="radiogroup" aria-label="Tipo de evaluación">
+          {(['delivery', 'exam'] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              role="radio"
+              aria-checked={kind === k}
+              onClick={() => chooseKind(k)}
+              className={cx('h-7 rounded-md border px-3 text-xs font-medium transition', kind === k ? 'border-accent bg-accent text-accent-fg' : 'border-line text-muted hover:text-fg')}
+            >
+              {KIND_LABEL[k]}
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-[1fr_72px_72px_136px_110px_auto]">
+          <input className="field col-span-2 md:col-span-1" placeholder="Nueva evaluación (p. ej. Examen final)" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
           <input className={cx('field num', weight && w === undefined && 'border-rose-500')} inputMode="decimal" placeholder="Peso %" value={weight} onChange={(e) => setWeight(e.target.value)} />
           <input className={cx('field num', grade && gr === undefined && 'border-rose-500')} inputMode="decimal" placeholder="Nota" value={grade} onChange={(e) => setGrade(e.target.value)} />
-          <input type="date" className="field num" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Fecha de entrega" />
-          <input type="time" className="field num" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Hora de entrega" disabled={!date} />
-          <Button type="submit" variant="primary" className="col-span-2 sm:col-span-1" disabled={!valid}>
+          <input type="date" className="field num" value={date} onChange={(e) => setDate(e.target.value)} aria-label={kind === 'exam' ? 'Fecha del examen' : 'Fecha de entrega'} />
+          <input
+            type="time"
+            className="field num"
+            value={time}
+            onChange={(e) => {
+              setTime(e.target.value)
+              setTimeTouched(true)
+            }}
+            aria-label={kind === 'exam' ? 'Hora del examen' : 'Hora de entrega'}
+            disabled={!date}
+          />
+          <Button type="submit" variant="primary" className="col-span-2 md:col-span-1" disabled={!valid}>
             <Plus className="size-4" /> Añadir
           </Button>
         </div>
         {date && (
-          <p className="text-xs text-muted">🔔 Telegram te avisará 1 día, 3 h, 1 h, 30 min y 5 min antes de la entrega.</p>
+          <p className="text-xs text-muted">🔔 Telegram te avisará {KIND_REMINDERS[kind]}.</p>
         )}
         {date && (
           <label className="flex items-center gap-2 text-xs text-muted">

@@ -7,8 +7,9 @@
  *
  * For each timed event: one message per reminder slot before it starts
  * (default 10 and 5 minutes, EVENT_REMINDERS="10,5") and one when it ends.
- * For each study deadline not yet delivered/graded: one message per slot
- * (default 1 day, 3 h, 1 h, 30 min, 5 min; DELIVERY_REMINDERS="1440,180,60,30,5").
+ * For each study assessment not yet done/graded, one message per slot:
+ *   deliveries: 1 day, 3 h, 1 h, 30 min, 5 min   (DELIVERY_REMINDERS)
+ *   exams:      1 month, 2 weeks, 1 week, 2 days, 1 day, 3 h, 1 h   (EXAM_REMINDERS)
  * notification_log / study_notification_log guarantee each message is sent once.
  *
  * Auth: `Authorization: Bearer <NOTIFY_SECRET>` (the database reads the same
@@ -17,7 +18,7 @@
  * EVENT_REMINDERS, TIMEZONE. SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected.
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { deadlineMessage, eventEndMessage, eventStartMessage, parseSlots, reminderSlot, sendTelegram } from '../_shared/telegram.ts'
+import { DELIVERY_SLOTS, EXAM_SLOTS, deadlineMessage, eventEndMessage, eventStartMessage, examMessage, parseSlots, reminderSlot, sendTelegram } from '../_shared/telegram.ts'
 
 const json = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -41,7 +42,8 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const timeZone = Deno.env.get('TIMEZONE') || 'Europe/Madrid'
   const slots = parseSlots(Deno.env.get('EVENT_REMINDERS'))
-  const deadlineSlots = parseSlots(Deno.env.get('DELIVERY_REMINDERS'), [1440, 180, 60, 30, 5])
+  const deliverySlots = parseSlots(Deno.env.get('DELIVERY_REMINDERS'), DELIVERY_SLOTS)
+  const examSlots = parseSlots(Deno.env.get('EXAM_REMINDERS'), EXAM_SLOTS)
 
   if (!secret || secret.length < 24 || !url || !serviceKey) {
     console.error('telegram-notify: missing NOTIFY_SECRET or Supabase env')
@@ -70,13 +72,13 @@ Deno.serve(async (req) => {
     const iso = (ms: number) => new Date(ms).toISOString()
     const maxLead = Math.max(...slots)
     const cols = 'id, title, start_at, end_at, category'
-    const maxDeadline = Math.max(...deadlineSlots)
+    const maxDeadline = Math.max(...deliverySlots, ...examSlots)
     const [starting, ending, deadlines] = await Promise.all([
       db.from('events').select(cols).eq('all_day', false).gt('start_at', iso(now)).lte('start_at', iso(now + maxLead * 60_000)),
       db.from('events').select(cols).eq('all_day', false).gt('end_at', iso(now - 5 * 60_000)).lte('end_at', iso(now)),
       db
         .from('study_assessments')
-        .select('id, name, due_at, weight, subject:study_subjects(name)')
+        .select('id, name, kind, due_at, weight, subject:study_subjects(name)')
         .eq('is_done', false)
         .is('grade', null)
         .gt('due_at', iso(now))
@@ -106,7 +108,8 @@ Deno.serve(async (req) => {
 
     for (const a of deadlines.data ?? []) {
       const minutesLeft = Math.max(1, Math.ceil((new Date(a.due_at as string).getTime() - now) / 60_000))
-      const slot = reminderSlot(minutesLeft, deadlineSlots)
+      const isExam = a.kind === 'exam'
+      const slot = reminderSlot(minutesLeft, isExam ? examSlots : deliverySlots)
       if (slot === null) continue
       const { data: claimed, error } = await db
         .from('study_notification_log')
@@ -114,7 +117,9 @@ Deno.serve(async (req) => {
         .select('assessment_id')
       if (error) throw error
       const subject = Array.isArray(a.subject) ? a.subject[0] : a.subject
-      const text = deadlineMessage({ name: a.name, due_at: a.due_at as string, weight: Number(a.weight) }, (subject as { name?: string } | null)?.name ?? 'Estudios', minutesLeft, timeZone)
+      const row = { name: a.name, due_at: a.due_at as string, weight: Number(a.weight) }
+      const subjectName = (subject as { name?: string } | null)?.name ?? 'Estudios'
+      const text = (isExam ? examMessage : deadlineMessage)(row, subjectName, minutesLeft, timeZone)
       if (claimed && claimed.length && (await sendTelegram(token, chatId, text))) sent++
     }
     return json(200, { ok: true, sent })

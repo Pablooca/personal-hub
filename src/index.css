@@ -79,7 +79,9 @@
 
 @layer components {
   .card {
-    @apply rounded-xl border border-line bg-surface;
+    /* min-w-0: inside grids/flex rows a card must shrink to the screen and let
+       wide content (tables) scroll inside it, never widen the page. */
+    @apply min-w-0 rounded-xl border border-line bg-surface;
   }
   .num {
     @apply font-mono tabular-nums tracking-tight;

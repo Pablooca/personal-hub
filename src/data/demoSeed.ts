@@ -334,7 +334,8 @@ export function buildDemoDataset(today = new Date()): Dataset {
   ]
   const as = (si: number, name: string, weight: number, grade: number | null, dueOffset: number | null = null): StudyAssessment => ({
     id: uid(), subject_id: study_subjects[si].id, name, weight, grade,
-    due_at: dueOffset === null ? null : combineDateTime(day(dueOffset), '23:59'),
+    kind: /examen|defensa/i.test(name) ? 'exam' : 'delivery',
+    due_at: dueOffset === null ? null : combineDateTime(day(dueOffset), /examen|defensa/i.test(name) ? '09:00' : '23:59'),
     is_done: grade !== null || (dueOffset !== null && dueOffset < 0), created_at: now,
   })
   const study_assessments: StudyAssessment[] = [

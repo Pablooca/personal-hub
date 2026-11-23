@@ -139,6 +139,9 @@ export interface StudySubject {
   created_at: string
 }
 
+export const ASSESSMENT_KINDS = ['delivery', 'exam'] as const
+export type AssessmentKind = (typeof ASSESSMENT_KINDS)[number]
+
 export interface StudyAssessment {
   id: string
   user_id?: string
@@ -146,7 +149,9 @@ export interface StudyAssessment {
   name: string
   weight: number // % of the final grade
   grade: number | null // 0–10, null = not graded yet
-  /** Deadline (ISO timestamp). Drives the Telegram reminders. */
+  /** 'delivery' = has a deadline · 'exam' = happens at a date and time. */
+  kind: AssessmentKind
+  /** Delivery deadline or exam date+time (ISO). Drives the Telegram reminders. */
   due_at: string | null
   /** Delivered / sat: no more reminders. */
   is_done: boolean

@@ -52,7 +52,7 @@ test('reminder slots: 10 and 5 minutes before', async () => {
   assert.equal(reminderSlot(5, slots), 5)
   assert.equal(reminderSlot(1, slots), 5)
   assert.equal(reminderSlot(11, slots), null)
-  assert.deepEqual(parseSlots('15, 5,x,50000'), [15, 5])
+  assert.deepEqual(parseSlots('15, 5,x,500000'), [15, 5])
 })
 
 test('deadline reminders: 1 day, 3 h, 1 h, 30 min, 5 min', async () => {
@@ -77,4 +77,30 @@ test('deadline reminders: 1 day, 3 h, 1 h, 30 min, 5 min', async () => {
   assert.match(m, /Sistemas Distribuidos · 25 % de la nota/)
   assert.match(m, /23:59/)
   assert.match(deadlineMessage({ name: 'X', due_at: '2026-11-24T22:59:00Z', weight: 10 }, 'S', 5, 'Europe/Madrid'), /^🚨/)
+})
+
+test('exam reminders: 1 month, 2 weeks, 1 week, 2 days, 1 day, 3 h, 1 h', async () => {
+  const { EXAM_SLOTS, reminderSlot, humanMinutes, examMessage } = await import('../_shared/telegram.ts')
+  const D = 1440
+  assert.equal(reminderSlot(30 * D, EXAM_SLOTS), 30 * D)
+  assert.equal(reminderSlot(30 * D + 1, EXAM_SLOTS), null) // more than a month away: nothing yet
+  assert.equal(reminderSlot(20 * D, EXAM_SLOTS), 30 * D) // exam added 20 days before: the "month" reminder fires now
+  assert.equal(reminderSlot(14 * D, EXAM_SLOTS), 14 * D)
+  assert.equal(reminderSlot(7 * D, EXAM_SLOTS), 7 * D)
+  assert.equal(reminderSlot(2 * D, EXAM_SLOTS), 2 * D)
+  assert.equal(reminderSlot(D, EXAM_SLOTS), D)
+  assert.equal(reminderSlot(180, EXAM_SLOTS), 180)
+  assert.equal(reminderSlot(60, EXAM_SLOTS), 60)
+  assert.equal(reminderSlot(30, EXAM_SLOTS), 60) // no 30-min slot for exams: the 1 h one covers it once
+  assert.equal(humanMinutes(30 * D), '1 mes')
+  assert.equal(humanMinutes(14 * D), '2 semanas')
+  assert.equal(humanMinutes(7 * D), '1 semana')
+  assert.equal(humanMinutes(2 * D), '2 días')
+  assert.equal(humanMinutes(20 * D), '20 días')
+  assert.equal(humanMinutes(2 * D + 19 * 60), '2 días y 19 h')
+  assert.equal(humanMinutes(D), '1 día')
+  const m = examMessage({ name: 'Examen final', due_at: '2026-12-17T08:00:00Z', weight: 60 }, 'Sistemas Distribuidos', 14 * D, 'Europe/Madrid')
+  assert.match(m, /^📝 <b>Examen en 2 semanas: Examen final<\/b>/)
+  assert.match(m, /60 % de la nota/)
+  assert.match(m, /09:00/)
 })

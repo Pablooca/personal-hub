@@ -69,7 +69,7 @@ export function parseSlots(raw: string | undefined, fallback = [10, 5]): number[
   const slots = (raw ?? '')
     .split(',')
     .map((x) => Math.round(Number(x.trim())))
-    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 10080) // up to one week
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 64800) // up to 45 days
   return slots.length ? [...new Set(slots)].sort((a, b) => b - a) : fallback
 }
 
@@ -99,13 +99,24 @@ export function eventEndMessage(e: EventRow, timeZone: string): string {
 }
 
 // ---------------------------------------------------------------- study deadlines
-/** 1440 → "1 día" · 180 → "3 h" · 90 → "1 h 30 min" · 30 → "30 min" */
+/**
+ * Human countdown in Spanish:
+ * 43200 → "1 mes" · 20160 → "2 semanas" · 10080 → "1 semana" · 2880 → "2 días"
+ * 1440 → "1 día" · 4000 → "2 días y 19 h" · 180 → "3 h" · 90 → "1 h 30 min" · 5 → "5 min"
+ */
 export function humanMinutes(m: number): string {
-  if (m >= 1440 && m % 1440 === 0) return m === 1440 ? '1 día' : `${m / 1440} días`
+  if (m >= 2 * 1440) {
+    const days = Math.round(m / 1440)
+    if (days === 30 || days === 31) return '1 mes'
+    if (days % 7 === 0) return days === 7 ? '1 semana' : `${days / 7} semanas`
+    const rest = m - Math.floor(m / 1440) * 1440
+    // Within a few days, hours still matter ("2 días y 19 h"); beyond that, days are enough.
+    if (days <= 3 && rest >= 60) return `${Math.floor(m / 1440)} días y ${Math.round(rest / 60)} h`
+    return `${days} días`
+  }
   if (m >= 1440) {
-    const d = Math.floor(m / 1440)
-    const h = Math.round((m % 1440) / 60)
-    return h ? `${d} día${d > 1 ? 's' : ''} y ${h} h` : `${d} día${d > 1 ? 's' : ''}`
+    const h = Math.round((m - 1440) / 60)
+    return h ? `1 día y ${h} h` : '1 día'
   }
   if (m >= 60) {
     const h = Math.floor(m / 60)
@@ -123,6 +134,15 @@ export interface DeadlineRow {
 
 const dateTime = (iso: string, timeZone: string) =>
   new Intl.DateTimeFormat('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone }).format(new Date(iso))
+
+export const DELIVERY_SLOTS = [1440, 180, 60, 30, 5]
+/** 1 month, 2 weeks, 1 week, 2 days, 1 day, 3 h, 1 h. */
+export const EXAM_SLOTS = [43200, 20160, 10080, 2880, 1440, 180, 60]
+
+export function examMessage(a: DeadlineRow, subjectName: string, minutesLeft: number, timeZone: string): string {
+  const icon = minutesLeft <= 180 ? '🚨' : minutesLeft <= 2880 ? '⏳' : '📝'
+  return `${icon} <b>Examen en ${humanMinutes(minutesLeft)}: ${escapeHtml(a.name)}</b>\n${escapeHtml(subjectName)} · ${a.weight.toLocaleString('es-ES')} % de la nota\nCuándo: ${dateTime(a.due_at, timeZone)}`
+}
 
 export function deadlineMessage(a: DeadlineRow, subjectName: string, minutesLeft: number, timeZone: string): string {
   const urgent = minutesLeft <= 30 ? '🚨' : minutesLeft <= 180 ? '⏳' : '📚'

@@ -456,10 +456,21 @@ create table if not exists public.study_assessments (
   name        text not null check (char_length(name) between 1 and 120),
   weight      numeric(5, 2) not null check (weight > 0 and weight <= 100),  -- % of the final grade
   grade       numeric(4, 2) check (grade is null or grade between 0 and 10),
-  due_at      timestamptz,  -- deadline (date + time); drives the Telegram reminders
+  kind        text not null default 'delivery' check (kind in ('delivery', 'exam')),
+  due_at      timestamptz,  -- delivery deadline or exam date+time; drives the Telegram reminders
   is_done     boolean not null default false,  -- delivered / sat: stops reminders
   created_at  timestamptz not null default now()
 );
+
+-- Upgrade path: deliveries vs exams (different reminder schedules).
+alter table public.study_assessments add column if not exists kind text not null default 'delivery';
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'study_assessments_kind_check') then
+    alter table public.study_assessments add constraint study_assessments_kind_check check (kind in ('delivery', 'exam'));
+  end if;
+end;
+$$;
 
 create table if not exists public.study_files (
   id            uuid primary key default gen_random_uuid(),
@@ -554,9 +565,10 @@ $$;
 
 -- =============================================================================
 --  TELEGRAM NOTIFICATIONS (optional)
---  Event reminders (10 and 5 minutes before, and at the end) and study deadline
---  reminders (1 day, 3 h, 1 h, 30 min and 5 min before) are sent by the Edge
---  Function `telegram-notify`, called every minute by pg_cron. Its URL
+--  Event reminders (10 and 5 minutes before, and at the end), delivery reminders
+--  (1 day, 3 h, 1 h, 30 min, 5 min before) and exam reminders (1 month, 2 weeks,
+--  1 week, 2 days, 1 day, 3 h, 1 h before) are sent by the Edge Function
+--  `telegram-notify`, called every minute by pg_cron. Its URL
 --  and shared secret live in Supabase Vault, never in this file:
 --    select vault.create_secret('https://<ref>.supabase.co/functions/v1/telegram-notify', 'telegram_notify_url');
 --    select vault.create_secret('<same value as the NOTIFY_SECRET function secret>', 'telegram_notify_secret');
@@ -604,7 +616,7 @@ begin
     url := fn_url,
     body := payload,
     headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || fn_secret),
-    timeout_milliseconds := 5000
+    timeout_milliseconds := 15000  -- room for Edge Function cold starts
   );
 exception when others then
   -- Notifications must never break a write.
