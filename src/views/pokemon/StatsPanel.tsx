@@ -48,7 +48,16 @@ export function StatsPanel({ game }: { game: PokemonGame }) {
   }
   const all = useMemo(() => matchesOf(data.tournaments, data.tournament_rounds, data.pokemon_matches).filter((m) => m.t.game === game), [data.tournaments, data.tournament_rounds, data.pokemon_matches, game])
   const both = all.some((m) => m.source === 'match') && all.some((m) => m.source === 'tournament')
-  const ms = useMemo(() => all.filter((m) => inPeriod(m.t.date, period) && (!both || source === 'all' || m.source === source)), [all, period, source, both])
+  /** Everything in the period and source: what the decks or teams are compared with. */
+  const wide = useMemo(() => all.filter((m) => inPeriod(m.t.date, period) && (!both || source === 'all' || m.source === source)), [all, period, source, both])
+  const ownOf = (m: Match) => (game === 'tcg' ? m.t.deck_id : m.t.team_id) ?? 'none'
+  const library: { id: string; name: string }[] = game === 'tcg' ? data.tcg_decks : data.vgc_teams
+  const used = useMemo(() => [...groupTally(all, (m) => (game === 'tcg' ? m.t.deck_id : m.t.team_id) ?? 'none').entries()].sort((a, b) => played(b[1]) - played(a[1])).map(([id]) => id), [all, game])
+  const [own, setOwn] = useState('')
+  const picked = used.includes(own) ? own : ''
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ms = useMemo(() => (picked ? wide.filter((m) => ownOf(m) === picked) : wide), [wide, picked, game])
+  const nameOf = (id: string) => library.find((x) => x.id === id)?.name ?? (game === 'tcg' ? 'Sin mazo asignado' : 'Sin equipo asignado')
   const replayed = useMemo(() => {
     const ids = new Set(ms.filter((m) => m.source === 'match').map((m) => m.t.id))
     return data.pokemon_matches.filter((m) => ids.has(m.id) && m.replays.length > 0)
@@ -63,7 +72,15 @@ export function StatsPanel({ game }: { game: PokemonGame }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <select className="field h-9 w-full min-w-0 sm:w-64 pointer-coarse:h-11" aria-label={game === 'tcg' ? 'Filtrar por mazo' : 'Filtrar por equipo'} value={picked} onChange={(e) => setOwn(e.target.value)}>
+          <option value="">{game === 'tcg' ? 'Todos los mazos' : 'Todos los equipos'}</option>
+          {used.map((id) => (
+            <option key={id} value={id}>
+              {nameOf(id)}
+            </option>
+          ))}
+        </select>
         <Segmented value={period} onChange={setPeriod} options={[{ value: 'all', label: 'Siempre' }, { value: 'year', label: 'Este año' }, { value: '90', label: '90 días' }]} />
         {both && <Segmented value={source} onChange={setSource} options={[{ value: 'all', label: 'Todo' }, { value: 'tournament', label: 'Torneos' }, { value: 'match', label: 'Partidas sueltas' }]} />}
       </div>
@@ -72,7 +89,7 @@ export function StatsPanel({ game }: { game: PokemonGame }) {
       ) : (
         <>
           <Global ms={ms} game={game} />
-          {game === 'tcg' ? <TcgStats ms={ms} /> : <VgcStats ms={ms} />}
+          {game === 'tcg' ? <TcgStats ms={ms} wide={wide} picked={picked} onPick={setOwn} /> : <VgcStats ms={ms} wide={wide} picked={picked} onPick={setOwn} />}
           {replayed.length > 0 && <ReplayStatsSection matches={replayed} />}
         </>
       )}
@@ -128,19 +145,31 @@ function Global({ ms, game }: { ms: Match[]; game: PokemonGame }) {
 }
 
 // ----------------------------------------------------------------------- TCG
-function TcgStats({ ms }: { ms: Match[] }) {
+interface Scope {
+  /** Only the chosen deck or team; `wide` has them all, to compare. */
+  ms: Match[]
+  wide: Match[]
+  picked: string
+  onPick: (id: string) => void
+}
+
+/** A deck or team to compare with the rest: choosing it filters the whole page. */
+const PickRow = ({ on, name, onClick, children }: { on: boolean; name: string; onClick: () => void; children: ReactNode }) => (
+  <button type="button" aria-pressed={on} aria-label={`${on ? 'Quitar el filtro de' : 'Ver solo'} ${name}`} onClick={onClick} className={cx('-mx-2 block w-[calc(100%+1rem)] rounded-lg px-2 text-left transition hover:bg-surface-2', on && 'bg-accent/10 ring-1 ring-accent/40')}>
+    {children}
+  </button>
+)
+
+function TcgStats({ ms, wide, picked, onPick }: Scope) {
   const { data } = useData()
-  const [deckId, setDeckId] = useState('')
-  const decks = useMemo(() => [...groupTally(ms, (m) => m.t.deck_id ?? 'none').entries()].sort((a, b) => played(b[1]) - played(a[1])), [ms])
-  const picked = decks.some(([id]) => id === deckId) ? deckId : ''
-  const scoped = useMemo(() => (picked ? ms.filter((m) => (m.t.deck_id ?? 'none') === picked) : ms), [ms, picked])
-  const matrix = useMemo(() => matchupMatrix(scoped), [scoped])
-  const turn = turnTally(scoped)
-  const dice = diceTally(scoped)
+  const decks = useMemo(() => [...groupTally(wide, (m) => m.t.deck_id ?? 'none').entries()].sort((a, b) => played(b[1]) - played(a[1])), [wide])
+  const matrix = useMemo(() => matchupMatrix(ms), [ms])
+  const turn = turnTally(ms)
+  const dice = diceTally(ms)
   const deckOf = (id: string) => data.tcg_decks.find((d) => d.id === id)
   const deckName = (id: string) => deckOf(id)?.name ?? 'Sin mazo asignado'
   const name = (c: { id: string; name: string }) => ARCHETYPE.get(c.id)?.name ?? c.name
-  const unknown = scoped.filter((m) => !m.r.opponent_archetype).length
+  const unknown = ms.filter((m) => !m.r.opponent_archetype).length
 
   return (
     <section>
@@ -148,24 +177,20 @@ function TcgStats({ ms }: { ms: Match[] }) {
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card title="Rendimiento de mis mazos">
           {decks.map(([id, t]) => (
-            <WinBar
-              key={id}
-              tally={t}
-              label={
-                <>
-                  <DeckIcons icons={deckOf(id)?.icons ?? []} size={28} label={deckName(id)} />
-                  <span className="truncate">{deckName(id)}</span>
-                </>
-              }
-            />
+            <PickRow key={id} on={picked === id} name={deckName(id)} onClick={() => onPick(picked === id ? '' : id)}>
+              <WinBar
+                tally={t}
+                label={
+                  <>
+                    <DeckIcons icons={deckOf(id)?.icons ?? []} size={28} label={deckName(id)} />
+                    <span className="truncate">{deckName(id)}</span>
+                  </>
+                }
+              />
+            </PickRow>
           ))}
         </Card>
-        <Card
-          title="Salida y dado"
-          action={
-            <DeckFilter value={picked} onChange={setDeckId} decks={decks.map(([id]) => ({ id, name: deckName(id) }))} />
-          }
-        >
+        <Card title="Salida y dado">
           <WinBar label="Saliendo 1.º" tally={turn.first} />
           <WinBar label="Saliendo 2.º" tally={turn.second} />
           <WinBar label="Ganando el dado" tally={dice.won} />
@@ -177,7 +202,6 @@ function TcgStats({ ms }: { ms: Match[] }) {
         className="mt-3"
         title="Matriz de emparejamientos"
         bodyClass="p-0"
-        action={<DeckFilter value={picked} onChange={setDeckId} decks={decks.map(([id]) => ({ id, name: deckName(id) }))} />}
       >
         {matrix.cols.length ? (
           <>
@@ -240,19 +264,6 @@ function TcgStats({ ms }: { ms: Match[] }) {
   )
 }
 
-function DeckFilter({ value, onChange, decks }: { value: string; onChange: (id: string) => void; decks: { id: string; name: string }[] }) {
-  return (
-    <select className="field h-9 w-40 min-w-0 sm:w-56" aria-label="Filtrar por mazo" value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">Todos los mazos</option>
-      {decks.map((d) => (
-        <option key={d.id} value={d.id}>
-          {d.name}
-        </option>
-      ))}
-    </select>
-  )
-}
-
 const Legend = ({ rate, label }: { rate: number; label: string }) => (
   <span className="inline-flex items-center gap-1.5">
     <span className="size-3 rounded" style={{ background: heat(rate) }} /> {label}
@@ -276,20 +287,18 @@ function Cell({ t, title, bold }: { t?: Tally; title: string; bold?: boolean }) 
 }
 
 // ----------------------------------------------------------------------- VGC
-function VgcStats({ ms }: { ms: Match[] }) {
+function VgcStats({ ms, wide, picked, onPick }: Scope) {
   const { data } = useData()
-  const [teamId, setTeamId] = useState('')
   const [side, setSide] = useState<'own' | 'rival'>('own')
   const [openMon, setOpenMon] = useState<string | null>(null)
-  const teams = useMemo(() => [...groupTally(ms, (m) => m.t.team_id ?? 'none').entries()].sort((a, b) => played(b[1]) - played(a[1])), [ms])
-  const scoped = useMemo(() => (teamId ? ms.filter((m) => (m.t.team_id ?? 'none') === teamId) : ms), [ms, teamId])
-  const own = useMemo(() => ownMons(scoped), [scoped])
-  const rivals = useMemo(() => rivalMons(scoped), [scoped])
+  const teams = useMemo(() => [...groupTally(wide, (m) => m.t.team_id ?? 'none').entries()].sort((a, b) => played(b[1]) - played(a[1])), [wide])
+  const own = useMemo(() => ownMons(ms), [ms])
+  const rivals = useMemo(() => rivalMons(ms), [ms])
   const ext = useMemo(() => extremes(rivals), [rivals])
   const teamName = (id: string) => data.vgc_teams.find((t) => t.id === id)?.name ?? 'Sin equipo asignado'
   const sets = useMemo(() => {
     // Items and natures my Pokémon carry in the teams I played with.
-    const used = new Set(scoped.map((m) => m.t.team_id))
+    const used = new Set(ms.map((m) => m.t.team_id))
     const out = new Map<string, { items: Set<string>; natures: Set<string> }>()
     for (const t of data.vgc_teams)
       if (used.has(t.id))
@@ -300,44 +309,35 @@ function VgcStats({ ms }: { ms: Match[] }) {
           out.set(m.species, s)
         }
     return out
-  }, [scoped, data.vgc_teams])
+  }, [ms, data.vgc_teams])
 
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-semibold">Por equipo y Pokémon</h2>
-        {teams.length > 1 && (
-          <select className="field h-9 w-52" aria-label="Equipo" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
-            <option value="">Todos los equipos</option>
-            {teams.map(([id]) => (
-              <option key={id} value={id}>
-                {teamName(id)}
-              </option>
-            ))}
-          </select>
-        )}
       </div>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card title="Rendimiento por equipo">
           {teams.map(([id, t]) => {
             const team = data.vgc_teams.find((x) => x.id === id)
             return (
-              <WinBar
-                key={id}
-                tally={t}
-                label={
-                  <span className="min-w-0">
-                    <span className="block truncate">{teamName(id)}</span>
-                    {team && (
-                      <span className="flex -space-x-1.5">
-                        {parseTeam(team.paste).mons.map((m, i) => (
-                          <SpeciesSprite key={i} species={m.species} size={26} />
-                        ))}
-                      </span>
-                    )}
-                  </span>
-                }
-              />
+              <PickRow key={id} on={picked === id} name={teamName(id)} onClick={() => onPick(picked === id ? '' : id)}>
+                <WinBar
+                  tally={t}
+                  label={
+                    <span className="min-w-0">
+                      <span className="block truncate">{teamName(id)}</span>
+                      {team && (
+                        <span className="flex -space-x-1.5">
+                          {parseTeam(team.paste).mons.map((m, i) => (
+                            <SpeciesSprite key={i} species={m.species} size={26} />
+                          ))}
+                        </span>
+                      )}
+                    </span>
+                  }
+                />
+              </PickRow>
             )
           })}
         </Card>
