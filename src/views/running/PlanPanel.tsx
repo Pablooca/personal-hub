@@ -1,13 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
-import { CheckCircle2, Circle, CopyPlus, Download, FileUp, Pencil, Plus, Trash2, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Circle, CopyPlus, Download, FileUp, Pencil, Plus, Trash2, XCircle } from 'lucide-react'
 import { Button, Card, Empty, Field, Modal, cx } from '../../components/ui'
 import { fromDateKey, toDateKey } from '../../lib/dates'
 import { downloadText } from '../../lib/download'
 import { capitalize, fmtDate } from '../../lib/format'
-import { RUN_TYPE_LABELS, RUN_TYPE_SHORT, daysBetween, fmtKm, fmtPace, matchRuns, parseKm, parsePace, parsePlan, planToCsv, runPace, shiftDay, weekOf, type PlanDraft } from '../../lib/running'
-import { RUN_TYPES, type RaceGoal, type Run, type RunPlanSession, type RunType } from '../../lib/types'
+import { RUN_TYPE_LABELS, RUN_TYPE_SHORT, daysBetween, fmtKm, fmtPace, goalPace, matchRuns, parseKm, parsePace, parsePlan, planToCsv, runPace, shiftDay, weekOf, type PlanDraft } from '../../lib/running'
+import { defaultBlocks, easyPace, ensureSections, estimate, formatWorkout, missingSections, targetPace } from '../../lib/workout'
+import { RUN_TYPES, type RaceGoal, type Run, type RunPlanSession, type RunType, type WorkoutBlock } from '../../lib/types'
 import { useData } from '../../state/data'
 import { useToast } from '../../state/toast'
+import { BlocksEditor, StructureSummary, Templates } from './Blocks'
 import { TYPE_DOT } from './Runs'
 
 export function PlanPanel({ goal, onComplete }: { goal: RaceGoal; onComplete: (s: RunPlanSession, run: Run | null) => void }) {
@@ -89,6 +91,7 @@ export function PlanPanel({ goal, onComplete }: { goal: RaceGoal; onComplete: (s
                           <span className="min-w-0 flex-1">
                             <span className="text-sm font-medium">{RUN_TYPE_SHORT[p.type]}</span>
                             {p.description && <span className="block truncate text-xs text-muted">{p.description}</span>}
+                            <StructureSummary blocks={p.blocks} className="mt-1" />
                           </span>
                           <span className="num text-right text-sm">
                             {run ? (
@@ -129,12 +132,19 @@ interface Row {
   km: string
   pace: string
   description: string
+  /** null while the structure editor holds something invalid. */
+  blocks: WorkoutBlock[] | null
+  /** The structure was edited by hand: it decides km and pace, not the other way round. */
+  custom: boolean
 }
 const DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
 function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week: string; plan: RunPlanSession[]; onWeek: (w: string) => void; onClose: () => void }) {
-  const { createMany, update, removeMany } = useData()
+  const { data, createMany, update, removeMany } = useData()
   const toast = useToast()
+  const easy = useMemo(() => easyPace(data.runs, goalPace(goal)), [data.runs, goal])
+  const [open, setOpen] = useState<number | null>(null)
+  const [version, setVersion] = useState(0)
   const current = plan.filter((p) => weekOf(p.date) === week)
   const toRow = (p: RunPlanSession, keepId: boolean): Row => ({
     id: keepId ? p.id : null,
@@ -143,6 +153,8 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
     km: String(p.distance_km).replace('.', ','),
     pace: p.pace_s ? fmtPace(p.pace_s) : '',
     description: p.description,
+    blocks: p.blocks.length ? ensureSections(p.blocks) : defaultBlocks(p.type, p.distance_km, p.pace_s, easy),
+    custom: p.blocks.length > 0,
   })
   const [rows, setRows] = useState<Row[]>(() => current.map((p) => toRow(p, true)))
   const [repeat, setRepeat] = useState(0)
@@ -150,9 +162,28 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
   const maxRepeat = Math.max(0, Math.round(daysBetween(week, weekOf(goal.date)) / 7))
 
   const set = (i: number, patch: Partial<Row>) => setRows((r) => r.map((x, j) => (j === i ? { ...x, ...patch } : x)))
+  /** Quick fields: while the structure is the default one, it follows type, km and pace. */
+  const quick = (i: number, patch: Partial<Row>) =>
+    setRows((list) =>
+      list.map((x, j) => {
+        if (j !== i) return x
+        const r = { ...x, ...patch }
+        if (patch.type && patch.type !== x.type && !x.custom) {
+          const template = data.run_workouts.findLast((w) => w.type === patch.type)
+          if (template) return { ...r, ...fromBlocks(ensureSections(template.blocks)), custom: false }
+        }
+        if (r.custom && !patch.type) return r
+        const km = parseKm(r.km)
+        return r.custom ? r : { ...r, blocks: defaultBlocks(r.type, km ?? 6, r.pace.trim() ? parsePace(r.pace) : null, easy) }
+      }),
+    )
+  const fromBlocks = (blocks: WorkoutBlock[]) => {
+    const pace = targetPace(blocks)
+    return { blocks, km: String(estimate(blocks, easy).km).replace('.', ','), pace: pace ? fmtPace(pace) : '' }
+  }
   const valid = (r: Row) => {
     const km = parseKm(r.km)
-    return km !== null && km <= 200 && (!r.pace.trim() || parsePace(r.pace) !== null)
+    return km !== null && km <= 200 && (!r.pace.trim() || parsePace(r.pace) !== null) && r.blocks !== null && missingSections(r.blocks).length === 0
   }
   const ok = rows.every(valid)
   const total = rows.reduce((a, r) => a + (parseKm(r.km) ?? 0), 0)
@@ -163,7 +194,7 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
 
   async function save() {
     if (!ok) return
-    const toData = (r: Row, w: string) => ({ goal_id: goal.id, date: shiftDay(w, r.day), type: r.type, distance_km: Math.round(parseKm(r.km)! * 100) / 100, pace_s: r.pace.trim() ? parsePace(r.pace) : null, description: r.description.trim() })
+    const toData = (r: Row, w: string) => ({ goal_id: goal.id, date: shiftDay(w, r.day), type: r.type, distance_km: Math.round(parseKm(r.km)! * 100) / 100, pace_s: r.pace.trim() ? parsePace(r.pace) : null, description: r.description.trim(), blocks: r.blocks! })
     onClose()
     const keep = new Set(rows.map((r) => r.id).filter(Boolean))
     await removeMany('run_plan', current.filter((p) => !keep.has(p.id)).map((p) => p.id))
@@ -171,7 +202,7 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
       const old = r.id && current.find((p) => p.id === r.id)
       if (!old) continue
       const d = toData(r, week)
-      if (old.date !== d.date || old.type !== d.type || old.distance_km !== d.distance_km || old.pace_s !== d.pace_s || old.description !== d.description) await update('run_plan', old.id, d)
+      if (old.date !== d.date || old.type !== d.type || old.distance_km !== d.distance_km || old.pace_s !== d.pace_s || old.description !== d.description || formatWorkout(old.blocks) !== formatWorkout(d.blocks)) await update('run_plan', old.id, d)
     }
     const fresh = rows.filter((r) => !r.id).map((r) => toData(r, week))
     // Repeating only fills weeks that are still empty.
@@ -216,7 +247,8 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
     >
       <div className="mx-auto max-w-4xl space-y-3">
         {rows.map((r, i) => (
-          <div key={i} className="grid grid-cols-2 gap-2 rounded-lg border border-line p-3 sm:grid-cols-[130px_170px_90px_90px_minmax(0,1fr)_40px]">
+          <div key={i} className="rounded-lg border border-line p-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-[130px_170px_90px_90px_minmax(0,1fr)_40px]">
             <select className="field" aria-label="Día" value={r.day} onChange={(e) => set(i, { day: Number(e.target.value) })}>
               {DAYS.map((d, n) => (
                 <option key={d} value={n}>
@@ -224,23 +256,47 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
                 </option>
               ))}
             </select>
-            <select className="field" aria-label="Tipo" value={r.type} onChange={(e) => set(i, { type: e.target.value as RunType })}>
+            <select className="field" aria-label="Tipo" value={r.type} onChange={(e) => quick(i, { type: e.target.value as RunType })}>
               {RUN_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {RUN_TYPE_LABELS[t]}
                 </option>
               ))}
             </select>
-            <input className={cx('field num', r.km.trim() !== '' && !parseKm(r.km) && 'border-rose-500')} inputMode="decimal" aria-label="Kilómetros" placeholder="km" value={r.km} onChange={(e) => set(i, { km: e.target.value })} />
-            <input className={cx('field num', r.pace.trim() !== '' && !parsePace(r.pace) && 'border-rose-500')} aria-label="Ritmo objetivo" placeholder="min/km" value={r.pace} onChange={(e) => set(i, { pace: e.target.value })} />
+            <input className={cx('field num', r.km.trim() !== '' && !parseKm(r.km) && 'border-rose-500')} inputMode="decimal" aria-label="Kilómetros" placeholder="km" value={r.km} onChange={(e) => quick(i, { km: e.target.value })} />
+            <input className={cx('field num', r.pace.trim() !== '' && !parsePace(r.pace) && 'border-rose-500')} aria-label="Ritmo objetivo" placeholder="min/km" value={r.pace} onChange={(e) => quick(i, { pace: e.target.value })} />
             <input className="field" aria-label="Descripción" placeholder="Descripción (opcional)" value={r.description} maxLength={1000} onChange={(e) => set(i, { description: e.target.value })} />
-            <button type="button" aria-label="Quitar sesión" className="grid h-9 place-items-center rounded-lg text-faint hover:bg-rose-500/10 hover:text-rose-600" onClick={() => setRows((x) => x.filter((_, j) => j !== i))}>
+            <button type="button" aria-label="Quitar sesión" className="grid h-9 place-items-center rounded-lg text-faint hover:bg-rose-500/10 hover:text-rose-600" onClick={() => {
+                setOpen(null)
+                setRows((x) => x.filter((_, j) => j !== i))
+              }}
+            >
               <Trash2 className="size-4" />
             </button>
           </div>
+          <button type="button" aria-expanded={open === i} onClick={() => setOpen(open === i ? null : i)} className="mt-2 flex min-h-9 w-full items-center gap-2 text-left text-xs font-medium text-accent">
+            <ChevronDown className={cx('size-4 shrink-0 transition', open === i && 'rotate-180')} /> {open === i ? 'Cerrar estructura' : 'Calentamiento, bloque principal y enfriamiento'}
+          </button>
+          {open === i ? (
+            <div className="mt-2 space-y-3">
+              <Templates
+                key={`t${i}-${version}`}
+                type={r.type}
+                current={r.blocks}
+                onApply={(blocks, type) => {
+                  set(i, { ...fromBlocks(blocks), type, custom: true })
+                  setVersion((v) => v + 1)
+                }}
+              />
+              <BlocksEditor key={`e${i}-${version}`} initial={r.blocks ?? defaultBlocks(r.type, parseKm(r.km) ?? 6, null, easy)} easy={easy} onChange={(blocks) => set(i, blocks ? { ...fromBlocks(blocks), custom: true } : { blocks: null, custom: true })} />
+            </div>
+          ) : (
+            r.blocks && <StructureSummary blocks={r.blocks} className="pl-6" />
+          )}
+          </div>
         ))}
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setRows((r) => [...r, { id: null, day: nextFree(), type: 'easy', km: '', pace: '', description: '' }])}>
+          <Button onClick={() => setRows((r) => [...r, { id: null, day: nextFree(), type: 'easy', km: '', pace: '', description: '', blocks: defaultBlocks('easy', 6, null, easy), custom: false }])}>
             <Plus className="size-4" /> Añadir sesión
           </Button>
           {rows.length === 0 && previous.length > 0 && (
@@ -267,14 +323,15 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
 }
 
 // -------------------------------------------------------------------- import
-const SAMPLE = 'fecha;tipo;distancia_km;ritmo;descripcion\n2026-12-01;Rodaje;8;5:40;Suave\n2026-12-03;Series;10;4:10;6 x 1000 m\n2026-12-06;Larga;16;5:20;'
+const SAMPLE = 'fecha;tipo;distancia_km;ritmo;descripcion;estructura\n2026-12-01;Rodaje;8;6:30;Suave;\n2026-12-03;Series;8;;;5 min cal + 4x30s cortas rec 30s + 4x30s prog + 5-6x800 en 4:30 rec 3 min + 5 min enf\n2026-12-06;Larga;14;6:20;;'
 
 function ImportModal({ goal, existing, onClose }: { goal: RaceGoal; existing: RunPlanSession[]; onClose: () => void }) {
-  const { createMany } = useData()
+  const { data, createMany } = useData()
   const toast = useToast()
+  const easy = useMemo(() => easyPace(data.runs, goalPace(goal)), [data.runs, goal])
   const input = useRef<HTMLInputElement>(null)
   const [text, setText] = useState('')
-  const parsed = useMemo(() => (text.trim() ? parsePlan(text) : { sessions: [], errors: [] }), [text])
+  const parsed = useMemo(() => (text.trim() ? parsePlan(text, easy) : { sessions: [], errors: [] }), [text, easy])
   const key = (p: Pick<PlanDraft, 'date' | 'type'>) => `${p.date}|${p.type}`
   const have = new Set(existing.map(key))
   const fresh = parsed.sessions.filter((s) => !have.has(key(s)))
@@ -321,7 +378,7 @@ function ImportModal({ goal, existing, onClose }: { goal: RaceGoal; existing: Ru
         <Field label="…o pega aquí el contenido">
           <textarea className="field min-h-36 font-mono text-xs" spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} placeholder={SAMPLE} />
         </Field>
-        <p className="text-xs text-muted">Columnas: fecha, tipo (rodaje, series, tempo, larga, test), distancia en km, ritmo (min/km) y descripción. También admite JSON con los mismos campos.</p>
+        <p className="text-xs text-muted">Columnas: fecha, tipo (rodaje, series, tempo, larga, test), distancia en km, ritmo (min/km), descripción y estructura. Sin estructura se añaden 5 min de calentamiento y 5 de enfriamiento. También admite JSON con los mismos campos.</p>
         {parsed.errors.length > 0 && (
           <ul className="space-y-1 text-sm text-rose-700 dark:text-rose-400">
             {parsed.errors.slice(0, 6).map((e) => (

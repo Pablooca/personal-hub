@@ -5,8 +5,8 @@ import type { RaceGoal, Run, RunPlanSession, RunType } from './types.ts'
 
 const goal: RaceGoal = { id: 'g', name: 'Media', date: '2027-01-31', distance_km: 21.097, previous_best_s: null, target_s: 5700, notes: '', created_at: '2026-11-01T00:00:00Z' }
 let n = 0
-const P = (date: string, type: RunType, km: number, pace: number | null = null): RunPlanSession => ({ id: `p${++n}`, goal_id: 'g', date, type, distance_km: km, pace_s: pace, description: '', created_at: '' })
-const R = (date: string, type: RunType, km: number, s: number, o: Partial<Run> = {}): Run => ({ id: `r${++n}`, plan_id: null, date, type, distance_km: km, duration_s: s, work_pace_s: null, avg_hr: null, rpe: null, is_test: false, notes: '', created_at: '', ...o })
+const P = (date: string, type: RunType, km: number, pace: number | null = null): RunPlanSession => ({ id: `p${++n}`, goal_id: 'g', date, type, distance_km: km, pace_s: pace, description: '', blocks: [], created_at: '' })
+const R = (date: string, type: RunType, km: number, s: number, o: Partial<Run> = {}): Run => ({ id: `r${++n}`, plan_id: null, date, type, distance_km: km, duration_s: s, work_pace_s: null, avg_hr: null, rpe: null, is_test: false, notes: '', blocks: [], created_at: '', ...o })
 
 test('durations and paces', () => {
   assert.equal(parseDuration('1:35:00'), 5700)
@@ -33,14 +33,17 @@ test('Riegel: 10K in 45:00 → half ≈ 1:39:17', () => {
 test('plan import: CSV with ; and decimal comma, Spanish types and dates', () => {
   const r = parsePlan('Fecha;Tipo;Distancia (km);Ritmo;Descripción\n01/12/2026;Rodaje suave;8,5;5:40;"fácil; sin reloj"\n2026-12-03;Series;10;4:10;6x1000\n2026-12-06;Tirada larga;16;;\n32/12/2026;Tempo;8;;\n2026-12-07;Natación;2;;')
   assert.equal(r.sessions.length, 3)
-  assert.deepEqual(r.sessions[0], { date: '2026-12-01', type: 'easy', distance_km: 8.5, pace_s: 340, description: 'fácil; sin reloj' })
+  const { blocks, ...first } = r.sessions[0]
+  assert.deepEqual(first, { date: '2026-12-01', type: 'easy', distance_km: 8.5, pace_s: 340, description: 'fácil; sin reloj' })
+  // No structure in the file → every session still gets warm-up, main part and cool-down.
+  assert.deepEqual(blocks.map((b) => b.kind), ['warmup', 'easy', 'cooldown'])
   assert.deepEqual(r.sessions.map((s) => s.type), ['easy', 'interval', 'long'])
   assert.equal(r.errors.length, 2)
 })
 
 test('plan import: JSON, headerless CSV, and CSV round trip', () => {
   const j = parsePlan('{"sessions":[{"date":"2026-12-01","type":"tempo","distance_km":9,"pace":"4:30"}]}')
-  assert.deepEqual(j.sessions[0], { date: '2026-12-01', type: 'tempo', distance_km: 9, pace_s: 270, description: '' })
+  assert.deepEqual([j.sessions[0].type, j.sessions[0].pace_s, j.sessions[0].blocks.length], ['tempo', 270, 3])
   assert.equal(parsePlan('2026-12-01,easy,8,5:30').sessions.length, 1)
   assert.deepEqual(parsePlan(planToCsv(j.sessions)).sessions, j.sessions)
   assert.ok(parsePlan('{nope').errors.length)

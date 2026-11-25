@@ -1,5 +1,6 @@
 /** Race preparation: paces, plan import and the "am I ready?" engine. Pure functions. */
-import type { RaceGoal, Run, RunPlanSession, RunType } from './types'
+import { completion, defaultBlocks, ensureSections, formatWorkout, parseWorkout, repDrift, targetPace } from './workout.ts'
+import type { RaceGoal, Run, RunPlanSession, RunType, WorkoutBlock } from './types'
 
 export const RUN_TYPE_LABELS: Record<RunType, string> = { easy: 'Rodaje suave', interval: 'Series / intervalos', tempo: 'Tempo / umbral', long: 'Tirada larga', race: 'Test / carrera' }
 export const RUN_TYPE_SHORT: Record<RunType, string> = { easy: 'Rodaje', interval: 'Series', tempo: 'Tempo', long: 'Larga', race: 'Test' }
@@ -75,6 +76,7 @@ export interface PlanDraft {
   distance_km: number
   pace_s: number | null
   description: string
+  blocks: WorkoutBlock[]
 }
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
@@ -125,6 +127,7 @@ function splitCsv(line: string, sep: string): string[] {
 }
 
 const KEYS: Record<keyof PlanDraft, RegExp> = {
+  blocks: /^(blocks|estructura|structure|bloques|workout)$/,
   date: /^(date|fecha|dia)$/,
   type: /^(type|tipo|sesion|session)$/,
   distance_km: /^(distance|distancia|distance_?km|distancia_?km|km)$/,
@@ -134,7 +137,7 @@ const KEYS: Record<keyof PlanDraft, RegExp> = {
 const keyOf = (header: string) => (Object.keys(KEYS) as (keyof PlanDraft)[]).find((k) => KEYS[k].test(fold(header).replace(/\s*\(.*\)$/, '').replace(/\s+/g, '_')))
 
 /** CSV (`,` or `;`) or JSON (array, or `{ sessions: [...] }`). Bad rows are reported, not imported. */
-export function parsePlan(text: string): { sessions: PlanDraft[]; errors: string[] } {
+export function parsePlan(text: string, easy = 390): { sessions: PlanDraft[]; errors: string[] } {
   const errors: string[] = []
   const sessions: PlanDraft[] = []
   const trimmed = text.replace(/^﻿/, '').trim()
@@ -149,7 +152,9 @@ export function parsePlan(text: string): { sessions: PlanDraft[]; errors: string
     if (!km || km > 200) return errors.push(`${where}: distancia no válida «${raw.distance_km ?? ''}».`)
     const pace = raw.pace_s?.trim() ? (/^\d{3,4}$/.test(raw.pace_s.trim()) ? Number(raw.pace_s) : parsePace(raw.pace_s)) : null
     if (raw.pace_s?.trim() && !pace) errors.push(`${where}: ritmo no válido «${raw.pace_s}»; se importa sin ritmo.`)
-    sessions.push({ date, type, distance_km: Math.round(km * 100) / 100, pace_s: pace, description: (raw.description ?? '').slice(0, 1000) })
+    const structure = raw.blocks?.trim() ? parseWorkout(raw.blocks) : { blocks: [], errors: [] }
+    if (structure.errors.length) errors.push(`${where}: ${structure.errors[0]}`)
+    sessions.push({ date, type, distance_km: Math.round(km * 100) / 100, pace_s: pace ?? targetPace(structure.blocks), description: (raw.description ?? '').slice(0, 1000), blocks: structure.blocks.length ? ensureSections(structure.blocks) : defaultBlocks(type, km, pace, easy) })
   }
 
   if (/^[[{]/.test(trimmed)) {
@@ -175,7 +180,7 @@ export function parsePlan(text: string): { sessions: PlanDraft[]; errors: string
     const sep = (lines[0].match(/;/g)?.length ?? 0) >= (lines[0].match(/,/g)?.length ?? 0) && lines[0].includes(';') ? ';' : lines[0].includes('\t') ? '\t' : ','
     const head = splitCsv(lines[0], sep).map(keyOf)
     const hasHead = head.includes('date')
-    const cols = hasHead ? head : (['date', 'type', 'distance_km', 'pace_s', 'description'] as const)
+    const cols = hasHead ? head : (['date', 'type', 'distance_km', 'pace_s', 'description', 'blocks'] as const)
     if (hasHead && (!head.includes('type') || !head.includes('distance_km'))) return { sessions, errors: ['Faltan columnas: se necesitan fecha, tipo y distancia.'] }
     lines.slice(hasHead ? 1 : 0).forEach((line, i) => {
       const raw: Partial<Record<keyof PlanDraft, string>> = {}
@@ -190,9 +195,9 @@ export function parsePlan(text: string): { sessions: PlanDraft[]; errors: string
   return { sessions, errors }
 }
 
-export function planToCsv(list: Pick<RunPlanSession, 'date' | 'type' | 'distance_km' | 'pace_s' | 'description'>[]): string {
+export function planToCsv(list: Pick<RunPlanSession, 'date' | 'type' | 'distance_km' | 'pace_s' | 'description' | 'blocks'>[]): string {
   const q = (s: string) => (/[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s)
-  return ['fecha;tipo;distancia_km;ritmo;descripcion', ...list.map((s) => [s.date, RUN_TYPE_SHORT[s.type], String(s.distance_km).replace('.', ','), s.pace_s ? fmtPace(s.pace_s) : '', q(s.description)].join(';'))].join('\n')
+  return ['fecha;tipo;distancia_km;ritmo;descripcion;estructura', ...list.map((s) => [s.date, RUN_TYPE_SHORT[s.type], String(s.distance_km).replace('.', ','), s.pace_s ? fmtPace(s.pace_s) : '', q(s.description), q(formatWorkout(s.blocks))].join(';'))].join('\n')
 }
 
 // ------------------------------------------------------------------ matching
@@ -256,7 +261,10 @@ export interface KeySession {
   ok: boolean
   /** Fraction slower (+) / faster (−) than planned; null = unknown. */
   paceDeviation: number | null
+  /** How much of the session was done: reps for structured sessions, distance otherwise. */
   distancePct: number | null
+  /** Reps run / planned, for structured sessions. */
+  reps: { done: number; min: number; max: number } | null
 }
 
 export interface Alert {
@@ -350,8 +358,9 @@ export function evaluate(goal: RaceGoal, planAll: RunPlanSession[], runsAll: Run
       const run = matched.get(session.id) ?? null
       const actual = run ? comparablePace(run) : null
       const paceDeviation = actual !== null && session.pace_s ? actual / session.pace_s - 1 : null
-      const distancePct = run ? (run.distance_km / session.distance_km) * 100 : null
-      return { session, run, paceDeviation, distancePct, ok: run !== null && (distancePct ?? 0) >= 85 && (paceDeviation === null || paceDeviation <= PACE_TOLERANCE) }
+      const reps = run ? completion(session.blocks, run.blocks) : null
+      const distancePct = run ? (reps ? (reps.done / reps.min) * 100 : (run.distance_km / session.distance_km) * 100) : null
+      return { session, run, paceDeviation, distancePct, reps, ok: run !== null && (distancePct ?? 0) >= 85 && (paceDeviation === null || paceDeviation <= PACE_TOLERANCE) }
     })
   const count = (types: RunType[]) => {
     const l = list.filter((k) => types.includes(k.session.type))
@@ -382,6 +391,10 @@ export function evaluate(goal: RaceGoal, planAll: RunPlanSession[], runsAll: Run
   }
   const fast = lastKeys.filter((k) => k.session.type === 'long' && (k.paceDeviation ?? 0) < -0.06)
   if (fast.length) alerts.push({ level: 'warn', text: 'Alguna tirada larga ha ido bastante más rápida de lo planificado: guarda esa intensidad para las sesiones de calidad.' })
+  const unfinished = lastKeys.filter((k) => k.reps && k.reps.done < k.reps.min)
+  if (unfinished.length) alerts.push({ level: 'warn', text: `${unfinished.length === 1 ? 'En una sesión de series reciente no completaste' : `En ${unfinished.length} sesiones de series recientes no completaste`} todas las repeticiones.` })
+  const fading = recent.filter((r) => (repDrift(r.blocks) ?? 0) > 0.05)
+  if (fading.length >= 2) alerts.push({ level: 'warn', text: `En ${fading.length} sesiones de series has acabado más de un 5 % más lento de lo que empezaste: sal algo más conservador.` })
   const missed = list.filter((k) => !k.run && daysBetween(k.session.date, today) <= 28)
   if (missed.length >= 2) alerts.push({ level: 'bad', text: `Has perdido ${missed.length} sesiones clave en las últimas 4 semanas.` })
   const short = lastKeys.filter((k) => k.session.type === 'long' && k.run && (k.distancePct ?? 100) < 85)

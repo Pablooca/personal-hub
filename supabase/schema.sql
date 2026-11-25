@@ -7,7 +7,7 @@
 --  Tables:   events · projects · project_tasks · transactions · categories · accounts · work_logs ·
 --            study_programs · study_subjects · study_assessments · study_files ·
 --            tcg_decks · vgc_teams · tournaments · tournament_rounds ·
---            race_goals · run_plan · runs · notification_log
+--            race_goals · run_plan · runs · run_workouts · notification_log
 --  Security: Row Level Security on every table. Each row belongs to exactly
 --            one auth user (user_id) and is only visible/editable by them.
 -- =============================================================================
@@ -635,6 +635,9 @@ create table if not exists public.tournament_rounds (
   created_at          timestamptz not null default now()
 );
 
+-- Upgrade path: final placement by bracket (champion, finalist, top 4…) besides the exact position.
+alter table public.tournaments add column if not exists placement_bracket integer check (placement_bracket in (1, 2, 4, 8, 16, 32, 64, 256, 1024));
+
 create index if not exists tcg_decks_user_idx on public.tcg_decks (user_id);
 create index if not exists vgc_teams_user_idx on public.vgc_teams (user_id);
 create index if not exists tournaments_user_date_idx on public.tournaments (user_id, date desc);
@@ -686,6 +689,21 @@ create table if not exists public.runs (
   created_at   timestamptz not null default now()
 );
 
+-- Reusable structured sessions (blocks: warm-up, reps with recovery, cool-down…).
+create table if not exists public.run_workouts (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name        text not null check (char_length(name) between 1 and 120),
+  type        text not null default 'interval' check (type in ('easy', 'interval', 'tempo', 'long', 'race')),
+  blocks      jsonb not null default '[]'::jsonb check (jsonb_typeof(blocks) = 'array'),
+  created_at  timestamptz not null default now()
+);
+create index if not exists run_workouts_user_idx on public.run_workouts (user_id);
+
+-- Upgrade path: structured sessions.
+alter table public.run_plan add column if not exists blocks jsonb not null default '[]'::jsonb check (jsonb_typeof(blocks) = 'array');
+alter table public.runs add column if not exists blocks jsonb not null default '[]'::jsonb check (jsonb_typeof(blocks) = 'array');
+
 create index if not exists race_goals_user_idx on public.race_goals (user_id, date);
 create index if not exists run_plan_goal_idx on public.run_plan (goal_id, date);
 create index if not exists run_plan_user_idx on public.run_plan (user_id);
@@ -699,6 +717,7 @@ alter table public.tournament_rounds enable row level security;
 alter table public.race_goals        enable row level security;
 alter table public.run_plan          enable row level security;
 alter table public.runs              enable row level security;
+alter table public.run_workouts      enable row level security;
 
 -- Own rows only; anything referenced (deck, team, tournament, race, session) must be yours too.
 do $$
@@ -714,6 +733,7 @@ begin
                             ' and (team_id is null or exists (select 1 from public.vgc_teams v where v.id = team_id and v.user_id = (select auth.uid())))'),
       ('tournament_rounds', 'exists (select 1 from public.tournaments p where p.id = tournament_id and p.user_id = (select auth.uid()))'),
       ('race_goals',        'true'),
+      ('run_workouts',      'true'),
       ('run_plan',          'exists (select 1 from public.race_goals g where g.id = goal_id and g.user_id = (select auth.uid()))'),
       ('runs',              '(plan_id is null or exists (select 1 from public.run_plan s where s.id = plan_id and s.user_id = (select auth.uid())))')
     ) as v(tbl, extra)
@@ -740,7 +760,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'race_goals', 'run_plan', 'runs'] loop
+  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'race_goals', 'run_plan', 'runs', 'run_workouts'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

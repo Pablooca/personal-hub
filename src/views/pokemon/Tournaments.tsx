@@ -4,7 +4,7 @@ import { Badge, Button, Empty, Segmented, cx } from '../../components/ui'
 import { fromDateKey } from '../../lib/dates'
 import { fmtDate } from '../../lib/format'
 import { recordText, swissRecord } from '../../lib/pokemon/stats'
-import { CATEGORY_LABELS } from '../../lib/pokemon/structure'
+import { CATEGORY_LABELS, placementLabel } from '../../lib/pokemon/structure'
 import { parseTeam } from '../../lib/pokemon/team'
 import type { PokemonGame, TcgDeck, Tournament, TournamentStatus, VgcTeam } from '../../lib/types'
 import { useData } from '../../state/data'
@@ -134,9 +134,9 @@ export function Tournaments({ onCalculator }: { onCalculator: (s: CalcSeed) => v
                         {cut.length > 0 && <span className="text-sm text-muted"> +{cut.filter((r) => r.result === 'win' || r.result === 'bye').length}</span>}
                       </span>
                     )}
-                    <span className={cx('text-xs text-muted', !t.placement && !t.cp && 'hidden')}>
-                      {t.placement && `${t.placement}.º`}
-                      {t.placement && t.cp ? ' · ' : ''}
+                    <span className={cx('text-right text-xs text-muted', !placementLabel(t) && !t.cp && 'hidden')}>
+                      {placementLabel(t)}
+                      {placementLabel(t) && t.cp ? ' · ' : ''}
                       {t.cp ? `${t.cp} CP` : ''}
                     </span>
                   </div>

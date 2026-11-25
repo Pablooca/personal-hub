@@ -5,7 +5,7 @@ import { parseDeck, formatDeck, isBasicEnergy } from './deck.ts'
 import { cardImage, cardSlug, spriteUrls, type SpeciesRow } from './sprites.ts'
 import { EXAMPLE_DECK, EXAMPLE_TEAM } from './examples.ts'
 import { finalStats, formatTeam, parseTeam, pokepasteId } from './team.ts'
-import { cpFor, cutRoundLabel, recordFor, structureFor } from './structure.ts'
+import { bracketOf, bracketRange, cpFor, cpForPlacement, cutRoundLabel, placementLabel, recordFor, structureFor } from './structure.ts'
 import { cutChance, mulberry32, myChance, myFinalPoints, playRound, scenarios, simulateSwiss, type SimConfig } from './simulate.ts'
 import { decided, diceTally, matchesOf, matchupMatrix, ownMons, resultFromGames, rivalKey, rivalMons, swissRecord, turnTally, winRate } from './stats.ts'
 import type { Tournament, TournamentRound } from '../types.ts'
@@ -170,6 +170,20 @@ test('Championship Points with kickers', () => {
   assert.equal(cpFor('regional', null, 900), null)
 })
 
+test('final placement: brackets, exact position and CP', () => {
+  assert.deepEqual([1, 2, 3, 6, 16, 17, 100, 256, 700, 2000].map(bracketOf), [1, 2, 4, 8, 16, 32, 256, 256, 1024, null])
+  assert.deepEqual([bracketRange(1), bracketRange(4), bracketRange(256)], [[1, 1], [3, 4], [65, 256]])
+  assert.equal(placementLabel({ placement: null, placement_bracket: 1 }), 'Campeón')
+  assert.equal(placementLabel({ placement: 6, placement_bracket: 8 }), 'Top 8 · 6.º')
+  assert.equal(placementLabel({ placement: 38 }), 'Top 64 · 38.º')
+  assert.equal(placementLabel({ placement: 2000, placement_bracket: null }), '2000.º')
+  assert.equal(placementLabel({ placement: null, placement_bracket: null }), null)
+  assert.deepEqual(cpForPlacement('league_cup', 8, null, 40), { min: 25, max: 25 })
+  // 65th–128th = 80 CP, 129th–256th = 60 CP
+  assert.deepEqual(cpForPlacement('regional', 256, null, 1500), { min: 60, max: 80 })
+  assert.deepEqual(cpForPlacement('regional', 256, 100, 1500), { min: 80, max: 80 })
+})
+
 test('labels and records', () => {
   assert.deepEqual([1, 2, 3].map((n) => cutRoundLabel(8, n)), ['Cuartos', 'Semifinal', 'Final'])
   assert.equal(cutRoundLabel(32, 1), 'Top 32')
@@ -234,7 +248,7 @@ test('my chance: certain, impossible and in between; phase threshold respected',
 // ------------------------------------------------------------------- stats
 const T = (o: Partial<Tournament>): Tournament => ({
   id: 't', game: 'tcg', name: 'x', date: '2026-11-25', mode: 'in_person', location: '', category: 'league_cup', format: 'TEF-DLR', players: 32, swiss_rounds: 5, swiss_format: 'bo1',
-  has_top_cut: true, top_cut_type: 'standard', top_cut_size: 8, top_cut_format: 'bo3', made_top_cut: false, deck_id: 'd', team_id: null, status: 'finished', placement: null, cp: null, notes: '', created_at: '', ...o,
+  has_top_cut: true, top_cut_type: 'standard', top_cut_size: 8, top_cut_format: 'bo3', made_top_cut: false, deck_id: 'd', team_id: null, status: 'finished', placement_bracket: null, placement: null, cp: null, notes: '', created_at: '', ...o,
 })
 const R = (o: Partial<TournamentRound>): TournamentRound => ({
   id: Math.random().toString(), tournament_id: 't', phase: 'swiss', number: 1, result: 'win', games: [], won_dice: null, went_first: null, opponent_name: '', opponent_archetype: '', opponent_icons: [],

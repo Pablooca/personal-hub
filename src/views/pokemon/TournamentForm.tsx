@@ -3,7 +3,7 @@ import { Wand2 } from 'lucide-react'
 import { Button, Field, Modal, cx } from '../../components/ui'
 import { toDateKey } from '../../lib/dates'
 import { uid } from '../../lib/format'
-import { CATEGORY_LABELS, MIN_PLAYERS, cpFor, eventKind, structureFor } from '../../lib/pokemon/structure'
+import { CATEGORY_LABELS, MIN_PLAYERS, PLACEMENT_BRACKETS, bracketLabel, bracketOf, bracketRange, cpForPlacement, eventKind, structureFor } from '../../lib/pokemon/structure'
 import { TOURNAMENT_CATEGORIES, TOURNAMENT_STATUSES, type MatchFormat, type PokemonGame, type Tournament, type TournamentCategory } from '../../lib/types'
 import { useData } from '../../state/data'
 import { useToast } from '../../state/toast'
@@ -43,6 +43,45 @@ export function TopCutFormatQuestion({ value, onChange, swiss, category, invalid
   )
 }
 
+/** Bracket reached + optional exact position, kept consistent with each other. */
+export function PlacementFields({ bracket, position, onChange }: { bracket: number | null; position: string; onChange: (bracket: number | null, position: string) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <Field label="Puesto final">
+        <select
+          className="field"
+          value={bracket ?? ''}
+          onChange={(e) => {
+            const b = e.target.value ? Number(e.target.value) : null
+            const n = num(position)
+            const fits = b !== null && n !== null && n >= bracketRange(b)[0] && n <= b
+            onChange(b, fits ? position : '')
+          }}
+        >
+          <option value="">Sin indicar</option>
+          {PLACEMENT_BRACKETS.map((b) => (
+            <option key={b} value={b}>
+              {bracketLabel(b)}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Posición exacta">
+        <input
+          className="field num"
+          inputMode="numeric"
+          value={position}
+          placeholder={bracket && bracket > 2 ? `${bracketRange(bracket)[0]}–${bracket}` : '—'}
+          onChange={(e) => {
+            const n = num(e.target.value)
+            onChange(n ? bracketOf(n) : bracket, e.target.value)
+          }}
+        />
+      </Field>
+    </div>
+  )
+}
+
 export function TournamentForm({ tournament, defaultGame, onClose, onCreated }: { tournament: Tournament | null; defaultGame: PokemonGame; onClose: () => void; onCreated?: (id: string) => void }) {
   const { data, create, update } = useData()
   const toast = useToast()
@@ -65,6 +104,7 @@ export function TournamentForm({ tournament, defaultGame, onClose, onCreated }: 
     team_id: tournament?.team_id ?? '',
     status: tournament?.status ?? ('planned' as Tournament['status']),
     placement: tournament?.placement?.toString() ?? '',
+    bracket: tournament?.placement_bracket ?? (tournament?.placement ? bracketOf(tournament.placement) : null),
     cp: tournament?.cp?.toString() ?? '',
     notes: tournament?.notes ?? '',
   }))
@@ -73,7 +113,8 @@ export function TournamentForm({ tournament, defaultGame, onClose, onCreated }: 
 
   const players = num(f.players)
   const official = players && players >= MIN_PLAYERS ? structureFor(f.game, eventKind(f.category, f.mode), players) : null
-  const suggestedCp = cpFor(f.category, num(f.placement), players)
+  const cpRange = cpForPlacement(f.category, f.bracket, num(f.placement) || null, players)
+  const suggestedCp = cpRange && cpRange.min === cpRange.max ? cpRange.min : null
   const needsFormat = f.has_top_cut && !f.top_cut_format
 
   function setMode(mode: Tournament['mode']) {
@@ -121,6 +162,7 @@ export function TournamentForm({ tournament, defaultGame, onClose, onCreated }: 
       deck_id: f.game === 'tcg' && f.deck_id ? f.deck_id : null,
       team_id: f.game === 'vgc' && f.team_id ? f.team_id : null,
       status: f.status,
+      placement_bracket: f.bracket,
       placement: num(f.placement) || null,
       cp: num(f.cp),
       notes: f.notes,
@@ -225,14 +267,15 @@ export function TournamentForm({ tournament, defaultGame, onClose, onCreated }: 
               </select>
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Puesto final">
-              <input className="field num" inputMode="numeric" value={f.placement} onChange={(e) => set('placement', e.target.value)} placeholder="—" />
-            </Field>
-            <Field label="CP obtenidos">
-              <input className="field num" inputMode="numeric" value={f.cp} onChange={(e) => set('cp', e.target.value)} placeholder="—" />
-            </Field>
-          </div>
+          <PlacementFields bracket={f.bracket} position={f.placement} onChange={(bracket, placement) => setF((x) => ({ ...x, bracket, placement }))} />
+          <Field label="CP obtenidos">
+            <input className="field num" inputMode="numeric" value={f.cp} onChange={(e) => set('cp', e.target.value)} placeholder="—" />
+          </Field>
+          {cpRange && cpRange.min !== cpRange.max && (
+            <p className="text-xs text-muted">
+              Ese puesto abarca entre {cpRange.min} y {cpRange.max} CP: indica la posición exacta para saber cuántos son.
+            </p>
+          )}
           {suggestedCp !== null && String(suggestedCp) !== f.cp.trim() && (
             <button type="button" className="text-xs font-medium text-accent hover:underline" onClick={() => set('cp', String(suggestedCp))}>
               Según la tabla de la temporada 2027: {suggestedCp} CP. Aplicar

@@ -242,6 +242,9 @@ export interface Tournament {
   deck_id: string | null
   team_id: string | null
   status: TournamentStatus
+  /** Best bracket reached: 1 = champion, 2 = finalist, 4 = top 4… */
+  placement_bracket: number | null
+  /** Exact final position, if known. */
   placement: number | null
   cp: number | null
   notes: string
@@ -290,6 +293,42 @@ export interface TournamentRound {
 export const RUN_TYPES = ['easy', 'interval', 'tempo', 'long', 'race'] as const
 export type RunType = (typeof RUN_TYPES)[number]
 
+export const BLOCK_KINDS = ['warmup', 'strides', 'progressive', 'main', 'easy', 'cooldown'] as const
+export type BlockKind = (typeof BLOCK_KINDS)[number]
+
+/** One part of a structured session, e.g. "5–6 × 800 m in 4:30, 3 min recovery". */
+export interface WorkoutBlock {
+  kind: BlockKind
+  reps: number
+  /** "5–6 reps": anything from `reps` to `reps_max` fulfils it. */
+  reps_max: number | null
+  unit: 's' | 'm'
+  /** Seconds or metres of each rep. */
+  amount: number
+  /** Recovery between reps. */
+  recovery_s: number | null
+  /** 'time' = seconds per rep · 'pace' = seconds per km. */
+  target_kind: 'time' | 'pace' | null
+  target_s: number | null
+}
+
+/** A block as it was actually run. */
+export interface RunBlock extends WorkoutBlock {
+  done: boolean
+  /** Per rep: seconds (blocks in metres) or pace in s/km (blocks in time); null = not run or not timed. */
+  splits: (number | null)[]
+}
+
+/** Reusable structured session. */
+export interface RunWorkout {
+  id: string
+  user_id?: string
+  name: string
+  type: RunType
+  blocks: WorkoutBlock[]
+  created_at: string
+}
+
 export interface RaceGoal {
   id: string
   user_id?: string
@@ -313,6 +352,7 @@ export interface RunPlanSession {
   distance_km: number
   pace_s: number | null // target pace, s/km
   description: string
+  blocks: WorkoutBlock[]
   created_at: string
 }
 
@@ -333,6 +373,7 @@ export interface Run {
   /** All-out effort (test or race): the best basis for the projection. */
   is_test: boolean
   notes: string
+  blocks: RunBlock[]
   created_at: string
 }
 
@@ -355,6 +396,7 @@ export interface Tables {
   race_goals: RaceGoal
   run_plan: RunPlanSession
   runs: Run
+  run_workouts: RunWorkout
 }
 
 export type TableName = keyof Tables

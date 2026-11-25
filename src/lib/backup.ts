@@ -24,15 +24,16 @@ export const TABLE_FIELDS: { [K in TableName]: readonly string[] } = {
   vgc_teams: ['id', 'name', 'regulation', 'paste', 'notes', 'created_at'],
   tournaments: [
     'id', 'game', 'name', 'date', 'mode', 'location', 'category', 'format', 'players', 'swiss_rounds', 'swiss_format', 'has_top_cut',
-    'top_cut_type', 'top_cut_size', 'top_cut_format', 'made_top_cut', 'deck_id', 'team_id', 'status', 'placement', 'cp', 'notes', 'created_at',
+    'top_cut_type', 'top_cut_size', 'top_cut_format', 'made_top_cut', 'deck_id', 'team_id', 'status', 'placement_bracket', 'placement', 'cp', 'notes', 'created_at',
   ],
   tournament_rounds: [
     'id', 'tournament_id', 'phase', 'number', 'result', 'games', 'won_dice', 'went_first', 'opponent_name', 'opponent_archetype',
     'opponent_icons', 'opponent_deck_name', 'opponent_pokemon', 'my_pokemon', 'notes', 'created_at',
   ],
   race_goals: ['id', 'name', 'date', 'distance_km', 'previous_best_s', 'target_s', 'notes', 'created_at'],
-  run_plan: ['id', 'goal_id', 'date', 'type', 'distance_km', 'pace_s', 'description', 'created_at'],
-  runs: ['id', 'plan_id', 'date', 'type', 'distance_km', 'duration_s', 'work_pace_s', 'avg_hr', 'rpe', 'is_test', 'notes', 'created_at'],
+  run_plan: ['id', 'goal_id', 'date', 'type', 'distance_km', 'pace_s', 'description', 'blocks', 'created_at'],
+  runs: ['id', 'plan_id', 'date', 'type', 'distance_km', 'duration_s', 'work_pace_s', 'avg_hr', 'rpe', 'is_test', 'notes', 'blocks', 'created_at'],
+  run_workouts: ['id', 'name', 'type', 'blocks', 'created_at'],
 }
 
 /** Parents first, so foreign keys always find their row. */
@@ -41,7 +42,7 @@ export const BACKUP_TABLES = Object.keys(TABLE_FIELDS) as TableName[]
 export const BACKUP_SCOPES: { id: string; label: string; tables: TableName[] }[] = [
   { id: 'all', label: 'Todo', tables: BACKUP_TABLES },
   { id: 'pokemon', label: 'Solo Pokémon', tables: ['tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds'] },
-  { id: 'running', label: 'Solo Running', tables: ['race_goals', 'run_plan', 'runs'] },
+  { id: 'running', label: 'Solo Running', tables: ['race_goals', 'run_plan', 'runs', 'run_workouts'] },
 ]
 
 export const TABLE_LABELS: Record<TableName, string> = {
@@ -63,6 +64,7 @@ export const TABLE_LABELS: Record<TableName, string> = {
   race_goals: 'Carreras objetivo',
   run_plan: 'Sesiones planificadas',
   runs: 'Entrenamientos',
+  run_workouts: 'Plantillas de sesión',
 }
 
 type Row = Record<string, unknown>

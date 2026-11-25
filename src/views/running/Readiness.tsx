@@ -130,6 +130,7 @@ export function Readiness({ goal, r }: { goal: RaceGoal; r: R }) {
                       {fmtDate(fromDateKey(k.session.date))} · {RUN_TYPE_SHORT[k.session.type]} {fmtKm(k.session.distance_km)} km
                     </span>
                     <span className="num text-xs text-muted">
+                      {k.reps && k.run ? `${k.reps.done}/${k.reps.max > k.reps.min ? `${k.reps.min}–${k.reps.max}` : k.reps.min} · ` : ''}
                       {!k.run ? 'no hecha' : k.paceDeviation === null ? `${Math.round(k.distancePct ?? 0)} %` : `${k.paceDeviation > 0 ? '+' : '−'}${Math.abs(Math.round(k.paceDeviation * k.session.pace_s!))} s/km`}
                     </span>
                   </li>

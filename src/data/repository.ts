@@ -73,6 +73,7 @@ const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   race_goals: { column: 'date', ascending: true },
   run_plan: { column: 'date', ascending: true },
   runs: { column: 'date', ascending: false },
+  run_workouts: { column: 'created_at', ascending: true },
 }
 
 /** Postgres `numeric` arrives as a string — normalise it. */
@@ -104,7 +105,8 @@ function normalise<K extends TableName>(table: K, row: Tables[K]): Tables[K] {
   }
   if (table === 'race_goals' || table === 'run_plan' || table === 'runs') {
     const r = row as Tables['runs']
-    return { ...r, distance_km: Number(r.distance_km) } as unknown as Tables[K]
+    // `blocks` is missing in copies saved before structured sessions existed.
+    return { ...r, distance_km: Number(r.distance_km), ...(table === 'race_goals' ? {} : { blocks: Array.isArray(r.blocks) ? r.blocks : [] }) } as unknown as Tables[K]
   }
   return row
 }
@@ -254,7 +256,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v11'
+const DEMO_KEY = 'ph-demo-dataset-v12'
 export const STUDY_BUCKET = 'study-files'
 
 function readDemo(): Dataset {

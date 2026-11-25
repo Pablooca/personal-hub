@@ -4,7 +4,7 @@ export const TABLES: TableName[] = [
   'events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs',
   'study_programs', 'study_subjects', 'study_assessments', 'study_files',
   'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds',
-  'race_goals', 'run_plan', 'runs',
+  'race_goals', 'run_plan', 'runs', 'run_workouts',
 ]
 
 /** A dataset with every table present (empty). Always merge loaded data over this. */
@@ -27,6 +27,7 @@ export const emptyDataset = (): Dataset => ({
   race_goals: [],
   run_plan: [],
   runs: [],
+  run_workouts: [],
 })
 
 /** Fill in any table missing from an older/partial dataset (e.g. demo data saved by a previous version). */
@@ -35,7 +36,10 @@ export function completeDataset(partial: Partial<Dataset> | null | undefined): D
   if (!partial) return out
   for (const t of TABLES) {
     const rows = (partial as Record<string, unknown>)[t]
-    if (Array.isArray(rows)) (out as Record<TableName, unknown[]>)[t] = rows
+    if (!Array.isArray(rows)) continue
+    // Copies saved before structured sessions existed have no `blocks`.
+    const needsBlocks = (t === 'run_plan' || t === 'runs') && rows.some((r) => !Array.isArray((r as { blocks?: unknown }).blocks))
+    ;(out as Record<TableName, unknown[]>)[t] = needsBlocks ? rows.map((r) => ({ ...(r as object), blocks: (r as { blocks?: unknown[] }).blocks ?? [] })) : rows
   }
   return out
 }

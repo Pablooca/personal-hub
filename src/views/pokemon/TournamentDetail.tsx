@@ -3,7 +3,7 @@ import { ArrowLeft, Calculator as CalcIcon, Copy, Flag, Pencil, Plus, Trash2, Tr
 import { Badge, Button, Card, Empty, Field, Modal, Stat, cx } from '../../components/ui'
 import { fromDateKey } from '../../lib/dates'
 import { capitalize, fmtDate } from '../../lib/format'
-import { asymmetricCap, CATEGORY_LABELS, cpFor, cutRoundLabel, eventKind, structureFor } from '../../lib/pokemon/structure'
+import { asymmetricCap, CATEGORY_LABELS, bracketOf, cpForPlacement, cutRoundLabel, eventKind, placementLabel, structureFor } from '../../lib/pokemon/structure'
 import { myChance, myFinalPoints, scenarios, simulateSwiss, type SimConfig } from '../../lib/pokemon/simulate'
 import { recordText, roundFormat, swissRecord } from '../../lib/pokemon/stats'
 import type { MatchFormat, RoundPhase, Tournament, TournamentRound } from '../../lib/types'
@@ -11,7 +11,7 @@ import { useData } from '../../state/data'
 import { useToast } from '../../state/toast'
 import type { CalcSeed } from './Calculator'
 import { RoundModal } from './RoundModal'
-import { CUT_SIZES, TopCutFormatQuestion, TournamentForm } from './TournamentForm'
+import { CUT_SIZES, PlacementFields, TopCutFormatQuestion, TournamentForm } from './TournamentForm'
 import { OwnIcons, STATUS_LABELS } from './Tournaments'
 import { DeckIcons, FORMAT_LABEL, RESULT_STYLES, SpeciesSprite, fmtRate } from './parts'
 
@@ -73,7 +73,7 @@ export function TournamentDetail({ tournament: t, onBack, onCalculator }: { tour
 
   async function duplicate() {
     const { id: _i, user_id: _u, created_at: _c, ...rest } = t
-    await create('tournaments', { ...rest, name: `${t.name} (copia)`.slice(0, 160), status: 'planned', placement: null, cp: null, made_top_cut: false })
+    await create('tournaments', { ...rest, name: `${t.name} (copia)`.slice(0, 160), status: 'planned', placement_bracket: null, placement: null, cp: null, made_top_cut: false })
     toast('success', 'Torneo duplicado')
     onBack()
   }
@@ -172,7 +172,7 @@ export function TournamentDetail({ tournament: t, onBack, onCalculator }: { tour
           value={t.has_top_cut ? (t.top_cut_format ? FORMAT_LABEL[t.top_cut_format] : '¿BO1 o BO3?') : 'No'}
           hint={t.has_top_cut ? `Top ${t.top_cut_size ?? '—'}${t.top_cut_type === 'asymmetric' ? ' asimétrico' : ''}${t.made_top_cut ? ' · clasificado' : ''}` : 'Solo rondas suizas'}
         />
-        <Stat label="Resultado" value={t.placement ? `${t.placement}.º` : '—'} hint={t.cp !== null ? `${t.cp} CP` : 'CP sin registrar'} icon={<Trophy className="size-4" />} />
+        <Stat label="Resultado" value={<span className="text-lg sm:text-xl">{placementLabel(t) ?? '—'}</span>} hint={t.cp !== null ? `${t.cp} CP` : 'CP sin registrar'} icon={<Trophy className="size-4" />} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -384,10 +384,12 @@ function TopCutModal({ tournament: t, onClose, onDone }: { tournament: Tournamen
 function FinishModal({ tournament: t, onClose }: { tournament: Tournament; onClose: () => void }) {
   const { update } = useData()
   const [placement, setPlacement] = useState(t.placement?.toString() ?? '')
+  const [bracket, setBracket] = useState(t.placement_bracket ?? (t.placement ? bracketOf(t.placement) : null))
   const [cp, setCp] = useState(t.cp?.toString() ?? '')
   const [dropped, setDropped] = useState(t.status === 'dropped')
   const place = Number(placement) > 0 ? Math.floor(Number(placement)) : null
-  const auto = cpFor(t.category, place, t.players)
+  const range = cpForPlacement(t.category, bracket, place, t.players)
+  const auto = range && range.min === range.max ? range.min : null
   return (
     <Modal
       open
@@ -403,7 +405,7 @@ function FinishModal({ tournament: t, onClose }: { tournament: Tournament; onClo
             onClick={() => {
               onClose()
               const points = cp.trim() === '' ? auto : Math.max(0, Math.floor(Number(cp) || 0))
-              void update('tournaments', t.id, { status: dropped ? 'dropped' : 'finished', placement: place, cp: points })
+              void update('tournaments', t.id, { status: dropped ? 'dropped' : 'finished', placement_bracket: bracket, placement: place, cp: points })
             }}
           >
             Guardar
@@ -412,14 +414,22 @@ function FinishModal({ tournament: t, onClose }: { tournament: Tournament; onClo
       }
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Puesto final">
-            <input className="field num" inputMode="numeric" value={placement} onChange={(e) => setPlacement(e.target.value)} />
-          </Field>
-          <Field label="CP">
-            <input className="field num" inputMode="numeric" value={cp} onChange={(e) => setCp(e.target.value)} placeholder={auto === null ? '—' : String(auto)} />
-          </Field>
-        </div>
+        <PlacementFields
+          bracket={bracket}
+          position={placement}
+          onChange={(b, p) => {
+            setBracket(b)
+            setPlacement(p)
+          }}
+        />
+        <Field label="CP">
+          <input className="field num" inputMode="numeric" value={cp} onChange={(e) => setCp(e.target.value)} placeholder={auto === null ? '—' : String(auto)} />
+        </Field>
+        {range && range.min !== range.max && (
+          <p className="text-xs text-muted">
+            Ese puesto abarca entre {range.min} y {range.max} CP: indica la posición exacta para calcularlos.
+          </p>
+        )}
         {auto !== null && <p className="text-xs text-muted">Según la tabla 2027 y {t.players} inscritos corresponden {auto} CP. Si lo dejas vacío se guarda ese valor.</p>}
         <label className="flex min-h-9 items-center gap-2 text-sm">
           <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={dropped} onChange={(e) => setDropped(e.target.checked)} /> Abandoné antes de terminar

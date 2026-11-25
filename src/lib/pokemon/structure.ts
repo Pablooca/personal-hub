@@ -100,6 +100,37 @@ export function cpFor(category: TournamentCategory, placement: number | null, pl
   return row && players >= row[2] ? row[1] : 0
 }
 
+// --------------------------------------------------------------- placement
+export const PLACEMENT_BRACKETS = [1, 2, 4, 8, 16, 32, 64, 256, 1024] as const
+export const bracketLabel = (b: number) => (b === 1 ? 'Campeón' : b === 2 ? 'Finalista' : `Top ${b}`)
+/** Bracket of an exact position; null beyond the last one. */
+export const bracketOf = (position: number): number | null => PLACEMENT_BRACKETS.find((b) => position <= b) ?? null
+/** Positions a bracket covers: Top 8 = 5th–8th. */
+export function bracketRange(b: number): [number, number] {
+  const i = PLACEMENT_BRACKETS.indexOf(b as (typeof PLACEMENT_BRACKETS)[number])
+  return [i > 0 ? PLACEMENT_BRACKETS[i - 1] + 1 : 1, b]
+}
+/** "Top 8 · 6.º", "Campeón", "Top 32"… */
+export function placementLabel(t: { placement: number | null; placement_bracket?: number | null }): string | null {
+  const b = t.placement_bracket ?? (t.placement ? bracketOf(t.placement) : null)
+  if (!b) return t.placement ? `${t.placement}.º` : null
+  return b <= 2 || !t.placement ? bracketLabel(b) : `${bracketLabel(b)} · ${t.placement}.º`
+}
+
+/**
+ * CP from what is known about the final placement. A bracket can span two CP tiers
+ * (Top 256 = 65th–256th): then both are returned and nothing should be auto-filled.
+ */
+export function cpForPlacement(category: TournamentCategory, bracket: number | null, position: number | null, players: number | null): { min: number; max: number } | null {
+  if (position) {
+    const cp = cpFor(category, position, players)
+    return cp === null ? null : { min: cp, max: cp }
+  }
+  if (!bracket) return null
+  const [a, b] = bracketRange(bracket).map((p) => cpFor(category, p, players))
+  return a === null || b === null ? null : { min: Math.min(a, b), max: Math.max(a, b) }
+}
+
 export const CATEGORY_LABELS: Record<TournamentCategory, string> = {
   league_challenge: 'League Challenge',
   league_cup: 'League Cup',

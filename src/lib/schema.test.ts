@@ -48,6 +48,7 @@ const TABLES: Record<string, string> = {
   race_goals: 'RaceGoal',
   run_plan: 'RunPlanSession',
   runs: 'Run',
+  run_workouts: 'RunWorkout',
 }
 
 for (const [table, iface] of Object.entries(TABLES)) {
