@@ -247,6 +247,36 @@ create table if not exists public.categories (
 
 comment on table public.categories is 'Finance categories defined by each user.';
 
+-- Upgrade path: monthly budget per category.
+alter table public.categories add column if not exists budget numeric(12, 2) check (budget is null or budget >= 0);
+
+-- "Concepts that contain X are Y": used by the app, the bank import and Apple Pay.
+create table if not exists public.category_rules (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  pattern     text not null check (char_length(pattern) between 2 and 120),
+  type        text not null default 'expense' check (type in ('income', 'expense', 'investment')),
+  category    text not null check (char_length(category) between 1 and 60),
+  created_at  timestamptz not null default now()
+);
+create index if not exists category_rules_user_idx on public.category_rules (user_id);
+
+-- Subscriptions and other charges that repeat.
+create table if not exists public.bills (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name         text not null check (char_length(name) between 1 and 200),
+  amount       numeric(12, 2) not null check (amount > 0),
+  category     text not null default 'subscriptions',
+  account      text not null default '',
+  period       text not null default 'monthly' check (period in ('weekly', 'monthly', 'bimonthly', 'quarterly', 'yearly')),
+  anchor_date  date not null,
+  notify_days  integer not null default 1 check (notify_days between 0 and 30),
+  active       boolean not null default true,
+  created_at   timestamptz not null default now()
+);
+create index if not exists bills_user_idx on public.bills (user_id);
+
 create index if not exists categories_user_type_idx on public.categories (user_id, type);
 
 -- =============================================================================
@@ -724,6 +754,8 @@ alter table public.race_goals        enable row level security;
 alter table public.run_plan          enable row level security;
 alter table public.runs              enable row level security;
 alter table public.run_workouts      enable row level security;
+alter table public.category_rules    enable row level security;
+alter table public.bills             enable row level security;
 
 -- Own rows only; anything referenced (deck, team, tournament, race, session) must be yours too.
 do $$
@@ -740,6 +772,8 @@ begin
       ('tournament_rounds', 'exists (select 1 from public.tournaments p where p.id = tournament_id and p.user_id = (select auth.uid()))'),
       ('race_goals',        'true'),
       ('run_workouts',      'true'),
+      ('category_rules',    'true'),
+      ('bills',             'true'),
       ('run_plan',          'exists (select 1 from public.race_goals g where g.id = goal_id and g.user_id = (select auth.uid()))'),
       ('runs',              '(plan_id is null or exists (select 1 from public.run_plan s where s.id = plan_id and s.user_id = (select auth.uid())))')
     ) as v(tbl, extra)
@@ -766,7 +800,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'race_goals', 'run_plan', 'runs', 'run_workouts'] loop
+  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'race_goals', 'run_plan', 'runs', 'run_workouts', 'category_rules', 'bills'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

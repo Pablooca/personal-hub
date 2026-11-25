@@ -5,6 +5,7 @@ export const TABLES: TableName[] = [
   'study_programs', 'study_subjects', 'study_assessments', 'study_files',
   'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds',
   'race_goals', 'run_plan', 'runs', 'run_workouts',
+  'category_rules', 'bills',
 ]
 
 /** A dataset with every table present (empty). Always merge loaded data over this. */
@@ -28,6 +29,8 @@ export const emptyDataset = (): Dataset => ({
   run_plan: [],
   runs: [],
   run_workouts: [],
+  category_rules: [],
+  bills: [],
 })
 
 /** Fill in any table missing from an older/partial dataset (e.g. demo data saved by a previous version). */

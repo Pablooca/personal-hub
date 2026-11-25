@@ -13,7 +13,7 @@ export const TABLE_FIELDS: { [K in TableName]: readonly string[] } = {
   projects: ['id', 'title', 'area', 'status', 'progress', 'priority', 'description', 'start_date', 'deadline', 'repo_url', 'notes', 'created_at', 'updated_at'],
   project_tasks: ['id', 'project_id', 'category', 'title', 'status', 'is_done', 'jira_key', 'description', 'priority', 'start_date', 'due_date', 'recurrence', 'created_at'],
   transactions: ['id', 'date', 'type', 'category', 'concept', 'amount', 'account', 'created_at'],
-  categories: ['id', 'name', 'type', 'color', 'created_at'],
+  categories: ['id', 'name', 'type', 'color', 'budget', 'created_at'],
   accounts: ['id', 'name', 'kind', 'color', 'is_primary', 'created_at'],
   work_logs: ['id', 'date', 'hours', 'description', 'jira_key', 'task_id', 'created_at'],
   study_programs: ['id', 'name', 'institution', 'academic_year', 'total_credits', 'created_at'],
@@ -34,6 +34,8 @@ export const TABLE_FIELDS: { [K in TableName]: readonly string[] } = {
   run_plan: ['id', 'goal_id', 'date', 'type', 'distance_km', 'pace_s', 'description', 'blocks', 'created_at'],
   runs: ['id', 'plan_id', 'date', 'type', 'distance_km', 'duration_s', 'work_pace_s', 'avg_hr', 'rpe', 'is_test', 'notes', 'blocks', 'created_at'],
   run_workouts: ['id', 'name', 'type', 'blocks', 'created_at'],
+  category_rules: ['id', 'pattern', 'type', 'category', 'created_at'],
+  bills: ['id', 'name', 'amount', 'category', 'account', 'period', 'anchor_date', 'notify_days', 'active', 'created_at'],
 }
 
 /** Parents first, so foreign keys always find their row. */
@@ -65,6 +67,8 @@ export const TABLE_LABELS: Record<TableName, string> = {
   run_plan: 'Sesiones planificadas',
   runs: 'Entrenamientos',
   run_workouts: 'Plantillas de sesión',
+  category_rules: 'Reglas de categoría',
+  bills: 'Cobros recurrentes',
 }
 
 type Row = Record<string, unknown>

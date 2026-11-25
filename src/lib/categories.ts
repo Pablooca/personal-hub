@@ -47,7 +47,7 @@ const DEFAULTS: Record<TxType, [string, CategoryColor][]> = {
 }
 
 export function defaultCategories(): Omit<Category, 'id' | 'created_at'>[] {
-  return (Object.keys(DEFAULTS) as TxType[]).flatMap((type) => DEFAULTS[type].map(([name, color]) => ({ name, type, color })))
+  return (Object.keys(DEFAULTS) as TxType[]).flatMap((type) => DEFAULTS[type].map(([name, color]) => ({ name, type, color, budget: null })))
 }
 
 /** Category assigned by automations (Apple Pay webhook) when no rule matches. */

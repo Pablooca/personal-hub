@@ -21,7 +21,7 @@
  *   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID      optional: announce each payment on Telegram
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { categorize, categoryLabel, extractPayment, formatEuro, parseAmount, parseDate } from './normalize.ts'
+import { categorize, matchOwnRule, categoryLabel, extractPayment, formatEuro, parseAmount, parseDate } from './normalize.ts'
 import { expensesMessage, sendTelegram } from '../_shared/telegram.ts'
 
 const MAX_BODY_BYTES = 8 * 1024
@@ -102,14 +102,18 @@ Deno.serve(async (req) => {
   const merchant = clean(extracted.merchant, 200) || 'Pago Apple Pay'
   const card = clean(extracted.card, 60)
   const date = parseDate(extracted.date, timeZone)
-  const category = categorize(merchant)
-  console.log('apple-pay-webhook: parsed', JSON.stringify({ source: extracted.source, amount, merchant, card, date, category }))
+  console.log('apple-pay-webhook: parsed', JSON.stringify({ source: extracted.source, amount, merchant, card, date }))
 
   const db = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
   try {
+    // ---------------------------------------------------------- category
+    // The user's rules first, then the built-in ones. A problem reading them never blocks the payment.
+    const { data: rules } = await db.from('category_rules').select('pattern, category').eq('user_id', ownerId).eq('type', 'expense')
+    const category = matchOwnRule(rules ?? [], merchant) ?? categorize(merchant)
+
     // ---------------------------------------------------------- account
     // Card name matching one of your accounts → that account;
     // otherwise your primary account; otherwise the card name / "Apple Pay".

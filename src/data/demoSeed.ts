@@ -333,7 +333,7 @@ export function buildDemoDataset(today = new Date()): Dataset {
     { id: uid(), name: 'Tarjeta de crédito', kind: 'credit', color: 'violet', is_primary: false, created_at: now },
   ]
 
-  const categories: Category[] = defaultCategories().map((c) => ({ ...c, id: uid(), created_at: now }))
+  const categories: Category[] = defaultCategories().map((c) => ({ ...c, id: uid(), created_at: now, budget: c.type === 'expense' ? (c.name === 'groceries' ? 250 : c.name === 'dining' ? 120 : c.name === 'transport' ? 45 : null) : null }))
 
   // ---------------------------------------------------------------- studies
   const program: StudyProgram = {
@@ -387,6 +387,8 @@ export function buildDemoDataset(today = new Date()): Dataset {
     study_subjects,
     study_assessments,
     study_files,
+    category_rules: [{ id: uid(), pattern: 'mercado', type: 'expense', category: 'groceries', created_at: now }],
+    bills: [{ id: uid(), name: 'Música en streaming', amount: 10.99, category: 'subscriptions', account: 'Cuenta nómina', period: 'monthly', anchor_date: day(-27), notify_days: 1, active: true, created_at: now }],
     ...buildDemoPokemon(today),
     ...buildDemoRunning(today),
   }

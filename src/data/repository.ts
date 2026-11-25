@@ -77,6 +77,8 @@ const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   run_plan: { column: 'date', ascending: true },
   runs: { column: 'date', ascending: false },
   run_workouts: { column: 'created_at', ascending: true },
+  category_rules: { column: 'created_at', ascending: true },
+  bills: { column: 'created_at', ascending: true },
 }
 
 /** Postgres `numeric` arrives as a string — normalise it. */
@@ -84,6 +86,14 @@ function normalise<K extends TableName>(table: K, row: Tables[K]): Tables[K] {
   if (table === 'transactions') {
     const tx = row as Tables['transactions']
     return { ...tx, amount: Number(tx.amount) } as Tables[K]
+  }
+  if (table === 'categories') {
+    const c = row as Tables['categories']
+    return { ...c, budget: c.budget === null || c.budget === undefined ? null : Number(c.budget) } as Tables[K]
+  }
+  if (table === 'bills') {
+    const b = row as Tables['bills']
+    return { ...b, amount: Number(b.amount) } as Tables[K]
   }
   if (table === 'work_logs') {
     const wl = row as Tables['work_logs']
@@ -267,7 +277,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v17'
+const DEMO_KEY = 'ph-demo-dataset-v18'
 export const STUDY_BUCKET = 'study-files'
 
 function readDemo(): Dataset {

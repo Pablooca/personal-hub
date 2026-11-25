@@ -10,7 +10,7 @@ export type AgendaSource = (typeof AGENDA_SOURCES)[number]
 export const SOURCE_LABELS: Record<AgendaSource, string> = { run: 'Entrenos', study: 'Entregas y exámenes', tournament: 'Torneos', task: 'Tareas', project: 'Proyectos', bill: 'Cobros' }
 
 export type Target =
-  | { kind: 'event' | 'task' | 'project' | 'subject' | 'run' | 'session' | 'goal' | 'tournament' | 'deck' | 'team' | 'tx' | 'worklog' | 'card'; id: string }
+  | { kind: 'event' | 'task' | 'project' | 'subject' | 'run' | 'session' | 'goal' | 'tournament' | 'deck' | 'team' | 'tx' | 'worklog' | 'card' | 'bill'; id: string }
 
 export interface AgendaItem {
   key: string
@@ -80,7 +80,7 @@ export function agendaItems(d: Dataset, { matched, bills = [] }: AgendaDeps): Ag
     out.push({ key: `project-${p.id}`, source: 'project', date: p.deadline, time: null, title: p.title, detail: 'Fin del proyecto', done: p.status === 'completed', target: { kind: 'project', id: p.id } })
   }
   for (const b of bills) {
-    out.push({ key: `bill-${b.id}-${b.date}`, source: 'bill', date: b.date, time: null, title: b.name, detail: b.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }), done: false, target: { kind: 'tx', id: b.id } })
+    out.push({ key: `bill-${b.id}-${b.date}`, source: 'bill', date: b.date, time: null, title: b.name, detail: b.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }), done: false, target: { kind: 'bill', id: b.id } })
   }
   return out.sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? '').localeCompare(b.time ?? '') || a.title.localeCompare(b.title))
 }
@@ -116,6 +116,7 @@ export function search(d: Dataset, query: string, limit = 40): SearchHit[] {
   for (const a of d.study_assessments) add('Entregas y exámenes', { kind: 'subject', id: a.subject_id }, a.name, subjects.get(a.subject_id) ?? '')
   for (const f of d.study_files) add('Apuntes', { kind: 'subject', id: f.subject_id }, f.name, [subjects.get(f.subject_id), f.topic].filter(Boolean).join(' · '))
   for (const t of d.transactions) add('Movimientos', { kind: 'tx', id: t.id }, t.concept || t.category, `${t.date} · ${t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}`, `${t.category} ${t.account}`, t.date)
+  for (const b of d.bills) add('Cobros', { kind: 'bill', id: b.id }, b.name, b.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }))
   for (const l of d.work_logs) add('Horas', { kind: 'worklog', id: l.id }, l.description || l.jira_key || 'Horas', `${l.date}${l.jira_key ? ` · ${l.jira_key}` : ''}`, '', l.date)
   for (const t of d.tournaments) add('Torneos', { kind: 'tournament', id: t.id }, t.name, `${t.game.toUpperCase()} · ${t.date}`, `${t.location} ${t.notes}`, t.date)
   for (const k of d.tcg_decks) add('Mazos', { kind: 'deck', id: k.id }, k.name, k.format, k.list_text)

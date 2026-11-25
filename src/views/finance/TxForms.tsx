@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Plus, Settings2, Trash2 } from 'lucide-react'
 import { Button, Card, Field, Modal, Segmented } from '../../components/ui'
+import { matchRule } from '../../lib/budget'
 import { UNCATEGORIZED, categoryLabel, categoryNames, normaliseCategory } from '../../lib/categories'
 import { fmtMoney } from '../../lib/format'
 import { TX_STYLES } from '../../lib/theme'
@@ -127,6 +128,7 @@ export function QuickEntry({ defaultDate, onManage, bare, onDone }: { defaultDat
   }
   // Follow the primary account (or new accounts/categories) until the user picks one by hand.
   const [accountTouched, setAccountTouched] = useState(false)
+  const [categoryTouched, setCategoryTouched] = useState(false)
   const autoAccount = blank(v.type).account
   if (!accountTouched && v.account !== autoAccount) setV((x) => ({ ...x, account: autoAccount }))
   if (!v.category && categoryNames(data, v.type)[0]) setV((x) => ({ ...x, category: categoryNames(data, x.type)[0] }))
@@ -138,6 +140,7 @@ export function QuickEntry({ defaultDate, onManage, bare, onDone }: { defaultDat
     if (await create('transactions', toRow(v, amount))) {
       toast('success', `${TX_STYLES[v.type].label}: ${fmtMoney(amount)}`)
       setV(blank(v.type))
+      setCategoryTouched(false)
       onDone?.()
     }
   }
@@ -151,7 +154,10 @@ export function QuickEntry({ defaultDate, onManage, bare, onDone }: { defaultDat
             setV((x) => {
               if (p.account !== undefined) setAccountTouched(true)
               if (p.type && p.type !== x.type) setAccountTouched(false)
+              if (p.category !== undefined && p.type === undefined) setCategoryTouched(true)
               const next = { ...x, ...p }
+              // A rule picks the category while you type, unless you already chose one.
+              if (p.concept !== undefined && !categoryTouched) next.category = matchRule(data.category_rules, p.concept, next.type)?.category ?? next.category
               // Switching to "Saved" pre-selects a savings account; switching back restores the primary.
               if (p.type && p.type !== x.type) next.account = blank(p.type).account
               return next
@@ -180,7 +186,8 @@ export function QuickEntry({ defaultDate, onManage, bare, onDone }: { defaultDat
 }
 
 export function TxModal({ tx, onClose, onManage }: { tx: Transaction; onClose: () => void; onManage: (tab: 'accounts' | 'categories') => void }) {
-  const { update, remove } = useData()
+  const { data, create, update, remove } = useData()
+  const [always, setAlways] = useState(false)
   const [v, setV] = useState<TxDraft>({ type: tx.type, amount: String(tx.amount), date: tx.date, category: tx.category, concept: tx.concept, account: tx.account })
   const amount = parseAmount(v.amount)
 
@@ -188,7 +195,10 @@ export function TxModal({ tx, onClose, onManage }: { tx: Transaction; onClose: (
     if (amount === null) return
     onClose()
     await update('transactions', tx.id, toRow(v, amount))
+    if (always && canRule) await create('category_rules', { pattern: pattern.slice(0, 120), type: v.type, category: normaliseCategory(v.category) })
   }
+  const pattern = v.concept.trim().split(/[,*]/)[0].trim()
+  const canRule = pattern.length >= 2 && v.category !== tx.category && v.category !== UNCATEGORIZED && matchRule(data.category_rules, v.concept, v.type)?.category !== normaliseCategory(v.category)
 
   return (
     <Modal
@@ -217,6 +227,11 @@ export function TxModal({ tx, onClose, onManage }: { tx: Transaction; onClose: (
       }
     >
       <TxFields value={v} onChange={(p) => setV((x) => ({ ...x, ...p }))} onManage={onManage} />
+      {canRule && (
+        <label className="mt-3 flex min-h-9 items-center gap-2 text-sm">
+          <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={always} onChange={(e) => setAlways(e.target.checked)} /> Hacerlo siempre con «{pattern.slice(0, 40)}»
+        </label>
+      )}
     </Modal>
   )
 }

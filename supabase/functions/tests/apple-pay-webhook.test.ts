@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { categorize, extractPayment, parseAmount, parseDate, parsePlainText } from '../apple-pay-webhook/normalize.ts'
+import { categorize, extractPayment, matchOwnRule, parseAmount, parseDate, parsePlainText } from '../apple-pay-webhook/normalize.ts'
 
 const NOW = new Date('2026-11-22T17:41:00Z') // 18:41 in Madrid
 const TZ = 'Europe/Madrid'
@@ -121,4 +121,11 @@ test('negative / unicode-minus amounts become positive, rounded to 2 decimals', 
   assert.equal(parseAmount('−14,50 €'), 14.5)
   assert.equal(parseAmount('-3,999'), 3999) // "3,999" = thousands
   assert.equal(parseAmount(10.005), 10.01)
+})
+
+test("the user's own rules go before the built-in ones", () => {
+  const rules = [{ pattern: 'tussam', category: 'transport' }, { pattern: 'Empire Games', category: 'pokémon' }, { pattern: 'empire', category: 'other' }]
+  assert.equal(matchOwnRule(rules, 'COMPRA  Empire   Games Sevilla'), 'pokémon')
+  assert.equal(matchOwnRule(rules, 'Mercadona'), null)
+  assert.equal(matchOwnRule([{ pattern: ' ', category: 'x' }], 'Mercadona'), null)
 })

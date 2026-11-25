@@ -1,17 +1,19 @@
 import { useState, type FormEvent } from 'react'
 import { Plus, Star, Trash2 } from 'lucide-react'
 import { Button, Empty, Field, Modal, Segmented, cx } from '../../components/ui'
-import { COLOR_BG, UNCATEGORIZED, categoryLabel, defaultCategories, normaliseCategory } from '../../lib/categories'
+import { foldText, matchRule } from '../../lib/budget'
+import { COLOR_BG, UNCATEGORIZED, categoryLabel, categoryNames, defaultCategories, normaliseCategory } from '../../lib/categories'
 import { ACCOUNT_KIND_LABELS, TX_STYLES } from '../../lib/theme'
-import { ACCOUNT_KINDS, CATEGORY_COLORS, TX_TYPES, type AccountKind, type CategoryColor, type TxType } from '../../lib/types'
+import { ACCOUNT_KINDS, CATEGORY_COLORS, TX_TYPES, type AccountKind, type Category, type CategoryColor, type CategoryRule, type TxType } from '../../lib/types'
 import { useData } from '../../state/data'
 import { useToast } from '../../state/toast'
+import { parseAmount } from './TxForms'
 
 export type ManageTab = 'accounts' | 'categories' | 'rules'
 
 export function ManageModal({ tab, onTab, onClose }: { tab: ManageTab | null; onTab: (t: ManageTab) => void; onClose: () => void }) {
   return (
-    <Modal open={tab !== null} onClose={onClose} title="Cuentas y categorías" wide>
+    <Modal open={tab !== null} onClose={onClose} title="Cuentas, categorías y reglas" wide>
       <Segmented
         className="mb-4"
         value={tab ?? 'accounts'}
@@ -19,9 +21,10 @@ export function ManageModal({ tab, onTab, onClose }: { tab: ManageTab | null; on
         options={[
           { value: 'accounts', label: 'Cuentas' },
           { value: 'categories', label: 'Categorías' },
+          { value: 'rules', label: 'Reglas' },
         ]}
       />
-      {tab === 'accounts' ? <AccountsManager /> : <CategoriesManager />}
+      {tab === 'accounts' ? <AccountsManager /> : tab === 'rules' ? <RulesManager /> : <CategoriesManager />}
     </Modal>
   )
 }
@@ -156,6 +159,110 @@ function AccountsManager() {
   )
 }
 
+function BudgetInput({ category }: { category: Category }) {
+  const { update } = useData()
+  const [v, setV] = useState(category.budget ? String(category.budget).replace('.', ',') : '')
+  const value = v.trim() ? parseAmount(v) : null
+  const bad = v.trim() !== '' && value === null
+  return (
+    <span className="relative shrink-0">
+      <input
+        className={cx('field num h-8 w-24 pr-6 text-right text-xs', bad && 'border-rose-500')}
+        inputMode="decimal"
+        aria-label={`Presupuesto mensual de ${categoryLabel(category.name)}`}
+        placeholder="Límite"
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={() => !bad && value !== category.budget && void update('categories', category.id, { budget: value })}
+        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      />
+      <span className="pointer-events-none absolute inset-y-0 right-2 grid place-items-center text-xs text-faint">€</span>
+    </span>
+  )
+}
+
+// --------------------------------------------------------------------- rules
+function RulesManager() {
+  const { data, create, update, remove } = useData()
+  const toast = useToast()
+  const [type, setType] = useState<TxType>('expense')
+  const [pattern, setPattern] = useState('')
+  const [category, setCategory] = useState('')
+  const names = categoryNames(data, type)
+  const list = data.category_rules.filter((r) => r.type === type).sort((a, b) => a.pattern.localeCompare(b.pattern))
+  const p = pattern.trim()
+  const taken = list.some((r) => foldText(r.pattern) === foldText(p))
+  const chosen = names.includes(category) ? category : (names[0] ?? '')
+  const pending = data.transactions.filter((t) => t.category === UNCATEGORIZED).map((t) => ({ t, rule: matchRule(data.category_rules, t.concept, t.type) })).filter((x) => x.rule)
+  const uses = (r: CategoryRule) => data.transactions.filter((t) => t.type === r.type && foldText(t.concept).includes(foldText(r.pattern))).length
+
+  async function add(e: FormEvent) {
+    e.preventDefault()
+    if (p.length < 2 || taken || !chosen) return
+    if (await create('category_rules', { pattern: p, type, category: chosen })) setPattern('')
+  }
+  async function applyPending() {
+    for (const { t, rule } of pending) await update('transactions', t.id, { category: rule!.category })
+    toast('success', `${pending.length} movimientos categorizados`)
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted">Si el concepto contiene el texto, se asigna la categoría. Se aplican a Apple Pay, a la importación del banco y al escribir un movimiento. Si coinciden varias, gana la más larga.</p>
+      <Segmented value={type} onChange={setType} options={TX_TYPES.map((t) => ({ value: t, label: TX_STYLES[t].label }))} />
+      {pending.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
+          <span className="flex-1">{pending.length} movimientos sin categorizar coinciden con tus reglas.</span>
+          <Button size="sm" onClick={() => void applyPending()}>
+            Aplicar
+          </Button>
+        </div>
+      )}
+      <form onSubmit={add} className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_180px_auto] sm:items-end">
+        <Field label="El concepto contiene">
+          <input className={cx('field', taken && 'border-rose-500')} value={pattern} maxLength={120} onChange={(e) => setPattern(e.target.value)} placeholder="p. ej. Ryanair" />
+        </Field>
+        <Field label="Categoría">
+          <select className="field" value={chosen} onChange={(e) => setCategory(e.target.value)}>
+            {names.map((c) => (
+              <option key={c} value={c}>
+                {categoryLabel(c)}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Button type="submit" variant="primary" disabled={p.length < 2 || taken}>
+          <Plus className="size-4" /> Añadir
+        </Button>
+      </form>
+      {list.length === 0 ? (
+        <Empty>Aún no hay reglas de {TX_STYLES[type].label.toLowerCase()}.</Empty>
+      ) : (
+        <ul className="divide-y divide-line rounded-lg border border-line">
+          {list.map((r) => (
+            <li key={r.id} className="flex min-h-12 items-center gap-3 px-3">
+              <span className="min-w-0 flex-1 truncate text-sm">«{r.pattern}»</span>
+              <span className="num text-[11px] text-faint" title="Movimientos que coinciden">
+                {uses(r)}
+              </span>
+              <select className="field h-9 w-40 shrink-0" aria-label={`Categoría de ${r.pattern}`} value={r.category} onChange={(e) => void update('category_rules', r.id, { category: e.target.value })}>
+                {[...new Set([r.category, ...names])].map((c) => (
+                  <option key={c} value={c}>
+                    {categoryLabel(c)}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={() => void remove('category_rules', r.id)} aria-label={`Eliminar la regla ${r.pattern}`} className="grid size-9 place-items-center rounded-lg text-faint hover:text-rose-600">
+                <Trash2 className="size-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- categories
 function CategoriesManager() {
   const { data, create, createMany, update, remove } = useData()
@@ -172,7 +279,7 @@ function CategoriesManager() {
   async function add(e: FormEvent) {
     e.preventDefault()
     if (!n || taken) return
-    if (await create('categories', { name: n, type, color })) {
+    if (await create('categories', { name: n, type, color, budget: null })) {
       toast('success', `Categoría «${categoryLabel(n)}» añadida`)
       setName('')
     }
@@ -214,7 +321,8 @@ function CategoriesManager() {
                   </option>
                 ))}
               </select>
-              <span className="flex-1 truncate text-sm">{categoryLabel(c.name)}</span>
+              <span className="min-w-0 flex-1 truncate text-sm">{categoryLabel(c.name)}</span>
+              {type === 'expense' && c.name !== 'savings_withdrawal' && <BudgetInput category={c} />}
               <span className="font-mono text-[10px] text-faint">{usage(c.name)}</span>
               <button
                 onClick={() => remove('categories', c.id)}
@@ -236,7 +344,7 @@ function CategoriesManager() {
           <Plus className="size-4" /> Añadir categoría
         </Button>
       </form>
-      <p className="text-xs text-muted">Eliminar una categoría no modifica los movimientos anteriores: conservan su categoría.</p>
+      <p className="text-xs text-muted">Eliminar una categoría no modifica los movimientos anteriores: conservan su categoría. El límite es mensual y avisa al 80 % y al 100 %.</p>
     </div>
   )
 }

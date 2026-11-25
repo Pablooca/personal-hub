@@ -5,6 +5,7 @@ import { newTask, TASK_CATEGORY_LABELS } from '../lib/tasks'
 import type { TaskCategory } from '../lib/types'
 import { useData } from '../state/data'
 import { useToast } from '../state/toast'
+import type { ManageTab } from '../views/finance/Manage'
 import { EventModal } from './EventModal'
 import { LogHoursModal } from './LogHoursModal'
 import { Button, Field, Modal, cx } from './ui'
@@ -26,7 +27,7 @@ const KINDS: { id: AddKind; label: string; icon: typeof Plus; cls: string }[] = 
 export function QuickAdd({ onClose }: { onClose: () => void }) {
   const { data } = useData()
   const [kind, setKind] = useState<AddKind | null>(null)
-  const [manage, setManage] = useState<'accounts' | 'categories' | null>(null)
+  const [manage, setManage] = useState<ManageTab | null>(null)
   const today = toDateKey(new Date())
   const goal = data.race_goals.filter((g) => g.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0] ?? data.race_goals[0] ?? null
 
@@ -44,7 +45,7 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
         <Modal open onClose={onClose} title="Nuevo movimiento">
           <QuickEntry bare defaultDate={today} onManage={setManage} onDone={onClose} />
         </Modal>
-        {manage && <ManageModal tab={manage} onTab={(t) => t !== 'rules' && setManage(t)} onClose={() => setManage(null)} />}
+        {manage && <ManageModal tab={manage} onTab={setManage} onClose={() => setManage(null)} />}
       </Suspense>
     )
   if (kind === 'task')

@@ -92,6 +92,34 @@ export interface Category {
   name: string // lower-case; matches transactions.category
   type: TxType
   color: CategoryColor
+  /** Monthly limit for expenses; null = none. */
+  budget: number | null
+  created_at: string
+}
+
+/** "Concepts that contain X are Y". */
+export interface CategoryRule {
+  id: string
+  user_id?: string
+  pattern: string
+  type: TxType
+  category: string
+  created_at: string
+}
+
+/** A subscription or any other charge that repeats. */
+export interface Bill {
+  id: string
+  user_id?: string
+  name: string
+  amount: number
+  category: string
+  account: string
+  period: 'weekly' | 'monthly' | 'bimonthly' | 'quarterly' | 'yearly'
+  anchor_date: string // YYYY-MM-DD, one real charge date
+  /** Days before the charge to warn (0 = no warning). */
+  notify_days: number
+  active: boolean
   created_at: string
 }
 
@@ -418,6 +446,8 @@ export interface Tables {
   run_plan: RunPlanSession
   runs: Run
   run_workouts: RunWorkout
+  category_rules: CategoryRule
+  bills: Bill
 }
 
 export type TableName = keyof Tables

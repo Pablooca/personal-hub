@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, ChevronLeft, ChevronRight, Landmark, PiggyBank, Plus, Scale, Settings2, Star, TrendingDown, TrendingUp } from 'lucide-react'
+import { AlertCircle, ChevronLeft, ChevronRight, FileUp, Landmark, PiggyBank, Plus, Scale, Settings2, Star, TrendingDown, TrendingUp } from 'lucide-react'
 import { PageHeader } from '../../components/Shell'
 import { Button, Card, Empty, Stat, cx } from '../../components/ui'
 import { COLOR_BG, categoryColor, categoryLabel, defaultCategories } from '../../lib/categories'
@@ -11,6 +11,8 @@ import type { CategoryColor, Transaction } from '../../lib/types'
 import { useData } from '../../state/data'
 import { Ledger, needsReview } from './Ledger'
 import { ManageModal, type ManageTab } from './Manage'
+import { BillsCard, BudgetCard, ComparisonCard } from './Extras'
+import { ImportBankModal } from './ImportBank'
 import { QuickEntry, TxModal } from './TxForms'
 
 const FALLBACK: CategoryColor[] = ['rose', 'amber', 'sky', 'violet', 'emerald', 'teal', 'fuchsia', 'orange', 'slate']
@@ -21,6 +23,7 @@ export function FinanceView() {
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [manage, setManage] = useState<ManageTab | null>(null)
+  const [importing, setImporting] = useState(false)
   const [reviewOnly, setReviewOnly] = useState(false)
   const ym = monthKey(month)
   const year = month.getFullYear()
@@ -79,7 +82,10 @@ export function FinanceView() {
         actions={
           <>
             <Button onClick={() => setManage('accounts')}>
-              <Settings2 className="size-4" /> <span className="max-sm:sr-only">Cuentas y categorías</span>
+              <Settings2 className="size-4" /> <span className="max-sm:sr-only">Gestionar</span>
+            </Button>
+            <Button onClick={() => setImporting(true)}>
+              <FileUp className="size-4" /> <span className="max-sm:sr-only">Importar banco</span>
             </Button>
             <div className="flex items-center rounded-lg border border-line bg-surface">
               <Button variant="ghost" size="icon" onClick={() => setMonth((m) => addMonths(m, -1))} aria-label="Mes anterior">
@@ -144,7 +150,7 @@ export function FinanceView() {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <QuickEntry defaultDate={isCurrentMonth ? toDateKey(new Date()) : `${ym}-01`} onManage={setManage} />
 
         {/* ---------------------------------------------------- accounts */}
@@ -223,6 +229,12 @@ export function FinanceView() {
         </Card>
       </div>
 
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <BudgetCard ym={ym} monthTxs={monthTxs} onManage={() => setManage('categories')} />
+        <BillsCard />
+        <ComparisonCard ym={ym} />
+      </div>
+
       {/* ---------------------------------------------------- year trend */}
       <Card className="mt-4" title={`Evolución ${year}`} action={<Legend />}>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_220px]">
@@ -267,6 +279,7 @@ export function FinanceView() {
 
       <Ledger month={month} onEdit={setEditing} reviewOnly={reviewOnly} setReviewOnly={setReviewOnly} />
       {editing && <TxModal key={editing.id} tx={editing} onClose={() => setEditing(null)} onManage={setManage} />}
+      {importing && <ImportBankModal onClose={() => setImporting(false)} />}
       <ManageModal tab={manage} onTab={setManage} onClose={() => setManage(null)} />
     </>
   )

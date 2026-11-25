@@ -168,6 +168,14 @@ export function categorize(merchant: string): string {
   return UNCATEGORIZED
 }
 
+/** The user's own rules (table category_rules) go first; the longest pattern wins. */
+export function matchOwnRule(rules: ReadonlyArray<{ pattern: string; category: string }>, merchant: string): string | null {
+  const squeeze = (s: string) => normaliseText(s).replace(/\s+/g, ' ').trim()
+  const m = squeeze(merchant)
+  const hit = [...rules].filter((r) => squeeze(r.pattern) && m.includes(squeeze(r.pattern))).sort((a, b) => b.pattern.length - a.pattern.length)[0]
+  return hit?.category ?? null
+}
+
 /** Spanish labels for the notification text. */
 const LABELS: Record<string, string> = {
   groceries: 'Supermercado',

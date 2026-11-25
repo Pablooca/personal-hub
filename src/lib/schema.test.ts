@@ -49,6 +49,8 @@ const TABLES: Record<string, string> = {
   run_plan: 'RunPlanSession',
   runs: 'Run',
   run_workouts: 'RunWorkout',
+  category_rules: 'CategoryRule',
+  bills: 'Bill',
 }
 
 for (const [table, iface] of Object.entries(TABLES)) {
