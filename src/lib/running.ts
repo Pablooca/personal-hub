@@ -20,6 +20,12 @@ export function fmtDuration(s: number): string {
   return `${s < 0 ? '−' : ''}${h ? `${h}:${pad(m)}` : m}:${pad(t % 60)}`
 }
 export const fmtPace = (secPerKm: number) => `${Math.floor(Math.round(secPerKm) / 60)}:${pad(Math.round(secPerKm) % 60)}`
+/** Pace difference: under a minute in seconds, otherwise minutes and seconds. 45 → "45 s" · 136 → "2 min 16 s" */
+export function fmtGap(seconds: number): string {
+  const t = Math.round(Math.abs(seconds))
+  if (t < 60) return `${t} s`
+  return t % 60 ? `${Math.floor(t / 60)} min ${t % 60} s` : `${t / 60} min`
+}
 /** One decimal, except the official half and full marathon distances. */
 export const fmtKm = (km: number) => km.toLocaleString('es-ES', { maximumFractionDigits: [21.097, 42.195].some((d) => Math.abs(d - km) < 0.0005) ? 3 : 1 })
 
@@ -387,7 +393,7 @@ export function evaluate(goal: RaceGoal, planAll: RunPlanSession[], runsAll: Run
   const slow = lastKeys.filter((k) => (k.paceDeviation ?? 0) > PACE_TOLERANCE)
   if (slow.length >= 2) {
     const avg = slow.reduce((a, k) => a + (k.paceDeviation ?? 0) * k.session.pace_s!, 0) / slow.length
-    alerts.push({ level: 'bad', text: `${slow.length} de tus últimas ${lastKeys.length} sesiones clave fueron más lentas de lo previsto (≈ ${Math.round(avg)} s/km).` })
+    alerts.push({ level: 'bad', text: `${slow.length} de tus últimas ${lastKeys.length} sesiones clave fueron más lentas de lo previsto (≈ ${fmtGap(avg)} por km).` })
   }
   const fast = lastKeys.filter((k) => k.session.type === 'long' && (k.paceDeviation ?? 0) < -0.06)
   if (fast.length) alerts.push({ level: 'warn', text: 'Alguna tirada larga ha ido bastante más rápida de lo planificado: guarda esa intensidad para las sesiones de calidad.' })

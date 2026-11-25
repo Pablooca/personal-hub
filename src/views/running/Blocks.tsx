@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, BookmarkPlus, Plus, Trash2, Type, X } from 'lucide-react'
 import { Button, Check, cx } from '../../components/ui'
-import { fmtDuration, fmtKm, fmtPace } from '../../lib/running'
+import { fmtDuration, fmtGap, fmtKm, fmtPace } from '../../lib/running'
 import {
   BLOCK_LABELS, MAIN_KINDS, SECTIONS, SECTION_LABELS, blockPace, blockTime, clock, core, estimate, fmtAmount, fmtSeconds, formatBlock, formatWorkout, newBlock, parseAmount, parseRecovery,
   parseTarget, parseWorkout, ensureSections, repsDone, sectionOf, splitPace, type Section,
@@ -445,7 +445,7 @@ function Splits({ block: b, onChange }: { block: RunBlock; onChange: (s: (number
                 placeholder={target ? clock(target) : perRep ? (several ? 'm:ss' : 'h:mm:ss o mm:ss') : 'min/km'}
                 onChange={(e) => commit(text.map((x, j) => (j === i ? e.target.value : x)))}
               />
-              {off !== null && several && <span className={cx('mt-0.5 block text-center font-mono text-[10px]', off > 0.04 ? 'text-amber-800 dark:text-amber-300' : 'text-faint')}>{off === 0 ? '=' : `${off > 0 ? '+' : '−'}${Math.abs(Math.round(splitPace(b, v!) - goal!))} s/km`}</span>}
+              {off !== null && several && <span className={cx('mt-0.5 block text-center font-mono text-[10px]', off > 0.04 ? 'text-amber-800 dark:text-amber-300' : 'text-faint')}>{off === 0 ? '=' : `${off > 0 ? '+' : '−'}${fmtGap(splitPace(b, v!) - goal!)}/km`}</span>}
             </label>
           )
         })}

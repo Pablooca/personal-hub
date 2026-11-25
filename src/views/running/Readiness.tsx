@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, CircleDashed, OctagonAlert, XCircle } from
 import { Card, Empty, cx } from '../../components/ui'
 import { fromDateKey } from '../../lib/dates'
 import { fmtDate } from '../../lib/format'
-import { LIGHT_LABELS, RUN_TYPE_SHORT, fmtDuration, fmtKm, fmtPace, goalPace, type Light, type Readiness as R, type WeekVolume } from '../../lib/running'
+import { LIGHT_LABELS, RUN_TYPE_SHORT, fmtDuration, fmtGap, fmtKm, fmtPace, goalPace, type Light, type Readiness as R, type WeekVolume } from '../../lib/running'
 import type { RaceGoal } from '../../lib/types'
 
 const LIGHT: Record<Light, { icon: typeof CheckCircle2; cls: string; dot: string; text: string }> = {
@@ -21,8 +21,8 @@ function verdict(goal: RaceGoal, r: R): string {
   const p = r.projection
   const pace = p
     ? p.gap <= 0
-      ? `Tu proyección (${fmtDuration(p.time)}) ya está por debajo del objetivo: te sobran ${Math.round(-p.gap)} s por km.`
-      : `Tu proyección es ${fmtDuration(p.time)}: te faltan ${Math.max(1, Math.round(p.gap))} s por km para rodar a ${fmtPace(goalPace(goal))}.`
+      ? `Tu proyección (${fmtDuration(p.time)}) ya está por debajo del objetivo: te sobran ${fmtGap(p.gap)} por km.`
+      : `Tu proyección es ${fmtDuration(p.time)}: te faltan ${fmtGap(Math.max(1, p.gap))} por km para rodar a ${fmtPace(goalPace(goal))}.`
     : 'Aún no hay un esfuerzo continuo reciente para proyectar tu marca.'
   const adh = r.adherence.pct !== null ? ` Llevas el ${pct(r.adherence.pct)} de las sesiones y el ${pct(r.adherence.kmPct)} de los kilómetros.` : ''
   return pace + adh
@@ -91,8 +91,8 @@ export function Readiness({ goal, r }: { goal: RaceGoal; r: R }) {
                 {Math.abs(r.projection.gap) < 0.5
                   ? 'Clavado en tu ritmo objetivo.'
                   : r.projection.gap < 0
-                    ? `Vas ${Math.round(-r.projection.gap)} s/km más rápido que el objetivo.`
-                    : `Tienes que bajar ${Math.round(r.projection.gap)} s/km para llegar al objetivo.`}
+                    ? `Vas ${fmtGap(r.projection.gap)} por km más rápido que el objetivo.`
+                    : `Tienes que bajar ${fmtGap(r.projection.gap)} por km para llegar al objetivo.`}
               </p>
               <dl className="mt-4 space-y-2 border-t border-line pt-3 text-sm">
                 <Line label="Ritmo proyectado" value={`${fmtPace(r.projection.pace)} /km`} />
@@ -131,7 +131,7 @@ export function Readiness({ goal, r }: { goal: RaceGoal; r: R }) {
                     </span>
                     <span className="num text-xs text-muted">
                       {k.reps && k.run ? `${k.reps.done}/${k.reps.max > k.reps.min ? `${k.reps.min}–${k.reps.max}` : k.reps.min} · ` : ''}
-                      {!k.run ? 'no hecha' : k.paceDeviation === null ? `${Math.round(k.distancePct ?? 0)} %` : `${k.paceDeviation > 0 ? '+' : '−'}${Math.abs(Math.round(k.paceDeviation * k.session.pace_s!))} s/km`}
+                      {!k.run ? 'no hecha' : k.paceDeviation === null ? `${Math.round(k.distancePct ?? 0)} %` : `${k.paceDeviation > 0 ? '+' : '−'}${fmtGap(k.paceDeviation * k.session.pace_s!)}/km`}
                     </span>
                   </li>
                 ))}

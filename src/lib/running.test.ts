@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { evaluate, fmtDuration, fmtKm, fmtPace, goalPace, matchRuns, parseDate, parseDuration, parsePace, parsePlan, parseRunType, planToCsv, project, riegel, weekOf } from './running.ts'
+import { evaluate, fmtDuration, fmtGap, fmtKm, fmtPace, goalPace, matchRuns, parseDate, parseDuration, parsePace, parsePlan, parseRunType, planToCsv, project, riegel, weekOf } from './running.ts'
 import type { RaceGoal, Run, RunPlanSession, RunType } from './types.ts'
 
 const goal: RaceGoal = { id: 'g', name: 'Media', date: '2027-01-31', distance_km: 21.097, previous_best_s: null, target_s: 5700, notes: '', created_at: '2026-11-01T00:00:00Z' }
@@ -20,6 +20,7 @@ test('durations and paces', () => {
   assert.equal(parsePace('5,5'), 330)
   assert.equal(parsePace('0:30'), null)
   assert.equal(fmtDuration(5700), '1:35:00')
+  assert.deepEqual([1, 45, 59.4, 59.6, 60, 136, -136, 120].map(fmtGap), ['1 s', '45 s', '59 s', '1 min', '1 min', '2 min 16 s', '2 min 16 s', '2 min'])
   assert.equal(fmtPace(299.6), '5:00')
   assert.deepEqual([fmtKm(40.75), fmtKm(21.097), fmtKm(38.716), fmtKm(8)], ['40,8', '21,097', '38,7', '8'])
   assert.equal(fmtPace(goalPace(goal)), '4:30')
