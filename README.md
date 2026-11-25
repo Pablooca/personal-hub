@@ -219,6 +219,7 @@ curl -X POST "https://<project-ref>.supabase.co/functions/v1/apple-pay-webhook" 
   | Entreno de mañana con su estructura | 21:00 | `WORKOUT_AT` |
   | Resumen semanal | domingo 20:00 | `WEEKLY_AT` |
   | Cobro de un recibo (según sus días de aviso) | 10:00 | `BILLS_AT` |
+  | Precios de la colección desde la guía diaria de Cardmarket (sin mensaje) | 9:00 | `PRICES_AT` |
   | Presupuesto al 80 % y al 100 % | al momento | `BUDGET_ALERTS` |
 
 - **Escribir al bot** (función `telegram-bot`, solo responde a tu chat): `gasto 12,50 café`, `ingreso 30 bizum`, `tarea llamar al banco mañana`, `evento viernes 18:00 dentista`, `horas 8 PLAT-142 revisión`, `hoy`, `mañana`, `semana`, `mes`, `deshacer`, `ayuda`.

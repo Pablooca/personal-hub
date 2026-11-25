@@ -21,7 +21,9 @@
  * in _shared/daily.ts. SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected.
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { localNow, parseAt } from '../_shared/brief.ts'
 import { runDaily } from '../_shared/daily.ts'
+import { isPriceTime } from '../_shared/prices.ts'
 import { DELIVERY_SLOTS, EXAM_SLOTS, deadlineMessage, eventEndMessage, eventStartMessage, escapeHtml, examMessage, parseSlots, reminderSlot, sendTelegram } from '../_shared/telegram.ts'
 
 const json = (status: number, body: Record<string, unknown>) =>
@@ -153,6 +155,15 @@ Deno.serve(async (req) => {
 
     const owner = Deno.env.get('OWNER_USER_ID')
     if (owner) sent += await runDaily(db, owner, timeZone, (k) => Deno.env.get(k), (text) => sendTelegram(token, chatId, text), now)
+
+    // Daily Cardmarket prices, in their own function: the guide is a 16 MB file.
+    if (owner && isPriceTime(parseAt(Deno.env.get('PRICES_AT'), '09:00'), localNow(now, timeZone).minutes))
+      try {
+        const r = await fetch(`${url}/functions/v1/card-prices`, { method: 'POST', headers: { Authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(90_000) })
+        console.log('card-prices:', r.status, (await r.text()).slice(0, 200))
+      } catch (e) {
+        console.error('card-prices: not reachable', e)
+      }
     return json(200, { ok: true, sent })
   } catch (err) {
     console.error('telegram-notify: error', err)

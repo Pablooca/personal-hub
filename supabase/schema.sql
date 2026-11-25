@@ -966,6 +966,25 @@ create table if not exists public.bot_actions (
 alter table public.bot_actions enable row level security;  -- no policies: server-only
 create index if not exists bot_actions_user_idx on public.bot_actions (user_id, id desc);
 
+-- Reference prices from the Cardmarket guide (Edge Function card-prices): one statement for the whole collection.
+create or replace function public.set_card_prices(p_user uuid, p_date date, p_rows jsonb)
+returns integer
+language sql
+security invoker
+set search_path = public
+as $$
+  with done as (
+    update public.owned_cards c
+       set ref_low = r.low, ref_trend = r.trend, ref_date = p_date
+      from jsonb_to_recordset(p_rows) as r(product integer, finish text, low numeric, trend numeric)
+     where c.user_id = p_user and c.cm_product = r.product and c.finish = r.finish
+    returning 1
+  )
+  select count(*)::integer from done;
+$$;
+revoke all on function public.set_card_prices(uuid, date, jsonb) from public, anon, authenticated;
+grant execute on function public.set_card_prices(uuid, date, jsonb) to service_role;
+
 create index if not exists notification_log_sent_idx on public.notification_log (sent_at);
 
 -- Fire-and-forget POST to the notifier. SECURITY DEFINER so cron jobs can read Vault.

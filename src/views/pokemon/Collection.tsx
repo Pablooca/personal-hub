@@ -135,6 +135,8 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
       })
   }, [data.owned_cards, q, lang, setCode, filter, sort, alloc, day])
   const snaps = data.collection_snapshots.filter((s) => s.total > 0).sort((a, b) => a.date.localeCompare(b.date))
+  /** The oldest one: what is shown is at least this recent. */
+  const refDate = data.owned_cards.reduce<string | null>((a, c) => (c.ref_date && (!a || c.ref_date < a) ? c.ref_date : a), null)
   const inDecks = [...alloc.usedIn.values()].flat().reduce((a, u) => a + u.n, 0)
 
   return (
@@ -176,6 +178,11 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
             <Stat label="En venta" value={fmtMoney(t.forSale)} hint={`${data.owned_cards.filter((c) => c.for_sale).reduce((a, c) => a + c.quantity, 0)} cartas`} />
             <Stat label="Coste" value={t.paid ? fmtMoney(t.paid) : '—'} hint={t.paid ? `${total >= t.paid ? '+' : '−'}${fmtMoney(Math.abs(total - t.paid))} sobre lo pagado` : 'sin precio de compra'} />
           </div>
+          {refDate && (
+            <p className="mt-2 text-xs text-muted">
+              Precios de referencia de Cardmarket: {refDate === day ? 'actualizados hoy' : `actualizados el ${fmtDate(fromDateKey(refDate), { day: 'numeric', month: 'short' })}`}. Se renuevan solos cada día a las 9:00.
+            </p>
+          )}
           {snaps.length > 1 && (
             <Card className="mt-3" title="Valor de la colección">
               <LineChart label="Valor de la colección" height={120} points={snaps.map((s) => ({ x: fromDateKey(s.date).getTime(), y: s.total, label: fmtDate(fromDateKey(s.date), { day: 'numeric', month: 'short' }), detail: `${s.cards} cartas` }))} format={fmtMoneyShort} />
