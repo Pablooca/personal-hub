@@ -30,6 +30,18 @@ export const isReverse = (code: string) => FINISHES.find((f) => f[0] === code)?.
 
 export const GRADERS = ['PSA', 'BGS', 'CGC', 'PCA', 'GRAAD', 'Otra'] as const
 
+/** Kinds of card to filter by. */
+export const CARD_KINDS = [
+  ['pokemon', 'Pokémon'], ['supporter', 'Partidario'], ['stadium', 'Estadio'], ['item', 'Objeto'], ['tool', 'Herramienta'], ['energy', 'Energía'],
+] as const
+export type CardKind = (typeof CARD_KINDS)[number][0]
+/** Kind of trainer as TCGdex writes it. The old ones without one ("Trainer" alone, technical machines) are items. */
+export function trainerSubtype(type: string | undefined): Exclude<OwnedCard['subtype'], ''> {
+  const t = (type ?? '').toLowerCase()
+  return t === 'supporter' || t === 'stadium' || t === 'tool' ? t : 'item'
+}
+export const kindOf = (c: Pick<OwnedCard, 'category' | 'subtype'>): CardKind | null => (c.category === 'trainer' ? c.subtype || null : c.category)
+
 // -------------------------------------------------------------------- prints
 /** What we keep about a print (from TCGdex, English). */
 export interface Print {

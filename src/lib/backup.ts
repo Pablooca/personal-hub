@@ -25,7 +25,7 @@ export const TABLE_FIELDS: { [K in TableName]: readonly string[] } = {
   matchup_notes: ['id', 'deck_id', 'archetype', 'name', 'icons', 'notes', 'created_at'],
   owned_cards: [
     'id', 'tcgdex_id', 'set_code', 'set_name', 'number', 'name', 'name_en', 'category', 'signature', 'rarity', 'image', 'language', 'condition', 'finish', 'first_edition', 'signed', 'altered',
-    'grade_company', 'grade', 'quantity', 'location', 'for_sale', 'paid', 'acquired_at', 'cm_product', 'ref_low', 'ref_trend', 'ref_date', 'own_price', 'own_price_date', 'standard', 'standard_date', 'notes', 'created_at',
+    'grade_company', 'grade', 'quantity', 'location', 'for_sale', 'paid', 'acquired_at', 'cm_product', 'ref_low', 'ref_trend', 'ref_date', 'own_price', 'own_price_date', 'standard', 'standard_date', 'subtype', 'notes', 'created_at',
   ],
   collection_snapshots: ['id', 'date', 'total', 'cards', 'created_at'],
   vgc_teams: ['id', 'name', 'regulation', 'paste', 'notes', 'created_at'],
@@ -36,6 +36,10 @@ export const TABLE_FIELDS: { [K in TableName]: readonly string[] } = {
   tournament_rounds: [
     'id', 'tournament_id', 'phase', 'number', 'result', 'games', 'won_dice', 'went_first', 'opponent_name', 'opponent_archetype',
     'opponent_icons', 'opponent_deck_name', 'opponent_pokemon', 'opponent_record', 'my_pokemon', 'notes', 'created_at',
+  ],
+  pokemon_matches: [
+    'id', 'game', 'date', 'format', 'result', 'games', 'won_dice', 'went_first', 'deck_id', 'team_id', 'venue', 'opponent_name', 'opponent_archetype', 'opponent_icons', 'opponent_deck_name',
+    'opponent_pokemon', 'my_pokemon', 'teams', 'replays', 'notes', 'created_at',
   ],
   shoes: ['id', 'name', 'start_km', 'limit_km', 'retired', 'is_default', 'created_at'],
   race_goals: ['id', 'name', 'date', 'distance_km', 'previous_best_s', 'target_s', 'notes', 'created_at'],
@@ -51,7 +55,7 @@ export const BACKUP_TABLES = Object.keys(TABLE_FIELDS) as TableName[]
 
 export const BACKUP_SCOPES: { id: string; label: string; tables: TableName[] }[] = [
   { id: 'all', label: 'Todo', tables: BACKUP_TABLES },
-  { id: 'pokemon', label: 'Solo Pokémon', tables: ['tcg_decks', 'vgc_teams', 'deck_versions', 'matchup_notes', 'owned_cards', 'collection_snapshots', 'tournaments', 'tournament_rounds'] },
+  { id: 'pokemon', label: 'Solo Pokémon', tables: ['tcg_decks', 'vgc_teams', 'deck_versions', 'matchup_notes', 'owned_cards', 'collection_snapshots', 'tournaments', 'tournament_rounds', 'pokemon_matches'] },
   { id: 'running', label: 'Solo Running', tables: ['shoes', 'race_goals', 'run_plan', 'runs', 'run_workouts'] },
 ]
 
@@ -75,6 +79,7 @@ export const TABLE_LABELS: Record<TableName, string> = {
   vgc_teams: 'Equipos VGC',
   tournaments: 'Torneos',
   tournament_rounds: 'Rondas',
+  pokemon_matches: 'Partidas sueltas',
   shoes: 'Zapatillas',
   race_goals: 'Carreras objetivo',
   run_plan: 'Sesiones planificadas',

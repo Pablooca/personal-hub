@@ -49,6 +49,7 @@ const TABLES: Record<string, string> = {
   vgc_teams: 'VgcTeam',
   tournaments: 'Tournament',
   tournament_rounds: 'TournamentRound',
+  pokemon_matches: 'PokemonMatch',
   shoes: 'Shoe',
   race_goals: 'RaceGoal',
   run_plan: 'RunPlanSession',

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { BarChart3, Calculator as CalcIcon, Layers, Library, Trophy, Users } from 'lucide-react'
+import { BarChart3, Calculator as CalcIcon, Layers, Library, Swords, Trophy, Users } from 'lucide-react'
 import { PageHeader } from '../../components/Shell'
 import { cx } from '../../components/ui'
 import type { Target } from '../../lib/agenda'
@@ -8,6 +8,7 @@ import { useFocusTarget } from '../../state/nav'
 import { Calculator, type CalcSeed } from './Calculator'
 import { Collection } from './Collection'
 import { Decks } from './Decks'
+import { Matches } from './Matches'
 import { StatsPanel } from './StatsPanel'
 import { Teams } from './Teams'
 import { Tournaments } from './Tournaments'
@@ -15,7 +16,7 @@ import { META, loadChampions } from './data'
 
 /** TCG and VGC are two separate worlds; only the calculator is shared. */
 type Area = 'tcg' | 'vgc' | 'calculator'
-type Tab = 'tournaments' | 'library' | 'collection' | 'stats'
+type Tab = 'tournaments' | 'matches' | 'library' | 'collection' | 'stats'
 
 const AREAS: { id: Area; label: string }[] = [
   { id: 'tcg', label: 'TCG' },
@@ -33,7 +34,7 @@ function initial(): { area: Area; tab: Tab } {
     if (tab === 'calculator') return { area: 'calculator', tab: 'tournaments' }
     if (tab === 'decks') return { area: 'tcg', tab: 'library' }
     if (tab === 'teams') return { area: 'vgc', tab: 'library' }
-    return { area: AREAS.some((a) => a.id === area) ? area! : 'tcg', tab: tab === 'library' || tab === 'stats' || tab === 'collection' ? tab : 'tournaments' }
+    return { area: AREAS.some((a) => a.id === area) ? area! : 'tcg', tab: tab === 'library' || tab === 'matches' || tab === 'stats' || tab === 'collection' ? tab : 'tournaments' }
   } catch {
     return { area: 'tcg', tab: 'tournaments' }
   }
@@ -72,15 +73,16 @@ export function PokemonView() {
   // Opened from search, the calendar or the overview.
   const { data } = useData()
   const [target, setTarget] = useState<Target | null>(null)
-  useFocusTarget(['tournament', 'deck', 'team', 'card'], (t) => {
-    const game: Area = t.kind === 'team' || (t.kind === 'tournament' && data.tournaments.find((x) => x.id === t.id)?.game === 'vgc') ? 'vgc' : 'tcg'
-    go({ area: game, tab: t.kind === 'tournament' ? 'tournaments' : t.kind === 'card' ? 'collection' : 'library' })
+  useFocusTarget(['tournament', 'deck', 'team', 'card', 'match'], (t) => {
+    const game: Area = t.kind === 'team' || (t.kind === 'tournament' && data.tournaments.find((x) => x.id === t.id)?.game === 'vgc') || (t.kind === 'match' && data.pokemon_matches.find((x) => x.id === t.id)?.game === 'vgc') ? 'vgc' : 'tcg'
+    go({ area: game, tab: t.kind === 'tournament' ? 'tournaments' : t.kind === 'match' ? 'matches' : t.kind === 'card' ? 'collection' : 'library' })
     setTarget(t)
   })
 
   const game = area === 'calculator' ? null : area
   const tabs: { id: Tab; label: string; icon: typeof Trophy }[] = [
     { id: 'tournaments', label: 'Torneos', icon: Trophy },
+    { id: 'matches', label: 'Partidas', icon: Swords },
     area === 'vgc' ? { id: 'library', label: 'Equipos', icon: Users } : { id: 'library', label: 'Mazos', icon: Layers },
     ...(area === 'tcg' ? [{ id: 'collection' as const, label: 'Colección', icon: Library }] : []),
     { id: 'stats', label: 'Estadísticas', icon: BarChart3 },
@@ -132,6 +134,7 @@ export function PokemonView() {
           </div>
           <div id="pk-panel" role="tabpanel" aria-labelledby={`pk-tab-${tab}`}>
             {tab === 'tournaments' && <Tournaments key={`${game}-${target?.kind === 'tournament' ? target.id : ''}`} game={game} initialId={target?.kind === 'tournament' ? target.id : null} onCalculator={openCalculator} />}
+            {tab === 'matches' && <Matches key={`${game}-${target?.kind === 'match' ? target.id : ''}`} game={game} initialId={target?.kind === 'match' ? target.id : null} />}
             {tab === 'library' && (game === 'tcg' ? <Decks key={target?.id} initialId={target?.kind === 'deck' ? target.id : null} /> : <Teams key={target?.id} initialId={target?.kind === 'team' ? target.id : null} />)}
             {tab === 'collection' && game === 'tcg' && <Collection key={target?.id} initialId={target?.kind === 'card' ? target.id : null} />}
             {tab === 'stats' && <StatsPanel key={game} game={game} />}

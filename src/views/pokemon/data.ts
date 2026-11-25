@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { toId } from '../../lib/pokemon/replay'
 import { slugify, type Species, type SpeciesRow } from '../../lib/pokemon/sprites'
 import type { LegalData } from '../../lib/pokemon/team'
 import metaRaw from '../../data/pokemon/tcg-meta.json?raw'
@@ -38,6 +39,8 @@ export interface Champions extends LegalData {
   itemList: string[]
   moveList: string[]
   get(species: string): ChampionsMon | null
+  /** Display names of items, moves and abilities by Showdown id. */
+  names: ReadonlyMap<string, string>
   /** Mega forme unlocked by this item, if any. */
   mega(species: string, item: string): string | null
 }
@@ -70,6 +73,7 @@ export function loadChampions(): Promise<Champions> {
         itemList: d.items,
         items: new Set(d.items),
         moveList: [...d.moves].sort(),
+        names: new Map([...d.items, ...d.moves, ...Object.values(d.mons).flatMap((m) => m.a)].map((n) => [toId(n), n])),
         get,
         mon: (s: string) => {
           const m = get(s)

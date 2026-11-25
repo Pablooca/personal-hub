@@ -747,6 +747,8 @@ create index if not exists owned_cards_user_idx on public.owned_cards (user_id, 
 -- Upgrade path: legal in the current Standard format (null = not checked yet).
 alter table public.owned_cards add column if not exists standard boolean;
 alter table public.owned_cards add column if not exists standard_date date;
+-- Upgrade path: kind of trainer card ('' = not a trainer, or not known yet).
+alter table public.owned_cards add column if not exists subtype text not null default '' check (subtype in ('', 'supporter', 'stadium', 'item', 'tool'));
 
 create table if not exists public.collection_snapshots (
   id          uuid primary key default gen_random_uuid(),
@@ -757,6 +759,35 @@ create table if not exists public.collection_snapshots (
   created_at  timestamptz not null default now(),
   constraint collection_snapshots_day unique (user_id, date)
 );
+
+-- Single games (BO1) and sets (BO3) outside tournaments. VGC ones may come from Showdown replays.
+create table if not exists public.pokemon_matches (
+  id                  uuid primary key default gen_random_uuid(),
+  user_id             uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  game                text not null check (game in ('tcg', 'vgc')),
+  date                date not null,
+  format              text not null check (format in ('bo1', 'bo3')),
+  result              text not null check (result in ('win', 'loss', 'tie')),
+  games               jsonb not null default '[]'::jsonb check (jsonb_typeof(games) = 'array'),
+  won_dice            boolean,
+  went_first          boolean,
+  deck_id             uuid references public.tcg_decks (id) on delete set null,
+  team_id             uuid references public.vgc_teams (id) on delete set null,
+  venue               text not null default '' check (char_length(venue) <= 80),
+  opponent_name       text not null default '' check (char_length(opponent_name) <= 120),
+  opponent_archetype  text not null default '' check (char_length(opponent_archetype) <= 120),
+  opponent_icons      jsonb not null default '[]'::jsonb check (jsonb_typeof(opponent_icons) = 'array'),
+  opponent_deck_name  text not null default '' check (char_length(opponent_deck_name) <= 120),
+  opponent_pokemon    jsonb not null default '[]'::jsonb check (jsonb_typeof(opponent_pokemon) = 'array'),
+  my_pokemon          jsonb not null default '[]'::jsonb check (jsonb_typeof(my_pokemon) = 'array'),
+  teams               jsonb check (teams is null or jsonb_typeof(teams) = 'object'),
+  replays             jsonb not null default '[]'::jsonb check (jsonb_typeof(replays) = 'array'),
+  notes               text not null default '' check (char_length(notes) <= 5000),
+  created_at          timestamptz not null default now()
+);
+create index if not exists pokemon_matches_user_idx on public.pokemon_matches (user_id, game, date desc);
+create index if not exists pokemon_matches_deck_idx on public.pokemon_matches (deck_id);
+create index if not exists pokemon_matches_team_idx on public.pokemon_matches (team_id);
 
 create index if not exists tcg_decks_user_idx on public.tcg_decks (user_id);
 create index if not exists vgc_teams_user_idx on public.vgc_teams (user_id);
@@ -852,6 +883,7 @@ alter table public.matchup_notes     enable row level security;
 alter table public.owned_cards       enable row level security;
 alter table public.collection_snapshots enable row level security;
 alter table public.tournament_rounds enable row level security;
+alter table public.pokemon_matches   enable row level security;
 alter table public.race_goals        enable row level security;
 alter table public.run_plan          enable row level security;
 alter table public.runs              enable row level security;
@@ -877,6 +909,8 @@ begin
       ('tournaments',       '(deck_id is null or exists (select 1 from public.tcg_decks d where d.id = deck_id and d.user_id = (select auth.uid())))'
                             ' and (team_id is null or exists (select 1 from public.vgc_teams v where v.id = team_id and v.user_id = (select auth.uid())))'),
       ('tournament_rounds', 'exists (select 1 from public.tournaments p where p.id = tournament_id and p.user_id = (select auth.uid()))'),
+      ('pokemon_matches',   '(deck_id is null or exists (select 1 from public.tcg_decks d where d.id = deck_id and d.user_id = (select auth.uid())))'
+                            ' and (team_id is null or exists (select 1 from public.vgc_teams v where v.id = team_id and v.user_id = (select auth.uid())))'),
       ('race_goals',        'true'),
       ('run_workouts',      'true'),
       ('shoes',             'true'),
@@ -909,7 +943,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'race_goals', 'run_plan', 'runs', 'run_workouts', 'category_rules', 'bills', 'shoes', 'deck_versions', 'matchup_notes', 'owned_cards', 'collection_snapshots'] loop
+  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'pokemon_matches', 'race_goals', 'run_plan', 'runs', 'run_workouts', 'category_rules', 'bills', 'shoes', 'deck_versions', 'matchup_notes', 'owned_cards', 'collection_snapshots'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

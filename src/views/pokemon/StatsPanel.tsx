@@ -9,7 +9,19 @@ import { natureLabel, parseTeam } from '../../lib/pokemon/team'
 import type { PokemonGame } from '../../lib/types'
 import { useData } from '../../state/data'
 import { ARCHETYPE } from './data'
+import { ReplayStatsSection } from './ReplayReport'
 import { DeckIcons, SpeciesSprite, WinBar, fmtRate, heat } from './parts'
+
+type Source = 'all' | 'tournament' | 'match'
+const SOURCE_KEY = 'ph-pokemon-stats-source'
+function readSource(): Source {
+  try {
+    const v = localStorage.getItem(SOURCE_KEY)
+    return v === 'tournament' || v === 'match' ? v : 'all'
+  } catch {
+    return 'all'
+  }
+}
 
 type Period = 'all' | 'year' | '90'
 const inPeriod = (date: string, p: Period) => {
@@ -20,18 +32,32 @@ const inPeriod = (date: string, p: Period) => {
   return new Date(`${date}T12:00:00`) >= from
 }
 
-const Kpi = ({ label, t, icon }: { label: string; t: Tally; icon?: ReactNode }) => <Stat label={label} value={fmtRate(winRate(t))} hint={played(t) ? `${recordText(t)} · ${played(t)} rondas` : 'Sin datos'} icon={icon} />
+const Kpi = ({ label, t, icon }: { label: string; t: Tally; icon?: ReactNode }) => <Stat label={label} value={fmtRate(winRate(t))} hint={played(t) ? `${recordText(t)} · ${played(t)} ${played(t) === 1 ? 'enfrentamiento' : 'enfrentamientos'}` : 'Sin datos'} icon={icon} />
 
 export function StatsPanel({ game }: { game: PokemonGame }) {
   const { data } = useData()
   const [period, setPeriod] = useState<Period>('all')
-  const all = useMemo(() => matchesOf(data.tournaments, data.tournament_rounds).filter((m) => m.t.game === game), [data.tournaments, data.tournament_rounds, game])
-  const ms = useMemo(() => all.filter((m) => inPeriod(m.t.date, period)), [all, period])
+  const [source, setSourceState] = useState<Source>(readSource)
+  const setSource = (v: Source) => {
+    setSourceState(v)
+    try {
+      localStorage.setItem(SOURCE_KEY, v)
+    } catch {
+      /* ignore */
+    }
+  }
+  const all = useMemo(() => matchesOf(data.tournaments, data.tournament_rounds, data.pokemon_matches).filter((m) => m.t.game === game), [data.tournaments, data.tournament_rounds, data.pokemon_matches, game])
+  const both = all.some((m) => m.source === 'match') && all.some((m) => m.source === 'tournament')
+  const ms = useMemo(() => all.filter((m) => inPeriod(m.t.date, period) && (!both || source === 'all' || m.source === source)), [all, period, source, both])
+  const replayed = useMemo(() => {
+    const ids = new Set(ms.filter((m) => m.source === 'match').map((m) => m.t.id))
+    return data.pokemon_matches.filter((m) => ids.has(m.id) && m.replays.length > 0)
+  }, [ms, data.pokemon_matches])
 
   if (!all.length)
     return (
       <Empty icon={<BarChart3 className="size-6 text-faint" />}>
-        <p>Las estadísticas aparecerán cuando registres rondas en tus torneos de {game.toUpperCase()}.</p>
+        <p>Las estadísticas aparecerán cuando registres rondas de torneo o partidas de {game.toUpperCase()}.</p>
       </Empty>
     )
 
@@ -39,13 +65,15 @@ export function StatsPanel({ game }: { game: PokemonGame }) {
     <div className="space-y-6">
       <div className="flex flex-wrap gap-3">
         <Segmented value={period} onChange={setPeriod} options={[{ value: 'all', label: 'Siempre' }, { value: 'year', label: 'Este año' }, { value: '90', label: '90 días' }]} />
+        {both && <Segmented value={source} onChange={setSource} options={[{ value: 'all', label: 'Todo' }, { value: 'tournament', label: 'Torneos' }, { value: 'match', label: 'Partidas sueltas' }]} />}
       </div>
       {!ms.length ? (
-        <Empty>No hay rondas con estos filtros.</Empty>
+        <Empty>No hay nada con estos filtros.</Empty>
       ) : (
         <>
           <Global ms={ms} game={game} />
           {game === 'tcg' ? <TcgStats ms={ms} /> : <VgcStats ms={ms} />}
+          {replayed.length > 0 && <ReplayStatsSection matches={replayed} />}
         </>
       )}
     </div>
@@ -63,7 +91,7 @@ function Global({ ms, game }: { ms: Match[]; game: PokemonGame }) {
         <Kpi label="Winrate" t={tally(ms)} />
         <Kpi label="BO1" t={by((m) => m.format === 'bo1')} />
         <Kpi label="BO3" t={by((m) => m.format === 'bo3')} />
-        <Stat label="Torneos" value={new Set(ms.map((m) => m.t.id)).size} hint={`${new Set(ms.filter((m) => m.t.made_top_cut).map((m) => m.t.id)).size} con Top Cut`} />
+        <Stat label="Torneos" value={new Set(ms.filter((m) => m.source === 'tournament').map((m) => m.t.id)).size} hint={`${new Set(ms.filter((m) => m.t.made_top_cut).map((m) => m.t.id)).size} con Top Cut`} />
       </div>
       <div className={cx('mt-3 grid grid-cols-1 gap-3', game === 'tcg' && 'lg:grid-cols-2')}>
         <Card title="Fase y formato">
@@ -72,8 +100,15 @@ function Global({ ms, game }: { ms: Match[]; game: PokemonGame }) {
           <WinBar label="Top Cut · BO1" tally={by((m) => m.r.phase === 'top_cut' && m.format === 'bo1')} />
           <WinBar label="Top Cut · BO3" tally={by((m) => m.r.phase === 'top_cut' && m.format === 'bo3')} />
           <div className="my-2 border-t border-line" />
-          <WinBar label="Presencial" tally={by((m) => m.t.mode === 'in_person')} />
-          <WinBar label="Online" tally={by((m) => m.t.mode === 'online')} />
+          {ms.some((m) => m.source === 'match') && (
+            <>
+              <WinBar label="Partidas sueltas · BO1" tally={by((m) => m.source === 'match' && m.format === 'bo1')} />
+              <WinBar label="Partidas sueltas · BO3" tally={by((m) => m.source === 'match' && m.format === 'bo3')} />
+              <div className="my-2 border-t border-line" />
+            </>
+          )}
+          <WinBar label="Torneos presenciales" tally={by((m) => m.t.mode === 'in_person')} />
+          <WinBar label="Torneos online" tally={by((m) => m.t.mode === 'online')} />
         </Card>
         {game === 'tcg' && (
           <Card title="Dado y turno de salida">
@@ -83,7 +118,7 @@ function Global({ ms, game }: { ms: Match[]; game: PokemonGame }) {
             <WinBar label="Saliendo 1.º" tally={turn.first} hint="Por partida" />
             <WinBar label="Saliendo 2.º" tally={turn.second} hint="Por partida" />
             <p className="mt-2 text-xs text-muted">
-              {dice.rate === null ? 'Aún no has anotado el dado.' : `Has ganado el dado el ${fmtRate(dice.rate)} de las veces.`} El turno se cuenta por partida; el dado, por ronda.
+              {dice.rate === null ? 'Aún no has anotado el dado.' : `Has ganado el dado el ${fmtRate(dice.rate)} de las veces.`} El turno se cuenta por partida; el dado, por enfrentamiento.
             </p>
           </Card>
         )}
@@ -194,11 +229,11 @@ function TcgStats({ ms }: { ms: Match[] }) {
               <Legend rate={15} label="Desfavorable" />
               <Legend rate={50} label="50 %" />
               <Legend rate={85} label="Favorable" />
-              {unknown > 0 && <span>{unknown} rondas sin mazo rival anotado no aparecen.</span>}
+              {unknown > 0 && <span>{unknown} sin mazo rival anotado no aparecen.</span>}
             </div>
           </>
         ) : (
-          <p className="p-4 text-sm text-muted">{picked ? 'Con este mazo aún no has anotado ningún mazo rival.' : 'Anota el mazo del rival en tus rondas para ver la matriz.'}</p>
+          <p className="p-4 text-sm text-muted">{picked ? 'Con este mazo aún no has anotado ningún mazo rival.' : 'Anota el mazo del rival para ver la matriz.'}</p>
         )}
       </Card>
     </section>
@@ -227,7 +262,7 @@ const Legend = ({ rate, label }: { rate: number; label: string }) => (
 function Cell({ t, title, bold }: { t?: Tally; title: string; bold?: boolean }) {
   const rate = t ? winRate(t) : null
   return (
-    <td className="h-12 min-w-16 rounded-md text-center" style={{ background: heat(rate) }} title={t && rate !== null ? `${title}: ${recordText(t)} (${fmtRate(rate)})` : `${title}: sin rondas`}>
+    <td className="h-12 min-w-16 rounded-md text-center" style={{ background: heat(rate) }} title={t && rate !== null ? `${title}: ${recordText(t)} (${fmtRate(rate)})` : `${title}: sin datos`}>
       {t && rate !== null ? (
         <>
           <span className={cx('num block text-sm', bold ? 'font-bold' : 'font-semibold')}>{fmtRate(rate)}</span>
@@ -313,7 +348,7 @@ function VgcStats({ ms }: { ms: Match[] }) {
               <Matchups title="Desfavorables" list={ext.bad} />
             </div>
           ) : (
-            <p className="text-sm text-muted">Necesitas al menos dos rondas contra el mismo Pokémon.</p>
+            <p className="text-sm text-muted">Necesitas al menos dos enfrentamientos contra el mismo Pokémon.</p>
           )}
         </Card>
       </div>
@@ -348,7 +383,7 @@ function VgcStats({ ms }: { ms: Match[] }) {
               </li>
             )
           })}
-          {(side === 'own' ? own : rivals).length === 0 && <li className="p-4 text-sm text-muted">{side === 'own' ? 'Marca en cada ronda qué 4 Pokémon llevaste.' : 'Aún no has anotado Pokémon rivales.'}</li>}
+          {(side === 'own' ? own : rivals).length === 0 && <li className="p-4 text-sm text-muted">{side === 'own' ? 'Marca qué 4 Pokémon llevaste.' : 'Aún no has anotado Pokémon rivales.'}</li>}
         </ul>
       </Card>
     </section>

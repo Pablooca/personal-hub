@@ -6,8 +6,8 @@ import { fromDateKey, toDateKey } from '../../lib/dates'
 import { downloadText } from '../../lib/download'
 import { fmtDate, fmtMoney, fmtMoneyShort } from '../../lib/format'
 import {
-  CONDITIONS, FINISHES, GRADERS, LANGUAGES, allocate, cardmarketUrl, collectionCsv, finishName, isReverse, isWestern, languageOf, missingFor, missingText, signatureOf, stackKey, totals, valueOf,
-  type Allocation,
+  CARD_KINDS, CONDITIONS, FINISHES, GRADERS, LANGUAGES, allocate, cardmarketUrl, collectionCsv, finishName, isReverse, isWestern, kindOf, languageOf, missingFor, missingText, signatureOf, stackKey, totals, trainerSubtype, valueOf,
+  type Allocation, type CardKind,
 } from '../../lib/pokemon/collection'
 import { parseDeck } from '../../lib/pokemon/deck'
 import { isPlayable, needsCheck } from '../../lib/pokemon/legality'
@@ -69,6 +69,7 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
   const [query, setQuery] = useState('')
   const q = useDeferredValue(query)
   const [legal, setLegal] = useState<Legal>('yes')
+  const [kind, setKind] = useState<CardKind | ''>('')
   const [filter, setFilter] = useState<Filter>('all')
   const [lang, setLang] = useState('')
   const [setCode, setSetCode] = useState('')
@@ -149,6 +150,32 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending, day])
 
+  // ---- kind of trainer of the cards added before it was kept
+  const kindless = data.owned_cards.filter((c) => c.category === 'trainer' && !c.subtype).length
+  const asked = useRef(new Set<string>())
+  useEffect(() => {
+    if (!kindless || !navigator.onLine) return
+    const rows = data.owned_cards.filter((c) => c.category === 'trainer' && !c.subtype)
+    const keys = [...new Set(rows.map((c) => `${isWestern(c.language) ? 'en' : c.language}|${c.tcgdex_id}`))].filter((k) => !asked.current.has(k)).slice(0, 300)
+    for (const k of keys) asked.current.add(k)
+    let i = 0
+    const worker = async () => {
+      while (i < keys.length) {
+        const key = keys[i++]
+        const [l, id] = key.split('|')
+        try {
+          const c = await fetchCard(l, id)
+          if (!c) continue
+          for (const row of rows) if (row.tcgdex_id === id && (isWestern(row.language) ? 'en' : row.language) === l) await update('owned_cards', row.id, { subtype: trainerSubtype(c.trainerType) })
+        } catch {
+          asked.current.delete(key)
+        }
+      }
+    }
+    void Promise.all([worker(), worker(), worker(), worker()])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kindless])
+
   // ---- one point a day for the value chart
   useEffect(() => {
     if (!data.owned_cards.length || busy) return
@@ -174,6 +201,7 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
     return data.owned_cards
       .filter((c) => {
         const v = valueOf(c, day)
+        if (kind && kindOf(c) !== kind) return false
         if (lang && c.language !== lang) return false
         if (setCode && c.set_code !== setCode) return false
         if (place && (place === NO_PLACE ? c.location !== '' : c.location !== place)) return false
@@ -191,7 +219,7 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
         if (sort === 'recent') return b.created_at.localeCompare(a.created_at)
         return (valueOf(b, day).unit ?? -1) * b.quantity - (valueOf(a, day).unit ?? -1) * a.quantity || a.name.localeCompare(b.name)
       })
-  }, [data.owned_cards, q, lang, setCode, place, filter, sort, alloc, day])
+  }, [data.owned_cards, q, kind, lang, setCode, place, filter, sort, alloc, day])
   const list = useMemo(() => (legal === 'all' ? found : found.filter((c) => isPlayable(c) === (legal === 'yes'))), [found, legal])
   const snaps = data.collection_snapshots.filter((s) => s.total > 0).sort((a, b) => a.date.localeCompare(b.date))
   /** The oldest one: what is shown is at least this recent. */
@@ -298,6 +326,7 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
                 { value: 'all', label: 'Todas' },
               ]}
             />
+            <Segmented value={kind} onChange={setKind} options={[{ value: '', label: 'Todos los tipos' }, ...CARD_KINDS.map(([value, label]) => ({ value, label }))]} />
             <Segmented value={filter} onChange={setFilter} options={FILTERS} />
           </div>
 
@@ -667,7 +696,7 @@ export function buildRow(local: ApiCard, en: ApiCard | null, d: Defaults, quanti
     tcgdex_id: local.id, set_code: set?.code || local.set.id.toUpperCase(), set_name: (d.language === 'es' ? set?.es : set?.en) ?? local.set.name, number: local.localId.replace(/^0+(?=\d)/, ''), name: local.name, name_en: en?.name ?? local.name,
     category: categoryOf(ref), signature: en ? signatureOf(en) : `x|${local.id}`, rarity: local.rarity ?? en?.rarity ?? '', image: local.image ?? en?.image ?? null, language: d.language, condition: d.condition, finish,
     first_edition: false, signed: false, altered: false, grade_company: '', grade: '', quantity, location: d.location.trim(), for_sale: false, paid: null, acquired_at: today(),
-    cm_product: p.cm, ref_low: isReverse(finish) ? (p.lowHolo ?? p.low) : p.low, ref_trend: isReverse(finish) ? (p.trendHolo ?? p.trend) : p.trend, ref_date: today(), standard: en && standardPrint(en) ? true : null, standard_date: en && standardPrint(en) ? today() : null, own_price: null, own_price_date: null, notes: '',
+    cm_product: p.cm, ref_low: isReverse(finish) ? (p.lowHolo ?? p.low) : p.low, ref_trend: isReverse(finish) ? (p.trendHolo ?? p.trend) : p.trend, ref_date: today(), standard: en && standardPrint(en) ? true : null, standard_date: en && standardPrint(en) ? today() : null, own_price: null, own_price_date: null, subtype: categoryOf(ref) === 'trainer' ? trainerSubtype(ref.trainerType) : '', notes: '',
   }
 }
 

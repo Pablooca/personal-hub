@@ -26,9 +26,9 @@ export function Teams({ initialId = null }: { initialId?: string | null }) {
   const [editing, setEditing] = useState<VgcTeam | 'new' | null>(null)
   const open = data.vgc_teams.find((t) => t.id === openId)
   const records = useMemo(() => {
-    const ms = matchesOf(data.tournaments, data.tournament_rounds)
+    const ms = matchesOf(data.tournaments, data.tournament_rounds, data.pokemon_matches)
     return new Map(data.vgc_teams.map((d) => [d.id, tally(ms.filter((m) => m.t.team_id === d.id))]))
-  }, [data.tournaments, data.tournament_rounds, data.vgc_teams])
+  }, [data.tournaments, data.tournament_rounds, data.pokemon_matches, data.vgc_teams])
 
   return (
     <>

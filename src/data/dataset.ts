@@ -3,7 +3,7 @@ import type { Dataset, TableName } from '../lib/types'
 export const TABLES: TableName[] = [
   'events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs',
   'study_programs', 'study_subjects', 'study_assessments', 'study_files',
-  'tcg_decks', 'vgc_teams', 'deck_versions', 'matchup_notes', 'tournaments', 'tournament_rounds', 'owned_cards', 'collection_snapshots',
+  'tcg_decks', 'vgc_teams', 'deck_versions', 'matchup_notes', 'tournaments', 'tournament_rounds', 'pokemon_matches', 'owned_cards', 'collection_snapshots',
   'shoes', 'race_goals', 'run_plan', 'runs', 'run_workouts',
   'category_rules', 'bills',
 ]
@@ -29,6 +29,7 @@ export const emptyDataset = (): Dataset => ({
   collection_snapshots: [],
   tournaments: [],
   tournament_rounds: [],
+  pokemon_matches: [],
   shoes: [],
   race_goals: [],
   run_plan: [],
@@ -80,6 +81,8 @@ export function cascadeRemove(d: Dataset, table: TableName, ids: Set<string>): D
     next.matchup_notes = next.matchup_notes.filter((m) => !m.deck_id || !ids.has(m.deck_id))
   }
   if (table === 'tcg_decks') next.tournaments = next.tournaments.map((t) => (t.deck_id && ids.has(t.deck_id) ? { ...t, deck_id: null } : t))
+  if (table === 'tcg_decks') next.pokemon_matches = next.pokemon_matches.map((m) => (m.deck_id && ids.has(m.deck_id) ? { ...m, deck_id: null } : m))
+  if (table === 'vgc_teams') next.pokemon_matches = next.pokemon_matches.map((m) => (m.team_id && ids.has(m.team_id) ? { ...m, team_id: null } : m))
   if (table === 'vgc_teams') next.tournaments = next.tournaments.map((t) => (t.team_id && ids.has(t.team_id) ? { ...t, team_id: null } : t))
   return next
 }

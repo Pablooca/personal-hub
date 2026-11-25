@@ -12,7 +12,7 @@ import { Combobox, DeckIcons, FORMAT_LABEL, RESULT_STYLES, SpeciesSprite, Sprite
 
 const RESULTS: RoundGame['result'][] = ['win', 'loss', 'tie']
 
-function Toggle<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { value: T; label: string; cls?: string }[]; onChange: (v: T) => void }) {
+export function Toggle<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { value: T; label: string; cls?: string }[]; onChange: (v: T) => void }) {
   return (
     <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1">
       {options.map((o) => (
@@ -27,6 +27,62 @@ function Toggle<T extends string>({ label, value, options, onChange }: { label: 
           {o.label}
         </button>
       ))}
+    </div>
+  )
+}
+
+/** Games of a match: result and, in TCG, who went first in each one. */
+export function GamesEditor({ games, format, tcg, first, onChange, onFirst }: { games: RoundGame[]; format: MatchFormat; tcg: boolean; first: boolean | null; onChange: (g: RoundGame[]) => void; onFirst: (v: boolean | null) => void }) {
+  function setGame(i: number, patch: Partial<RoundGame>) {
+    const next = games.map((g, j) => (j === i ? { ...g, ...patch } : g))
+    if (i === 0 && 'first' in patch) onFirst(patch.first ?? null)
+    onChange(decided(next.slice(0, i + 1), format) ? next.slice(0, i + 1) : next)
+  }
+  function addGame(r: RoundGame['result']) {
+    // Loser of the previous game usually chooses to go first: suggested, always editable.
+    const prev = games.at(-1)
+    const guess = !tcg ? null : games.length === 0 ? first : prev?.result === 'tie' || prev?.first === null ? null : prev?.result === 'loss'
+    onChange([...games, { result: r, first: guess ?? null }])
+  }
+  return (
+    <div className="space-y-2">
+      {games.map((g, i) => (
+        <div key={i} className="rounded-lg border border-line p-2">
+          <div className="flex items-center gap-2">
+            <span className="num w-5 shrink-0 text-center text-xs text-muted">{i + 1}</span>
+            <div className="min-w-0 flex-1">
+              <Toggle
+                label={`Resultado de la partida ${i + 1}`}
+                value={g.result}
+                onChange={(v) => setGame(i, { result: v })}
+                options={RESULTS.map((r) => ({ value: r, label: RESULT_STYLES[r].label, cls: RESULT_STYLES[r].cls }))}
+              />
+            </div>
+            <button type="button" aria-label={`Quitar partida ${i + 1}`} className="grid size-8 shrink-0 place-items-center rounded-lg text-faint hover:bg-surface-2 hover:text-fg" onClick={() => onChange(games.filter((_, j) => j !== i))}>
+              <X className="size-4" />
+            </button>
+          </div>
+          {tcg && format === 'bo3' && (
+            <div className="mt-2 pr-10 pl-7">
+              <Toggle
+                label={`Salida de la partida ${i + 1}`}
+                value={g.first === null ? 'x' : g.first ? 'y' : 'n'}
+                onChange={(v) => setGame(i, { first: v === 'x' ? null : v === 'y' })}
+                options={[{ value: 'y', label: '1.º' }, { value: 'n', label: '2.º' }, { value: 'x', label: 'Salida —' }]}
+              />
+            </div>
+          )}
+        </div>
+      ))}
+      {!decided(games, format) && (
+        <div className="flex gap-1">
+          {RESULTS.map((r) => (
+            <Button key={r} type="button" className="min-h-11 flex-1" onClick={() => addGame(r)}>
+              {maxGames(format) > 1 && <Plus className="size-3.5" />} {RESULT_STYLES[r].label}
+            </Button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -72,17 +128,6 @@ export function RoundModal({
     setGames(next)
     setResult(resultFromGames(next))
   }
-  function setGame(i: number, patch: Partial<RoundGame>) {
-    const next = games.map((g, j) => (j === i ? { ...g, ...patch } : g))
-    if (i === 0 && 'first' in patch) setFirst(patch.first ?? null)
-    changeGames(decided(next.slice(0, i + 1), format) ? next.slice(0, i + 1) : next)
-  }
-  function addGame(r: RoundGame['result']) {
-    // Loser of the previous game usually chooses to go first: suggested, always editable.
-    const prev = games.at(-1)
-    const guess = !tcg ? null : games.length === 0 ? first : prev?.result === 'tie' || prev?.first === null ? null : prev?.result === 'loss'
-    changeGames([...games, { result: r, first: guess ?? null }])
-  }
   function chooseFirst(v: boolean | null) {
     setFirst(v)
     if (games.length) setGames(games.map((g, i) => (i === 0 ? { ...g, first: v } : g)))
@@ -115,7 +160,6 @@ export function RoundModal({
   }
 
   const title = phase === 'swiss' ? `Ronda ${number}` : cutRoundLabel(t.top_cut_size, number)
-  const canAdd = !decided(games, format)
 
   return (
     <Modal
@@ -178,45 +222,7 @@ export function RoundModal({
           {!unplayed && (
             <div>
               <span className="label">{format === 'bo1' ? 'Partida' : 'Partidas (al mejor de 3)'}</span>
-              <div className="space-y-2">
-                {games.map((g, i) => (
-                  <div key={i} className="rounded-lg border border-line p-2">
-                    <div className="flex items-center gap-2">
-                      <span className="num w-5 shrink-0 text-center text-xs text-muted">{i + 1}</span>
-                      <div className="min-w-0 flex-1">
-                        <Toggle
-                          label={`Resultado de la partida ${i + 1}`}
-                          value={g.result}
-                          onChange={(v) => setGame(i, { result: v })}
-                          options={RESULTS.map((r) => ({ value: r, label: RESULT_STYLES[r].label, cls: RESULT_STYLES[r].cls }))}
-                        />
-                      </div>
-                      <button type="button" aria-label={`Quitar partida ${i + 1}`} className="grid size-8 shrink-0 place-items-center rounded-lg text-faint hover:bg-surface-2 hover:text-fg" onClick={() => changeGames(games.filter((_, j) => j !== i))}>
-                        <X className="size-4" />
-                      </button>
-                    </div>
-                    {tcg && format === 'bo3' && (
-                      <div className="mt-2 pr-10 pl-7">
-                        <Toggle
-                          label={`Salida de la partida ${i + 1}`}
-                          value={g.first === null ? 'x' : g.first ? 'y' : 'n'}
-                          onChange={(v) => setGame(i, { first: v === 'x' ? null : v === 'y' })}
-                          options={[{ value: 'y', label: '1.º' }, { value: 'n', label: '2.º' }, { value: 'x', label: 'Salida —' }]}
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {canAdd && (
-                  <div className="flex gap-1">
-                    {RESULTS.map((r) => (
-                      <Button key={r} type="button" className="min-h-11 flex-1" onClick={() => addGame(r)}>
-                        {maxGames(format) > 1 && <Plus className="size-3.5" />} {RESULT_STYLES[r].label}
-                      </Button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <GamesEditor games={games} format={format} tcg={tcg} first={first} onChange={changeGames} onFirst={setFirst} />
             </div>
           )}
 
@@ -276,9 +282,9 @@ export function RivalDeckPicker({ value, onChange, invalid }: { value: RivalDeck
   // Custom decks already met, so they are one tap away next time.
   const customs = useMemo(() => {
     const m = new Map<string, RivalDeck>()
-    for (const r of data.tournament_rounds) if (r.opponent_archetype === 'other') m.set(rivalKey(r), { id: 'other', icons: r.opponent_icons, name: r.opponent_deck_name })
+    for (const r of [...data.tournament_rounds, ...data.pokemon_matches]) if (r.opponent_archetype === 'other') m.set(rivalKey(r), { id: 'other', icons: r.opponent_icons, name: r.opponent_deck_name })
     return [...m.values()]
-  }, [data.tournament_rounds])
+  }, [data.tournament_rounds, data.pokemon_matches])
 
   const q = query.trim().toLowerCase()
   const list = META.archetypes.filter((a) => !q || a.name.toLowerCase().includes(q) || a.icons.some((i) => i.includes(q)))
@@ -355,7 +361,7 @@ export function RivalDeckPicker({ value, onChange, invalid }: { value: RivalDeck
 const NATURE_OPTIONS = NATURES.map((n) => ({ value: n[0], label: natureLabel(n[0]) }))
 const blank = (): RivalPokemon => ({ species: '', item: '', nature: '', moves: ['', '', '', ''] })
 
-function VgcSide({ mons, setMons, mine, setMine, team }: { mons: RivalPokemon[]; setMons: (m: RivalPokemon[]) => void; mine: string[]; setMine: (m: string[]) => void; team: VgcTeam | null }) {
+export function VgcSide({ mons, setMons, mine, setMine, team }: { mons: RivalPokemon[]; setMons: (m: RivalPokemon[]) => void; mine: string[]; setMine: (m: string[]) => void; team: VgcTeam | null }) {
   const champions = useChampions()
   const own = useMemo(() => (team ? parseTeam(team.paste).mons.map((m) => m.species) : []), [team])
   const slots = [...mons, ...(mons.length < 4 ? [blank()] : [])]
@@ -392,7 +398,7 @@ function VgcSide({ mons, setMons, mine, setMine, team }: { mons: RivalPokemon[];
             })}
           </div>
         ) : (
-          <p className="text-sm text-muted">Asigna un equipo al torneo para marcar qué Pokémon llevaste.</p>
+          <p className="text-sm text-muted">Asigna un equipo para marcar qué Pokémon llevaste.</p>
         )}
       </div>
 

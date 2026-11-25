@@ -77,6 +77,7 @@ const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   collection_snapshots: { column: 'date', ascending: true },
   tournaments: { column: 'date', ascending: false },
   tournament_rounds: { column: 'number', ascending: true },
+  pokemon_matches: { column: 'date', ascending: false },
   shoes: { column: 'created_at', ascending: true },
   race_goals: { column: 'date', ascending: true },
   run_plan: { column: 'date', ascending: true },
@@ -295,7 +296,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v21'
+const DEMO_KEY = 'ph-demo-dataset-v22'
 export const STUDY_BUCKET = 'study-files'
 
 function readDemo(): Dataset {

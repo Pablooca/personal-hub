@@ -17,7 +17,7 @@ import { RivalDeckPicker, type RivalDeck } from './RoundModal'
 export function Versions({ deck }: { deck: TcgDeck }) {
   const { data, remove } = useData()
   const versions = useMemo(() => data.deck_versions.filter((v) => v.deck_id === deck.id).sort((a, b) => b.from_date.localeCompare(a.from_date) || b.created_at.localeCompare(a.created_at)), [data.deck_versions, deck.id])
-  const matches = useMemo(() => matchesOf(data.tournaments, data.tournament_rounds).filter((m) => m.t.deck_id === deck.id), [data.tournaments, data.tournament_rounds, deck.id])
+  const matches = useMemo(() => matchesOf(data.tournaments, data.tournament_rounds, data.pokemon_matches).filter((m) => m.t.deck_id === deck.id), [data.tournaments, data.tournament_rounds, data.pokemon_matches, deck.id])
   if (!versions.length) return <Empty>Cuando cambies la lista se guardará la anterior, y aquí verás qué cartas cambiaste y el winrate de cada versión.</Empty>
   return (
     <ol className="space-y-3">
@@ -39,7 +39,7 @@ export function Versions({ deck }: { deck: TcgDeck }) {
                     <span className="font-semibold">{fmtRate(winRate(t))}</span> <span className="text-muted">{recordText(t)}</span>
                   </>
                 ) : (
-                  <span className="text-muted">sin rondas</span>
+                  <span className="text-muted">sin partidas</span>
                 )}
               </span>
             </div>

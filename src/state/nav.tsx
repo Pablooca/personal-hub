@@ -16,7 +16,7 @@ interface NavApi {
 
 const Ctx = createContext<NavApi | null>(null)
 
-const PAGE: Partial<Record<Target['kind'], ViewId>> = { project: 'projects', subject: 'studies', tournament: 'pokemon', deck: 'pokemon', team: 'pokemon', card: 'pokemon' }
+const PAGE: Partial<Record<Target['kind'], ViewId>> = { project: 'projects', subject: 'studies', tournament: 'pokemon', deck: 'pokemon', team: 'pokemon', card: 'pokemon', match: 'pokemon' }
 
 export function NavProvider({ onNavigate, children }: { onNavigate: (v: ViewId) => void; children: ReactNode }) {
   const [dialog, setDialog] = useState<Target | null>(null)

@@ -308,6 +308,8 @@ export interface OwnedCard {
   /** Legal in Standard (any print of the card); null = not checked yet. */
   standard: boolean | null
   standard_date: string | null
+  /** Kind of trainer card; '' = not a trainer, or not known yet. */
+  subtype: '' | 'supporter' | 'stadium' | 'item' | 'tool'
   notes: string
   created_at: string
 }
@@ -374,6 +376,92 @@ export interface RivalPokemon {
   item: string
   nature: string
   moves: string[]
+}
+
+// ------------------------------------------- matches outside a tournament
+/** A Pokémon as seen in a replay (complete with open team sheets). */
+export interface ReplayMon {
+  species: string
+  item: string
+  ability: string
+  nature: string
+  tera: string
+  moves: string[]
+}
+/** What a Pokémon did in one game. Damage in % of HP, summed. */
+export interface ReplayLine {
+  species: string
+  /** Stone it used to mega evolve. */
+  mega: string
+  tera: string
+  kos: number
+  /** Turn it fainted. */
+  fainted: number | null
+  dealt: number
+  taken: number
+  hp: number
+  /** [move, times used] */
+  moves: [string, number][]
+}
+export interface ReplaySide {
+  name: string
+  rating: number | null
+  rating_after: number | null
+  /** In order of appearance; the first `leads` started the game. */
+  brought: string[]
+  leads: number
+  left: number
+  crits: number
+  misses: number
+  /** Turns lost to flinching, paralysis, sleep… */
+  lost_turns: number
+  mons: ReplayLine[]
+}
+export interface ReplayGame {
+  /** Showdown replay id. */
+  id: string
+  /** Best-of-3 room it belongs to ('' = single game). */
+  set: string
+  number: number | null
+  format: string
+  rated: boolean
+  at: string | null
+  turns: number
+  seconds: number
+  end: 'ko' | 'forfeit' | 'timeout'
+  result: RoundGame['result']
+  mine: ReplaySide
+  rival: ReplaySide
+  /** Turn by turn; each line starts with 1 (me), 2 (rival) or 0. Not in the offline copy. */
+  log?: { n: number; e: string[] }[]
+}
+
+/** A single game (BO1) or a set (BO3) outside a tournament. */
+export interface PokemonMatch {
+  id: string
+  user_id?: string
+  game: PokemonGame
+  date: string // YYYY-MM-DD
+  format: MatchFormat
+  result: RoundGame['result']
+  games: RoundGame[]
+  won_dice: boolean | null
+  went_first: boolean | null
+  deck_id: string | null
+  team_id: string | null
+  /** Where it was played: Showdown ladder, TCG Live, with friends… */
+  venue: string
+  opponent_name: string
+  opponent_archetype: string
+  opponent_icons: string[]
+  opponent_deck_name: string
+  opponent_pokemon: RivalPokemon[]
+  my_pokemon: string[]
+  /** VGC replays: both whole teams. */
+  teams: { mine: ReplayMon[]; rival: ReplayMon[] } | null
+  replays: ReplayGame[]
+  notes: string
+  created_at: string
 }
 
 /** Record of an opponent as the event goes on (our match included). */
@@ -535,6 +623,7 @@ export interface Tables {
   vgc_teams: VgcTeam
   tournaments: Tournament
   tournament_rounds: TournamentRound
+  pokemon_matches: PokemonMatch
   race_goals: RaceGoal
   run_plan: RunPlanSession
   runs: Run

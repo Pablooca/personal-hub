@@ -1,5 +1,5 @@
 /** Match statistics for the Pokémon section. Pure functions over tournaments + rounds. */
-import type { MatchFormat, RoundGame, RoundResult, Tournament, TournamentRound } from '../types'
+import type { MatchFormat, PokemonMatch, RoundGame, RoundPhase, RoundResult, Tournament, TournamentRound } from '../types'
 
 export interface Tally {
   w: number
@@ -41,19 +41,22 @@ export function decided(games: RoundGame[], f: MatchFormat) {
 export const roundFormat = (t: Tournament, r: Pick<TournamentRound, 'phase'>): MatchFormat => (r.phase === 'top_cut' ? (t.top_cut_format ?? t.swiss_format) : t.swiss_format)
 
 export interface Match {
-  t: Tournament
-  r: TournamentRound
+  /** Where it was played; a loose match has no mode and is its own "event". */
+  t: Pick<Tournament, 'id' | 'game' | 'date' | 'deck_id' | 'team_id' | 'made_top_cut'> & { mode: Tournament['mode'] | null }
+  r: Pick<TournamentRound, 'result' | 'games' | 'won_dice' | 'went_first' | 'opponent_name' | 'opponent_archetype' | 'opponent_icons' | 'opponent_deck_name' | 'opponent_pokemon' | 'my_pokemon'> & { phase: RoundPhase | null }
   format: MatchFormat
+  source: 'tournament' | 'match'
 }
 
-/** Every round joined with its tournament; byes and no-shows are excluded (nothing was played). */
-export function matchesOf(tournaments: Tournament[], rounds: TournamentRound[]): Match[] {
+/** Every round joined with its tournament, plus the loose matches; byes and no-shows are excluded (nothing was played). */
+export function matchesOf(tournaments: Tournament[], rounds: TournamentRound[], loose: PokemonMatch[] = []): Match[] {
   const byId = new Map(tournaments.map((t) => [t.id, t]))
   const out: Match[] = []
   for (const r of rounds) {
     const t = byId.get(r.tournament_id)
-    if (t && !isFreeWin(r.result)) out.push({ t, r, format: roundFormat(t, r) })
+    if (t && !isFreeWin(r.result)) out.push({ t, r, format: roundFormat(t, r), source: 'tournament' })
   }
+  for (const m of loose) out.push({ t: { id: m.id, game: m.game, date: m.date, deck_id: m.deck_id, team_id: m.team_id, made_top_cut: false, mode: null }, r: { ...m, phase: null }, format: m.format, source: 'match' })
   return out
 }
 
@@ -107,7 +110,7 @@ export function rivalKey(r: Pick<TournamentRound, 'opponent_archetype' | 'oppone
   return `other:${[...r.opponent_icons].sort().join('+')}|${r.opponent_deck_name.trim().toLowerCase()}`
 }
 
-export function rivalRef(r: TournamentRound): RivalRef | null {
+export function rivalRef(r: Pick<TournamentRound, 'opponent_archetype' | 'opponent_icons' | 'opponent_deck_name'>): RivalRef | null {
   const key = rivalKey(r)
   if (!key) return null
   return { key, id: r.opponent_archetype, icons: r.opponent_icons, name: r.opponent_deck_name.trim() || 'Personalizado' }

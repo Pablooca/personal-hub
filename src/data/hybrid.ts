@@ -1,4 +1,4 @@
-import type { Dataset, TableName, Tables } from '../lib/types'
+import type { Dataset, PokemonMatch, TableName, Tables } from '../lib/types'
 import { cascadeRemove, completeDataset } from './dataset.ts'
 import type { Repository } from './repository'
 
@@ -46,6 +46,9 @@ export function applyOp(d: Dataset, op: Op): Dataset {
   }
 }
 
+/** The turn by turn of a replay is the bulk of a match: it stays out of the copy in this device. */
+const withoutLog = (m: PokemonMatch): PokemonMatch => (m.replays?.length ? { ...m, replays: m.replays.map(({ log: _l, ...g }) => g) } : m)
+
 export function clearLocalCopy(userId: string) {
   try {
     localStorage.removeItem(cacheKey(userId))
@@ -85,7 +88,7 @@ export function createHybridRepository(remote: Repository, userId: string): Repo
   const persist = () => {
     if (closed || !memory) return
     try {
-      localStorage.setItem(cacheKey(userId), JSON.stringify(memory))
+      localStorage.setItem(cacheKey(userId), JSON.stringify({ ...memory, pokemon_matches: memory.pokemon_matches.map(withoutLog) }))
     } catch {
       // Quota exceeded: better no copy than a half-written one.
       clearLocalCopy(userId)

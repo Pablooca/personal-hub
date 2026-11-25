@@ -10,7 +10,7 @@ export type AgendaSource = (typeof AGENDA_SOURCES)[number]
 export const SOURCE_LABELS: Record<AgendaSource, string> = { run: 'Entrenos', study: 'Entregas y exámenes', tournament: 'Torneos', task: 'Tareas', project: 'Proyectos', bill: 'Cobros' }
 
 export type Target =
-  | { kind: 'event' | 'task' | 'project' | 'subject' | 'run' | 'session' | 'goal' | 'tournament' | 'deck' | 'team' | 'tx' | 'worklog' | 'card' | 'bill'; id: string }
+  | { kind: 'event' | 'task' | 'project' | 'subject' | 'run' | 'session' | 'goal' | 'tournament' | 'deck' | 'team' | 'tx' | 'worklog' | 'card' | 'match' | 'bill'; id: string }
 
 export interface AgendaItem {
   key: string
@@ -119,6 +119,7 @@ export function search(d: Dataset, query: string, limit = 40): SearchHit[] {
   for (const b of d.bills) add('Cobros', { kind: 'bill', id: b.id }, b.name, b.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }))
   for (const l of d.work_logs) add('Horas', { kind: 'worklog', id: l.id }, l.description || l.jira_key || 'Horas', `${l.date}${l.jira_key ? ` · ${l.jira_key}` : ''}`, '', l.date)
   for (const t of d.tournaments) add('Torneos', { kind: 'tournament', id: t.id }, t.name, `${t.game.toUpperCase()} · ${t.date}`, `${t.location} ${t.notes}`, t.date)
+  for (const m of d.pokemon_matches) add('Partidas', { kind: 'match', id: m.id }, m.opponent_name || m.opponent_deck_name || 'Partida', `${m.game.toUpperCase()} · ${m.format.toUpperCase()} · ${m.date}`, `${m.venue} ${m.notes} ${m.opponent_deck_name}`, m.date)
   for (const k of d.tcg_decks) add('Mazos', { kind: 'deck', id: k.id }, k.name, k.format, k.list_text)
   for (const c of d.owned_cards) add('Colección', { kind: 'card', id: c.id }, c.name, `${c.set_code} ${c.number} · ${c.quantity}×`, `${c.name_en} ${c.set_name} ${c.location}`)
   for (const k of d.vgc_teams) add('Equipos', { kind: 'team', id: k.id }, k.name, k.regulation, k.paste)

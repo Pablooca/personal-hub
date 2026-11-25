@@ -35,9 +35,9 @@ export function Decks({ initialId = null }: { initialId?: string | null }) {
   const [editing, setEditing] = useState<TcgDeck | 'new' | null>(null)
   const open = data.tcg_decks.find((d) => d.id === openId)
   const records = useMemo(() => {
-    const ms = matchesOf(data.tournaments, data.tournament_rounds)
+    const ms = matchesOf(data.tournaments, data.tournament_rounds, data.pokemon_matches)
     return new Map(data.tcg_decks.map((d) => [d.id, tally(ms.filter((m) => m.t.deck_id === d.id))]))
-  }, [data.tournaments, data.tournament_rounds, data.tcg_decks])
+  }, [data.tournaments, data.tournament_rounds, data.pokemon_matches, data.tcg_decks])
 
   return (
     <>

@@ -1,0 +1,220 @@
+|j|☆Yo Mismo
+|j|☆Rival Uno
+|html|<table width="100%"><tr><td align="left">Yo Mismo</td><td align="right">Rival Uno</tr><tr><td align="left"><i class="fa fa-circle"></i> <i class="fa fa-circle-o"></i> </td><td align="right"><i class="fa fa-circle-o"></i> <i class="fa fa-circle-o"></i> </tr></table>
+|uhtml|bestof|<h2><strong>Game 2</strong> of <a href="/game-bestof3-gen9championsvgc2026regmcbo3-1000">a best-of-3</a></h2>
+|t:|1700032394
+|gametype|doubles
+|player|p1|Yo Mismo|1|1045
+|player|p2|Rival Uno|pokemaniac|1171
+|gen|9
+|tier|[Gen 9 Champions] VGC 2026 Reg M-C (Bo3)
+|rated|
+|rule|Species Clause: Limit one of each Pokemon
+|rule|Item Clause: Limit 1 of each item
+|clearpoke
+|poke|p1|Glimmora, L50, F|
+|poke|p1|Garchomp, L50, F|
+|poke|p1|Delphox, L50, M|
+|poke|p1|Whimsicott, L50, M|
+|poke|p1|Farigiraf, L50, F|
+|poke|p1|Heracross, L50, F|
+|poke|p2|Chesnaught, L50, M|
+|poke|p2|Indeedee-F, L50, F|
+|poke|p2|Sneasler, L50, F|
+|poke|p2|Raichu, L50, F|
+|poke|p2|Incineroar, L50, F|
+|poke|p2|Gholdengo, L50|
+|teampreview|4
+|showteam|p1|Glimmora||LifeOrb|ToxicDebris|SludgeBomb,PowerGem,EarthPower,SpikyShield|Modest||F|||50|]Garchomp||ChoiceScarf|RoughSkin|Earthquake,RockSlide,StompingTantrum,DragonClaw|Adamant||F|||50|]Delphox||Delphoxite|Blaze|HeatWave,Psychic,Encore,Protect|Timid||M|||50|]Whimsicott||FocusSash|Prankster|Moonblast,Tailwind,Encore,Endeavor|Timid||M|||50|]Farigiraf||SitrusBerry|ArmorTail|ExpandingForce,HyperVoice,TrickRoom,Imprison|Bold||F|||50|]Heracross||Heracronite|Moxie|CloseCombat,BulletSeed,PinMissile,Detect|Jolly||F|||50|
+|showteam|p2|Chesnaught||Chesnaughtite|Bulletproof|WoodHammer,BodyPress,BulkUp,SpikyShield|Impish||M|||50|]Indeedee-F||RockyHelmet|PsychicSurge|Psychic,FollowMe,TrickRoom,HelpingHand|Bold||F|||50|]Sneasler||PsychicSeed|Unburden|CloseCombat,DireClaw,ThroatChop,Protect|Adamant||F|||50|]Raichu||RaichuniteY|LightningRod|ZapCannon,FocusBlast,FakeOut,Protect|Timid||F|||50|]Incineroar||SitrusBerry|Intimidate|FlareBlitz,ThroatChop,FakeOut,PartingShot|Jolly||F|||50|]Gholdengo||LifeOrb|GoodasGold|MakeItRain,ShadowBall,NastyPlot,Protect|Timid|||||50|
+|inactive|Battle timer is ON: inactive players will automatically lose when time's up. (requested by Rival Uno)
+|
+|t:|1700032406
+|teamsize|p1|4
+|teamsize|p2|4
+|start
+|switch|p1a: Whimsicott|Whimsicott, L50, M|100/100
+|switch|p1b: Delphox|Delphox, L50, M|100/100
+|switch|p2a: Raichu|Raichu, L50, F|100/100
+|switch|p2b: Incineroar|Incineroar, L50, F|100/100
+|-ability|p2b: Incineroar|Intimidate|boost
+|-unboost|p1a: Whimsicott|atk|1
+|-unboost|p1b: Delphox|atk|1
+|turn|1
+|inactive|Rival Uno has 30 seconds left.
+|
+|t:|1700032437
+|detailschange|p2a: Raichu|Raichu-Mega-Y, L50, F
+|-mega|p2a: Raichu|Raichu|Raichunite Y
+|detailschange|p1b: Delphox|Delphox-Mega, L50, M
+|-mega|p1b: Delphox|Delphox|Delphoxite
+|move|p2b: Incineroar|Fake Out|p1a: Whimsicott
+|-damage|p1a: Whimsicott|85/100
+|cant|p1a: Whimsicott|flinch
+|move|p1b: Delphox|Heat Wave|p2b: Incineroar|[spread] p2a,p2b
+|-resisted|p2b: Incineroar|1
+|-damage|p2a: Raichu|45/100
+|-damage|p2b: Incineroar|80/100
+|-status|p2a: Raichu|brn
+|move|p2a: Raichu|Zap Cannon|p1a: Whimsicott
+|-resisted|p1a: Whimsicott|1
+|-crit|p1a: Whimsicott
+|-damage|p1a: Whimsicott|2/100
+|-status|p1a: Whimsicott|par
+|
+|-damage|p2a: Raichu|39/100 brn|[from] brn
+|upkeep
+|turn|2
+|
+|t:|1700032456
+|switch|p2a: Indeedee|Indeedee-F, L50, F|100/100
+|-fieldstart|move: Psychic Terrain|[from] ability: Psychic Surge|[of] p2a: Indeedee
+|move|p1a: Whimsicott|Tailwind|p1a: Whimsicott
+|-sidestart|p1: Yo Mismo|move: Tailwind
+|move|p1b: Delphox|Heat Wave|p2b: Incineroar|[spread] p2a,p2b
+|-resisted|p2b: Incineroar|1
+|-damage|p2a: Indeedee|59/100
+|-damage|p2b: Incineroar|59/100
+|move|p2b: Incineroar|Parting Shot|p1b: Delphox
+|-unboost|p1b: Delphox|atk|1
+|-unboost|p1b: Delphox|spa|1
+|
+|t:|1700032460
+|switch|p2b: Sneasler|Sneasler, L50, F|100/100|[from] Parting Shot
+|-enditem|p2b: Sneasler|Psychic Seed
+|-boost|p2b: Sneasler|spd|1|[from] item: Psychic Seed
+|
+|upkeep
+|turn|3
+|
+|t:|1700032475
+|move|p2a: Indeedee|Follow Me|p2a: Indeedee
+|-singleturn|p2a: Indeedee|move: Follow Me
+|move|p1b: Delphox|Psychic|p2a: Indeedee
+|-resisted|p2a: Indeedee|1
+|-damage|p2a: Indeedee|41/100
+|move|p2b: Sneasler|Throat Chop|p1b: Delphox
+|-supereffective|p1b: Delphox|1
+|-damage|p1b: Delphox|4/100
+|-start|p1b: Delphox|Throat Chop|[silent]
+|move|p1a: Whimsicott|Moonblast|p2a: Indeedee
+|-damage|p2a: Indeedee|7/100
+|
+|upkeep
+|turn|4
+|
+|t:|1700032487
+|move|p2a: Indeedee|Follow Me|p2a: Indeedee
+|-singleturn|p2a: Indeedee|move: Follow Me
+|move|p1b: Delphox|Heat Wave|p2a: Indeedee|[spread] p2b
+|-miss|p1b: Delphox|p2a: Indeedee
+|-damage|p2b: Sneasler|73/100
+|move|p2b: Sneasler|Dire Claw|p1a: Whimsicott
+|-supereffective|p1a: Whimsicott|2
+|-damage|p1a: Whimsicott|0 fnt
+|faint|p1a: Whimsicott
+|
+|-end|p1b: Delphox|Throat Chop|[silent]
+|upkeep
+|
+|t:|1700032495
+|switch|p1a: Garchomp|Garchomp, L50, F|100/100
+|turn|5
+|
+|t:|1700032508
+|switch|p2a: Raichu|Raichu-Mega-Y, L50, F|39/100 brn
+|move|p2b: Sneasler|Protect|p2b: Sneasler
+|-singleturn|p2b: Sneasler|Protect
+|move|p1a: Garchomp|Rock Slide|p2b: Sneasler|[spread] p2a
+|-activate|p2b: Sneasler|move: Protect
+|-damage|p2a: Raichu|1/100 brn
+|move|p1b: Delphox|Psychic|p2b: Sneasler
+|-activate|p2b: Sneasler|move: Protect
+|
+|-damage|p2a: Raichu|0 fnt|[from] brn
+|faint|p2a: Raichu
+|-sideend|p1: Yo Mismo|move: Tailwind
+|upkeep
+|
+|t:|1700032512
+|switch|p2a: Indeedee|Indeedee-F, L50, F|7/100
+|turn|6
+|
+|t:|1700032535
+|move|p2b: Sneasler|Dire Claw|p1b: Delphox
+|-damage|p1b: Delphox|0 fnt
+|faint|p1b: Delphox
+|move|p1a: Garchomp|Rock Slide|p2a: Indeedee|[spread] p2a,p2b
+|-resisted|p2b: Sneasler|1
+|-damage|p2a: Indeedee|0 fnt
+|-damage|p2b: Sneasler|54/100
+|faint|p2a: Indeedee
+|
+|-fieldend|move: Psychic Terrain
+|upkeep
+|
+|t:|1700032541
+|switch|p1b: Glimmora|Glimmora, L50, F|100/100
+|switch|p2a: Incineroar|Incineroar, L50, F|59/100
+|-ability|p2a: Incineroar|Intimidate|boost
+|-unboost|p1a: Garchomp|atk|1
+|-unboost|p1b: Glimmora|atk|1
+|turn|7
+|
+|t:|1700032549
+|move|p2a: Incineroar|Fake Out|p1b: Glimmora
+|-resisted|p1b: Glimmora|1
+|-damage|p1b: Glimmora|94/100
+|-activate|p1b: Glimmora|ability: Toxic Debris
+|-sidestart|p2: Rival Uno|move: Toxic Spikes
+|move|p2b: Sneasler|Close Combat|p1a: Garchomp
+|-damage|p1a: Garchomp|31/100
+|-unboost|p2b: Sneasler|def|1
+|-unboost|p2b: Sneasler|spd|1
+|-damage|p2b: Sneasler|42/100|[from] ability: Rough Skin|[of] p1a: Garchomp
+|move|p1a: Garchomp|Rock Slide|p2b: Sneasler|[spread] p2a,p2b
+|-supereffective|p2a: Incineroar|1
+|-resisted|p2b: Sneasler|1
+|-damage|p2a: Incineroar|29/100
+|-damage|p2b: Sneasler|24/100
+|-enditem|p2a: Incineroar|Sitrus Berry|[eat]
+|-heal|p2a: Incineroar|54/100|[from] item: Sitrus Berry
+|cant|p1b: Glimmora|flinch
+|
+|upkeep
+|turn|8
+|
+|t:|1700032564
+|move|p2b: Sneasler|Close Combat|p1a: Garchomp
+|-crit|p1a: Garchomp
+|-damage|p1a: Garchomp|0 fnt
+|-unboost|p2b: Sneasler|def|1
+|-unboost|p2b: Sneasler|spd|1
+|-damage|p2b: Sneasler|12/100|[from] ability: Rough Skin|[of] p1a: Garchomp
+|faint|p1a: Garchomp
+|move|p1b: Glimmora|Earth Power|p2b: Sneasler
+|-supereffective|p2b: Sneasler|1
+|-damage|p2b: Sneasler|0 fnt
+|faint|p2b: Sneasler
+|-damage|p1b: Glimmora|84/100|[from] item: Life Orb
+|move|p2a: Incineroar|Throat Chop|p1b: Glimmora
+|-damage|p1b: Glimmora|48/100
+|-start|p1b: Glimmora|Throat Chop|[silent]
+|-activate|p1b: Glimmora|ability: Toxic Debris
+|-sidestart|p2: Rival Uno|move: Toxic Spikes
+|
+|upkeep
+|turn|9
+|
+|t:|1700032570
+|move|p1b: Glimmora|Earth Power|p2a: Incineroar
+|-supereffective|p2a: Incineroar|1
+|-damage|p2a: Incineroar|0 fnt
+|faint|p2a: Incineroar
+|-damage|p1b: Glimmora|38/100|[from] item: Life Orb
+|
+|win|Yo Mismo
+|raw|Yo Mismo's rating: 1045 &rarr; <strong>1090</strong><br />(+45 for winning)
+|raw|Rival Uno's rating: 1171 &rarr; <strong>1137</strong><br />(-34 for losing)
+|l|☆Rival Uno
+|player|p2|
