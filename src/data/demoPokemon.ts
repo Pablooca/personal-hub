@@ -78,7 +78,7 @@ export function buildDemoPokemon(today: Date): Pick<Dataset, 'tcg_decks' | 'vgc_
   const card = (id: string, set: string, number: string, name: string, quantity: number, low: number, o: Partial<OwnedCard> = {}): OwnedCard => ({
     id: uid(), tcgdex_id: id, set_code: set, set_name: '', number, name, name_en: name, category: 'pokemon', signature: `p|${name.toLowerCase()}`, rarity: 'Rara Doble', image: null, language: 'es', condition: 'NM', finish: 'holo',
     first_edition: false, signed: false, altered: false, grade_company: '', grade: '', quantity, location: 'Archivador 1', for_sale: false, paid: null, acquired_at: null, cm_product: null, ref_low: low, ref_trend: low * 1.6,
-    ref_date: day(-1), own_price: null, own_price_date: null, notes: '', created_at: now, ...o,
+    ref_date: day(-1), standard: true, standard_date: day(0), own_price: null, own_price_date: null, notes: '', created_at: now, ...o,
   })
   const owned_cards: OwnedCard[] = [
     card('me01-104', 'MEG', '104', 'Mega Kangaskhan ex', 5, 0.4, { own_price: 0.9, own_price_date: day(-3) }),

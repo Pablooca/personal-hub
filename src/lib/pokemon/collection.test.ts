@@ -9,7 +9,7 @@ import type { OwnedCard, TcgDeck, Tournament } from '../types.ts'
 let n = 0
 const C = (set: string, number: string, name: string, quantity: number, o: Partial<OwnedCard> = {}): OwnedCard => ({
   id: `c${++n}`, tcgdex_id: `${set}-${number}`, set_code: set, set_name: '', number, name, name_en: name, category: 'trainer', signature: `t|${name.toLowerCase()}`, rarity: '', image: null, language: 'es', condition: 'NM', finish: 'normal',
-  first_edition: false, signed: false, altered: false, grade_company: '', grade: '', quantity, location: '', for_sale: false, paid: null, acquired_at: null, cm_product: 1, ref_low: 1, ref_trend: 2, ref_date: null, own_price: null, own_price_date: null, notes: '', created_at: '', ...o,
+  first_edition: false, signed: false, altered: false, grade_company: '', grade: '', quantity, location: '', for_sale: false, paid: null, acquired_at: null, cm_product: 1, ref_low: 1, ref_trend: 2, ref_date: null, standard: true, standard_date: null, own_price: null, own_price_date: null, notes: '', created_at: '', ...o,
 })
 const D = (id: string, list_text: string, o: Partial<TcgDeck> = {}): TcgDeck => ({ id, name: id, format: '', icons: [], list_text, notes: '', is_built: true, created_at: id, ...o })
 const P = (set: string, number: string, name: string, signature: string): [string, Print] => [printKey(set, number), { id: '', set, number, name, category: 'pokemon', signature, image: null, rarity: '', cm: null, low: 2, trend: 3, lowHolo: null, trendHolo: null }]

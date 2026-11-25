@@ -25,7 +25,7 @@ export const TABLE_FIELDS: { [K in TableName]: readonly string[] } = {
   matchup_notes: ['id', 'deck_id', 'archetype', 'name', 'icons', 'notes', 'created_at'],
   owned_cards: [
     'id', 'tcgdex_id', 'set_code', 'set_name', 'number', 'name', 'name_en', 'category', 'signature', 'rarity', 'image', 'language', 'condition', 'finish', 'first_edition', 'signed', 'altered',
-    'grade_company', 'grade', 'quantity', 'location', 'for_sale', 'paid', 'acquired_at', 'cm_product', 'ref_low', 'ref_trend', 'ref_date', 'own_price', 'own_price_date', 'notes', 'created_at',
+    'grade_company', 'grade', 'quantity', 'location', 'for_sale', 'paid', 'acquired_at', 'cm_product', 'ref_low', 'ref_trend', 'ref_date', 'own_price', 'own_price_date', 'standard', 'standard_date', 'notes', 'created_at',
   ],
   collection_snapshots: ['id', 'date', 'total', 'cards', 'created_at'],
   vgc_teams: ['id', 'name', 'regulation', 'paste', 'notes', 'created_at'],

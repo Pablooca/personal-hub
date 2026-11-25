@@ -88,6 +88,7 @@ Deno.serve(async (req) => {
         { command: 'manana', description: 'Tu día de mañana' },
         { command: 'semana', description: 'Resumen de la semana' },
         { command: 'mes', description: 'Gastos y presupuestos del mes' },
+        { command: 'carta', description: '¿Tengo esta carta? Escribe el nombre detrás' },
         { command: 'deshacer', description: 'Quitar lo último que has dictado' },
         { command: 'ayuda', description: 'Qué puedo hacer' },
       ],

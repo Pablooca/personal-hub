@@ -305,6 +305,9 @@ export interface OwnedCard {
   /** Lowest price in this card's language, noted by hand. */
   own_price: number | null
   own_price_date: string | null
+  /** Legal in Standard (any print of the card); null = not checked yet. */
+  standard: boolean | null
+  standard_date: string | null
   notes: string
   created_at: string
 }

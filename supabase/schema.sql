@@ -744,6 +744,10 @@ create table if not exists public.owned_cards (
 );
 create index if not exists owned_cards_user_idx on public.owned_cards (user_id, set_code, number);
 
+-- Upgrade path: legal in the current Standard format (null = not checked yet).
+alter table public.owned_cards add column if not exists standard boolean;
+alter table public.owned_cards add column if not exists standard_date date;
+
 create table if not exists public.collection_snapshots (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,

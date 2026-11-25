@@ -111,5 +111,6 @@ test('bot: tasks, events, hours and queries', () => {
   assert.deepEqual([c('hoy').kind, c('Mañana').kind, c('semana').kind, c('mes').kind, c('deshacer').kind, c('/start').kind, c('').kind], ['day', 'day', 'week', 'month', 'undo', 'help', 'help'])
   assert.equal(c('evento dentista').kind, 'error')
   assert.equal(c('evento mañana 25:00 x').kind, 'error')
-  assert.equal(c('cuéntame un chiste').kind, 'error')
+  assert.equal(c('cuéntame un chiste').kind, 'unknown')
+  assert.equal(c('tengo que llamar').kind, 'unknown')
 })

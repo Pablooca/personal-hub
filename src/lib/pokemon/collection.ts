@@ -1,5 +1,5 @@
 /** Card collection: valuation, deck allocation and "what am I missing". Pure functions. */
-import type { OwnedCard, TcgDeck } from '../types'
+import type { OwnedCard, TcgDeck } from '../types.ts'
 import { isBasicEnergy, parseDeck, type DeckCard } from './deck.ts'
 
 // ---------------------------------------------------------------- attributes

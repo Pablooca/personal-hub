@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { printKey, signatureOf, type Print } from '../../lib/pokemon/collection'
+import { baseName, isStandardPrint } from '../../lib/pokemon/legality'
 import type { DeckCard } from '../../lib/pokemon/deck'
+import { META } from './data'
 import setsRaw from '../../data/pokemon/tcg-sets.json?raw'
 
 /** Card data from TCGdex (free, open); prices inside it are Cardmarket's daily guide. */
@@ -54,6 +56,8 @@ export interface ApiCard {
   pricing?: { cardmarket?: ApiPrice | null }
   variants_detailed?: { type?: string; foil?: string; pricing?: { cardmarket?: ApiPrice | null } }[]
 }
+const setIdOf = (id: string) => id.slice(0, id.lastIndexOf('-'))
+
 export interface ApiHit {
   id: string
   localId: string
@@ -135,6 +139,34 @@ export function priceOf(c: ApiCard): { cm: number | null; low: number | null; tr
 export function toPrint(c: ApiCard): Print {
   const set = SET_BY_ID.get(c.set.id)
   return { id: c.id, set: set?.code ?? c.set.id, number: c.localId.replace(/^0+(?=\d)/, ''), name: c.name, category: categoryOf(c), signature: signatureOf(c), image: c.image ?? null, rarity: c.rarity ?? '', ...priceOf(c) }
+}
+
+// --------------------------------------------------------------- legality
+/** Release dates of the first and last expansion of the format ("TEF-DLR"). */
+const [FROM, TO] = (() => {
+  const [a, b] = META.format.split('-').map((c) => setsByCode(c)[0]?.date ?? '')
+  return [a ?? '', b ?? '']
+})()
+export const standardPrint = (c: ApiCard) => isStandardPrint(c, SET_BY_ID.get(c.set.id)?.date ?? '', FROM, TO)
+
+/** Any print of the same card in Standard makes the old ones legal too. `c` is the English card. */
+export async function isStandard(c: ApiCard): Promise<boolean> {
+  if (standardPrint(c)) return true
+  const name = baseName(c.name)
+  const search = (extra: string) => get<ApiHit[]>(`/en/cards?name=${encodeURIComponent(name)}${extra}`)
+  const [legal, all] = await Promise.all([search('&legal.standard=true'), search('')])
+  const same = (h: ApiHit) => baseName(h.name) === name && SET_BY_ID.has(setIdOf(h.id))
+  const hits = (legal ?? []).filter(same)
+  const pokemon = categoryOf(c) === 'pokemon'
+  if (!pokemon && hits.length) return true
+  // Plus the expansions of the format, whose marks may be missing.
+  const ids = new Set([...hits, ...(all ?? []).filter((h) => same(h) && FROM !== '' && (SET_BY_ID.get(setIdOf(h.id))?.date ?? '') >= FROM)].map((h) => h.id))
+  const sig = signatureOf(c)
+  for (const id of ids) {
+    const x = await fetchCard('en', id)
+    if (x && standardPrint(x) && (!pokemon || signatureOf(x) === sig)) return true
+  }
+  return false
 }
 
 // ------------------------------------------------------------- prints cache

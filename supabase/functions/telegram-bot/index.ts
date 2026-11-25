@@ -9,8 +9,9 @@
  */
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { categorize, matchOwnRule } from '../apple-pay-webhook/normalize.ts'
-import { HELP, parseCommand, type Command } from '../_shared/bot.ts'
+import { HELP, NOT_UNDERSTOOD, parseCommand, type Command } from '../_shared/bot.ts'
 import { dayMessage, localInstant, localNow, weekMessage } from '../_shared/brief.ts'
+import { cardAnswer } from '../_shared/cardload.ts'
 import { claim, loadDay, loadMonth, loadWeek } from '../_shared/load.ts'
 import { categoryLabel, escapeHtml, euro, sendTelegram } from '../_shared/telegram.ts'
 
@@ -39,6 +40,11 @@ async function answer(db: SupabaseClient, owner: string, tz: string, cmd: Comman
       return HELP
     case 'error':
       return `🤔 ${escapeHtml(cmd.message)}`
+    case 'card':
+      return (await cardAnswer(db, owner, cmd.query, today)) ?? ''
+    case 'unknown':
+      // Just the name of a card I own also works.
+      return (await cardAnswer(db, owner, cmd.text, today, true)) ?? `🤔 ${NOT_UNDERSTOOD}`
     case 'expense':
     case 'income': {
       const [rules, accounts] = await Promise.all([

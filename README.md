@@ -222,7 +222,7 @@ curl -X POST "https://<project-ref>.supabase.co/functions/v1/apple-pay-webhook" 
   | Precios de la colección desde la guía diaria de Cardmarket (sin mensaje) | 9:00 | `PRICES_AT` |
   | Presupuesto al 80 % y al 100 % | al momento | `BUDGET_ALERTS` |
 
-- **Escribir al bot** (función `telegram-bot`, solo responde a tu chat): `gasto 12,50 café`, `ingreso 30 bizum`, `tarea llamar al banco mañana`, `evento viernes 18:00 dentista`, `horas 8 PLAT-142 revisión`, `hoy`, `mañana`, `semana`, `mes`, `deshacer`, `ayuda`.
+- **Escribir al bot** (función `telegram-bot`, solo responde a tu chat): `gasto 12,50 café`, `ingreso 30 bizum`, `tarea llamar al banco mañana`, `evento viernes 18:00 dentista`, `horas 8 PLAT-142 revisión`, `carta Latias ex` o `¿tengo SSP 76?` (copias, idioma, dónde está, precio, en mazo y fuera), `hoy`, `mañana`, `semana`, `mes`, `deshacer`, `ayuda`.
 
 Configuración (una vez):
 

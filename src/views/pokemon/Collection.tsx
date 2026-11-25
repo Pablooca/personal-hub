@@ -1,5 +1,5 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { Check as CheckIcon, ClipboardList, Copy, Download, ExternalLink, Layers, ListPlus, Loader2, Minus, Plus, RefreshCw, Search, Tag, Trash2 } from 'lucide-react'
+import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Check as CheckIcon, ClipboardList, Copy, Download, ExternalLink, Layers, ListPlus, Loader2, MapPin, Minus, Plus, RefreshCw, Search, Tag, Trash2 } from 'lucide-react'
 import { LineChart } from '../../components/LineChart'
 import { Badge, Button, Card, Empty, Field, Modal, Segmented, Stat, cx } from '../../components/ui'
 import { fromDateKey, toDateKey } from '../../lib/dates'
@@ -10,12 +10,13 @@ import {
   type Allocation,
 } from '../../lib/pokemon/collection'
 import { parseDeck } from '../../lib/pokemon/deck'
+import { isPlayable, needsCheck } from '../../lib/pokemon/legality'
 import type { NewRow, OwnedCard } from '../../lib/types'
 import { useData } from '../../state/data'
 import { useToast } from '../../state/toast'
 import { parseAmount } from '../finance/TxForms'
 import { META } from './data'
-import { SET_BY_ID, categoryOf, fetchByNumber, fetchCard, image, priceOf, searchCards, usePrints, type ApiCard, type ApiHit } from './cards'
+import { SET_BY_ID, categoryOf, fetchByNumber, fetchCard, image, isStandard, standardPrint, priceOf, searchCards, usePrints, type ApiCard, type ApiHit } from './cards'
 
 const today = () => toDateKey(new Date())
 const ALL_LINES: never[] = []
@@ -29,6 +30,27 @@ export function useAllocation(): { alloc: Allocation; prints: ReturnType<typeof 
   return { alloc, prints, loading }
 }
 
+const NO_PLACE = '(sin indicar)'
+/** Places already used, to choose instead of typing. */
+function usePlaces() {
+  const { data } = useData()
+  return useMemo(() => [...new Set(data.owned_cards.map((c) => c.location))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'es', { numeric: true })), [data.owned_cards])
+}
+function PlaceInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const places = usePlaces()
+  const id = useId()
+  return (
+    <>
+      <input className="field" list={id} value={value} maxLength={80} autoComplete="off" onChange={(e) => onChange(e.target.value)} placeholder="Archivador 1, caja azul…" />
+      <datalist id={id}>
+        {places.map((p) => (
+          <option key={p} value={p} />
+        ))}
+      </datalist>
+    </>
+  )
+}
+
 type Filter = 'all' | 'free' | 'deck' | 'sale' | 'review'
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'all', label: 'Todas' },
@@ -37,6 +59,7 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: 'sale', label: 'En venta' },
   { value: 'review', label: 'Sin precio en su idioma' },
 ]
+type Legal = 'yes' | 'no' | 'all'
 type Sort = 'value' | 'name' | 'set' | 'recent'
 
 export function Collection({ initialId = null }: { initialId?: string | null }) {
@@ -45,9 +68,13 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
   const { alloc } = useAllocation()
   const [query, setQuery] = useState('')
   const q = useDeferredValue(query)
+  const [legal, setLegal] = useState<Legal>('yes')
   const [filter, setFilter] = useState<Filter>('all')
   const [lang, setLang] = useState('')
   const [setCode, setSetCode] = useState('')
+  const [placeChoice, setPlace] = useState('')
+  const places = usePlaces()
+  const place = placeChoice === NO_PLACE || places.includes(placeChoice) ? placeChoice : ''
   const [sort, setSort] = useState<Sort>('value')
   const [limit, setLimit] = useState(60)
   const [openId, setOpenId] = useState<string | null>(initialId)
@@ -96,6 +123,32 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.owned_cards.length])
 
+  // ---- legality in Standard: new cards at once, the rest every week
+  const checking = useRef(new Set<string>())
+  const pending = data.owned_cards.filter((c) => needsCheck(c, day) && !checking.current.has(c.id)).length
+  useEffect(() => {
+    if (!pending || !navigator.onLine) return
+    const rows = data.owned_cards.filter((c) => needsCheck(c, day) && !checking.current.has(c.id)).slice(0, 300)
+    for (const c of rows) checking.current.add(c.id)
+    const ids = [...new Set(rows.map((c) => c.tcgdex_id))]
+    let i = 0
+    const worker = async () => {
+      while (i < ids.length) {
+        const id = ids[i++]
+        try {
+          const en = await fetchCard('en', id)
+          if (!en) continue
+          const standard = await isStandard(en)
+          for (const c of rows) if (c.tcgdex_id === id) await update('owned_cards', c.id, { standard, standard_date: day })
+        } catch {
+          /* next time the collection is opened */
+        }
+      }
+    }
+    void Promise.all([worker(), worker(), worker(), worker()])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, day])
+
   // ---- one point a day for the value chart
   useEffect(() => {
     if (!data.owned_cards.length || busy) return
@@ -111,7 +164,11 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
 
   const usedSets = useMemo(() => [...new Set(data.owned_cards.map((c) => c.set_code))].filter(Boolean).sort(), [data.owned_cards])
   const usedLangs = useMemo(() => [...new Set(data.owned_cards.map((c) => c.language))], [data.owned_cards])
-  const list = useMemo(() => {
+  const legalCount = useMemo(() => {
+    const yes = data.owned_cards.filter(isPlayable).reduce((a, c) => a + c.quantity, 0)
+    return { yes, no: data.owned_cards.reduce((a, c) => a + c.quantity, 0) - yes }
+  }, [data.owned_cards])
+  const found = useMemo(() => {
     const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
     const words = fold(q).split(/\s+/).filter(Boolean)
     return data.owned_cards
@@ -119,6 +176,7 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
         const v = valueOf(c, day)
         if (lang && c.language !== lang) return false
         if (setCode && c.set_code !== setCode) return false
+        if (place && (place === NO_PLACE ? c.location !== '' : c.location !== place)) return false
         if (filter === 'free' && !(alloc.free.get(c.id) ?? 0)) return false
         if (filter === 'deck' && !alloc.usedIn.has(c.id)) return false
         if (filter === 'sale' && !c.for_sale) return false
@@ -133,7 +191,8 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
         if (sort === 'recent') return b.created_at.localeCompare(a.created_at)
         return (valueOf(b, day).unit ?? -1) * b.quantity - (valueOf(a, day).unit ?? -1) * a.quantity || a.name.localeCompare(b.name)
       })
-  }, [data.owned_cards, q, lang, setCode, filter, sort, alloc, day])
+  }, [data.owned_cards, q, lang, setCode, place, filter, sort, alloc, day])
+  const list = useMemo(() => (legal === 'all' ? found : found.filter((c) => isPlayable(c) === (legal === 'yes'))), [found, legal])
   const snaps = data.collection_snapshots.filter((s) => s.total > 0).sort((a, b) => a.date.localeCompare(b.date))
   /** The oldest one: what is shown is at least this recent. */
   const refDate = data.owned_cards.reduce<string | null>((a, c) => (c.ref_date && (!a || c.ref_date < a) ? c.ref_date : a), null)
@@ -213,6 +272,15 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
                 ))}
               </select>
             )}
+            {places.length > 0 && (
+              <select className="field w-auto max-w-48" aria-label="Dónde está" value={place} onChange={(e) => setPlace(e.target.value)}>
+                <option value="">En cualquier sitio</option>
+                {places.map((x) => (
+                  <option key={x}>{x}</option>
+                ))}
+                <option value={NO_PLACE}>Sin indicar</option>
+              </select>
+            )}
             <select className="field w-auto" aria-label="Ordenar" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
               <option value="value">Más valiosas</option>
               <option value="name">Nombre</option>
@@ -220,7 +288,16 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
               <option value="recent">Últimas añadidas</option>
             </select>
           </div>
-          <div className="mt-2">
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Segmented
+              value={legal}
+              onChange={setLegal}
+              options={[
+                { value: 'yes', label: `Jugables (${legalCount.yes})` },
+                { value: 'no', label: `No jugables (${legalCount.no})` },
+                { value: 'all', label: 'Todas' },
+              ]}
+            />
             <Segmented value={filter} onChange={setFilter} options={FILTERS} />
           </div>
 
@@ -229,7 +306,16 @@ export function Collection({ initialId = null }: { initialId?: string | null }) 
               <CardRow key={c.id} c={c} alloc={alloc} day={day} onOpen={() => setOpenId(c.id)} />
             ))}
           </ul>
-          {!list.length && <Empty>Ninguna carta coincide.</Empty>}
+          {!list.length && (
+            <Empty>
+              <p>{found.length ? `Ninguna carta ${legal === 'yes' ? 'jugable' : 'no jugable'} coincide.` : 'Ninguna carta coincide.'}</p>
+              {found.length > 0 && (
+                <button type="button" className="mt-1 min-h-9 text-sm font-medium text-accent hover:underline" onClick={() => setLegal('all')}>
+                  Ver también las {legal === 'yes' ? 'no jugables' : 'jugables'} ({found.length})
+                </button>
+              )}
+            </Empty>
+          )}
           {list.length > limit && (
             <button type="button" className="mt-3 min-h-11 w-full text-sm font-medium text-accent hover:underline" onClick={() => setLimit((l) => l + 120)}>
               Ver más ({list.length - limit})
@@ -288,9 +374,16 @@ function CardRow({ c, alloc, day, onOpen }: { c: OwnedCard; alloc: Allocation; d
                 {c.grade_company} {c.grade}
               </span>
             )}
+            {!isPlayable(c) && <Badge className="border-line-strong text-muted">No jugable</Badge>}
             {c.for_sale && <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">Venta</Badge>}
           </span>
           <span className="mt-0.5 block truncate text-[11px] text-muted" title={used?.map((u) => `${u.n} en ${u.deck}`).join(', ')}>
+            {c.location && (
+              <>
+                <MapPin className="mr-0.5 inline size-3 align-[-2px]" aria-label="Está en" />
+                {c.location} ·{' '}
+              </>
+            )}
             {used ? `${free} libres · ${used.map((u) => `${u.n} en ${u.deck}`).join(', ')}` : 'Libre'}
           </span>
         </span>
@@ -332,6 +425,7 @@ function CardModal({ card: c, alloc, onClose }: { card: OwnedCard; alloc: Alloca
     if (!ok) return
     onClose()
     const { id: _i, user_id: _u, created_at: _c, ...row } = f
+    row.location = row.location.trim()
     if (f.language !== c.language) {
       // Another language: its own name and scan, and the old price no longer applies.
       const local = await fetchCard(f.language, c.tcgdex_id).catch(() => null)
@@ -423,8 +517,8 @@ function CardModal({ card: c, alloc, onClose }: { card: OwnedCard; alloc: Alloca
                 ))}
               </select>
             </Field>
-            <Field label="Ubicación">
-              <input className="field" value={f.location} maxLength={80} onChange={(e) => set('location', e.target.value)} placeholder="Archivador, caja…" />
+            <Field label="Dónde está">
+              <PlaceInput value={f.location} onChange={(v) => set('location', v)} />
             </Field>
             <Field label="Pagado (€/u.)">
               <input className={cx('field num', paid.trim() && cost === null && 'border-rose-500')} inputMode="decimal" value={paid} onChange={(e) => setPaid(e.target.value)} />
@@ -501,7 +595,7 @@ function CardInfo({ card: c, info }: { card: OwnedCard; info: ApiCard | null }) 
     ['Resistencia', info?.resistances?.map((w) => `${w.type} ${w.value ?? ''}`).join(', ')],
     ['Retirada', info?.category && categoryOf(info) === 'pokemon' ? String(info.retreat ?? 0) : null],
     ['Ilustrador', info?.illustrator],
-    ['Legal', info?.legal ? [info.legal.standard && 'Estándar', info.legal.expanded && 'Expandido'].filter(Boolean).join(', ') || 'No' : null],
+    ['Legal', [isPlayable(c) && c.standard && 'Estándar', info?.legal?.expanded && isWestern(c.language) && 'Expandido'].filter(Boolean).join(', ') || (c.standard == null && isWestern(c.language) ? null : 'No')],
   ]
   return (
     <div className="min-w-0 space-y-3 text-sm md:col-span-2 xl:col-span-1 xl:border-l xl:border-line xl:pl-6">
@@ -544,13 +638,14 @@ interface Defaults {
   language: string
   condition: string
   finish: string
+  location: string
 }
 const DEF_KEY = 'ph-card-defaults'
 function readDefaults(): Defaults {
   try {
-    return { language: 'es', condition: 'NM', finish: 'auto', ...(JSON.parse(localStorage.getItem(DEF_KEY) ?? '{}') as Partial<Defaults>) }
+    return { language: 'es', condition: 'NM', finish: 'auto', location: '', ...(JSON.parse(localStorage.getItem(DEF_KEY) ?? '{}') as Partial<Defaults>) }
   } catch {
-    return { language: 'es', condition: 'NM', finish: 'auto' }
+    return { language: 'es', condition: 'NM', finish: 'auto', location: '' }
   }
 }
 const writeDefaults = (d: Defaults) => {
@@ -571,8 +666,8 @@ export function buildRow(local: ApiCard, en: ApiCard | null, d: Defaults, quanti
   return {
     tcgdex_id: local.id, set_code: set?.code || local.set.id.toUpperCase(), set_name: (d.language === 'es' ? set?.es : set?.en) ?? local.set.name, number: local.localId.replace(/^0+(?=\d)/, ''), name: local.name, name_en: en?.name ?? local.name,
     category: categoryOf(ref), signature: en ? signatureOf(en) : `x|${local.id}`, rarity: local.rarity ?? en?.rarity ?? '', image: local.image ?? en?.image ?? null, language: d.language, condition: d.condition, finish,
-    first_edition: false, signed: false, altered: false, grade_company: '', grade: '', quantity, location: '', for_sale: false, paid: null, acquired_at: today(),
-    cm_product: p.cm, ref_low: isReverse(finish) ? (p.lowHolo ?? p.low) : p.low, ref_trend: isReverse(finish) ? (p.trendHolo ?? p.trend) : p.trend, ref_date: today(), own_price: null, own_price_date: null, notes: '',
+    first_edition: false, signed: false, altered: false, grade_company: '', grade: '', quantity, location: d.location.trim(), for_sale: false, paid: null, acquired_at: today(),
+    cm_product: p.cm, ref_low: isReverse(finish) ? (p.lowHolo ?? p.low) : p.low, ref_trend: isReverse(finish) ? (p.trendHolo ?? p.trend) : p.trend, ref_date: today(), standard: en && standardPrint(en) ? true : null, standard_date: en && standardPrint(en) ? today() : null, own_price: null, own_price_date: null, notes: '',
   }
 }
 
@@ -580,11 +675,12 @@ export function buildRow(local: ApiCard, en: ApiCard | null, d: Defaults, quanti
 function useAddRows() {
   const { data, createMany, update } = useData()
   return async (rows: NewRow<'owned_cards'>[]) => {
-    const stacks = new Map(data.owned_cards.map((c) => [stackKey(c), c]))
+    // Without a place it joins the stack you have; with one, the stack in that place.
+    const key = (c: NewRow<'owned_cards'>) => `${stackKey(c)}|${c.location}`
     const fresh = new Map<string, NewRow<'owned_cards'>>()
     for (const r of rows) {
-      const k = stackKey(r)
-      const old = stacks.get(k)
+      const k = key(r)
+      const old = data.owned_cards.find((c) => (r.location ? key(c) === k : stackKey(c) === stackKey(r)))
       if (old) await update('owned_cards', old.id, { quantity: old.quantity + r.quantity })
       else if (fresh.has(k)) fresh.get(k)!.quantity += r.quantity
       else fresh.set(k, { ...r })
@@ -601,7 +697,7 @@ function DefaultsBar({ value, onChange }: { value: Defaults; onChange: (d: Defau
     onChange(next)
   }
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Field label="Idioma">
         <select className="field" value={value.language} onChange={(e) => set({ language: e.target.value })}>
           {LANGUAGES.map((l) => (
@@ -629,6 +725,9 @@ function DefaultsBar({ value, onChange }: { value: Defaults; onChange: (d: Defau
             </option>
           ))}
         </select>
+      </Field>
+      <Field label="Dónde está">
+        <PlaceInput value={value.location} onChange={(location) => set({ location })} />
       </Field>
     </div>
   )

@@ -9,6 +9,8 @@ export type Command =
   | { kind: 'day'; date: string }
   | { kind: 'week' }
   | { kind: 'month' }
+  | { kind: 'card'; query: string }
+  | { kind: 'unknown'; text: string }
   | { kind: 'undo' }
   | { kind: 'help' }
   | { kind: 'error'; message: string }
@@ -72,7 +74,7 @@ const splitJira = (s: string) => {
 const pad = (n: number) => String(n).padStart(2, '0')
 
 export function parseCommand(raw: string, today: string): Command {
-  const text = raw.trim().replace(/^\//, '').replace(/@\w+bot\b/i, '').trim().slice(0, 1000)
+  const text = raw.normalize('NFC').trim().replace(/^[¿¡/\s]+/, '').replace(/[?!\s]+$/, '').replace(/@\w+bot\b/i, '').trim().slice(0, 1000)
   const word = fold(text.split(/\s/, 1)[0] ?? '')
   const rest = text.slice(text.split(/\s/, 1)[0].length).trim()
 
@@ -119,8 +121,19 @@ export function parseCommand(raw: string, today: string): Command {
     const only = m[4].trim().match(/^[A-Za-z][A-Za-z0-9]+-\d+$/)
     return { kind: 'hours', hours: Math.round(hours * 100) / 100, description: only ? '' : description.slice(0, 2000), jira: only ? only[0].toUpperCase() : jira }
   }
-  return { kind: 'error', message: 'No te he entendido. Escribe «ayuda» para ver lo que puedo hacer.' }
+  // ¿Tengo…? · ¿Cuántas … tengo? · ¿Dónde está …? · carta …
+  const f = fold(text)
+  const ask = f.match(/^(?:cartas?|busca(?:r)?|tengo|donde (?:esta|estan|tengo)|cuant[ao]s(?: copias)?(?: de)?(?: tengo(?: de)?)?)(?=\s|$)\s*/)
+  if (ask && !/^tengo que\b/.test(f)) {
+    let query = text.slice(ask[0].length)
+    if (/^cuant|^donde/.test(f)) query = query.replace(/\s+(?:la |lo )?tengo$/i, '')
+    query = query.replace(/^(?:(?:la|el|las|los|una|un|alguna?|algún)\s+)?(?:cartas?|copias?)\s+(?:de\s+)?/i, '').replace(/^(?:alguna?|algún)\s+/i, '').replace(/[«»"]/g, '').trim()
+    return query ? { kind: 'card', query: query.slice(0, 100) } : { kind: 'error', message: 'Dime qué carta. Prueba: carta Latias ex, o carta SSP 76' }
+  }
+  return { kind: 'unknown', text: text.slice(0, 100) }
 }
+/** Nothing matched. */
+export const NOT_UNDERSTOOD = 'No te he entendido. Escribe «ayuda» para ver lo que puedo hacer.'
 
 export const HELP = `👋 <b>Esto es lo que entiendo</b>
 
@@ -128,6 +141,8 @@ export const HELP = `👋 <b>Esto es lo que entiendo</b>
 ✅ <code>tarea llamar al banco mañana</code>
 📅 <code>evento viernes 18:00 dentista</code>
 🕗 <code>horas 8 PLAT-142 revisión</code>
+
+🎴 <code>carta Latias ex</code> · <code>¿tengo SSP 76?</code>
 
 ℹ️ <code>hoy</code> · <code>mañana</code> · <code>semana</code> · <code>mes</code>
 ↩️ <code>deshacer</code> quita lo último que me has dictado`
