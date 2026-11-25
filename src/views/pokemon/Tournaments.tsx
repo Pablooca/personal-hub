@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { CalendarDays, Globe, MapPin, Plus, Trophy, Users } from 'lucide-react'
-import { Badge, Button, Empty, Segmented, cx } from '../../components/ui'
+import { Badge, Button, Empty, cx } from '../../components/ui'
 import { fromDateKey } from '../../lib/dates'
 import { fmtDate } from '../../lib/format'
 import { recordText, swissRecord } from '../../lib/pokemon/stats'
@@ -36,9 +36,8 @@ export function OwnIcons({ deck, team, size = 32 }: { deck?: TcgDeck | null; tea
 
 const ORDER: Record<TournamentStatus, number> = { in_progress: 0, planned: 1, finished: 2, dropped: 2 }
 
-export function Tournaments({ onCalculator }: { onCalculator: (s: CalcSeed) => void }) {
+export function Tournaments({ game, onCalculator }: { game: PokemonGame; onCalculator: (s: CalcSeed) => void }) {
   const { data } = useData()
-  const [game, setGame] = useState<PokemonGame | 'all'>('all')
   const [editing, setEditing] = useState<Tournament | 'new' | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const open = data.tournaments.find((t) => t.id === openId)
@@ -46,7 +45,7 @@ export function Tournaments({ onCalculator }: { onCalculator: (s: CalcSeed) => v
   const list = useMemo(
     () =>
       data.tournaments
-        .filter((t) => game === 'all' || t.game === game)
+        .filter((t) => t.game === game)
         .sort((a, b) => ORDER[a.status] - ORDER[b.status] || (a.status === 'planned' ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date))),
     [data.tournaments, game],
   )
@@ -62,21 +61,16 @@ export function Tournaments({ onCalculator }: { onCalculator: (s: CalcSeed) => v
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <Segmented
-          value={game}
-          onChange={setGame}
-          options={[
-            { value: 'all', label: 'Todos' },
-            { value: 'tcg', label: 'TCG' },
-            { value: 'vgc', label: 'VGC' },
-          ]}
-        />
-        <div className="flex items-center gap-3">
+        <p className="text-sm text-muted">
+          {list.length} {list.length === 1 ? 'torneo' : 'torneos'}
           {totalCp > 0 && (
-            <span className="text-sm text-muted">
-              <span className="num font-semibold text-fg">{totalCp}</span> CP
-            </span>
+            <>
+              {' '}
+              · <span className="num font-semibold text-fg">{totalCp}</span> CP
+            </>
           )}
+        </p>
+        <div className="flex items-center gap-3">
           <Button variant="primary" onClick={() => setEditing('new')}>
             <Plus className="size-4" /> Nuevo torneo
           </Button>
@@ -85,7 +79,7 @@ export function Tournaments({ onCalculator }: { onCalculator: (s: CalcSeed) => v
 
       {list.length === 0 ? (
         <Empty icon={<Trophy className="size-6 text-faint" />}>
-          <p>Aún no hay torneos{game !== 'all' && ` de ${game.toUpperCase()}`}.</p>
+          <p>Aún no hay torneos de {game.toUpperCase()}.</p>
           <Button className="mt-1" onClick={() => setEditing('new')}>
             <Plus className="size-4" /> Registrar el primero
           </Button>
@@ -101,7 +95,6 @@ export function Tournaments({ onCalculator }: { onCalculator: (s: CalcSeed) => v
                 <button type="button" onClick={() => setOpenId(t.id)} className="card flex w-full items-start gap-3 p-4 text-left transition hover:border-line-strong">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <Badge className="border-line-strong text-fg">{t.game.toUpperCase()}</Badge>
                       <Badge className={STATUS_LABELS[t.status].cls}>{STATUS_LABELS[t.status].label}</Badge>
                       {t.made_top_cut && <Badge className="border-accent/30 bg-accent/10 text-fg">Top Cut</Badge>}
                     </div>
@@ -150,7 +143,7 @@ export function Tournaments({ onCalculator }: { onCalculator: (s: CalcSeed) => v
       {editing && (
         <TournamentForm
           tournament={editing === 'new' ? null : editing}
-          defaultGame={game === 'all' ? 'tcg' : game}
+          defaultGame={game}
           onClose={() => setEditing(null)}
           onCreated={(id) => setOpenId(id)}
         />

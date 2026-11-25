@@ -8,6 +8,7 @@ export function buildDemoPokemon(today: Date): Pick<Dataset, 'tcg_decks' | 'vgc_
   const now = new Date().toISOString()
   const day = (n: number) => toDateKey(addDays(today, n))
   const deck: TcgDeck = { id: uid(), ...EXAMPLE_DECK, icons: [...EXAMPLE_DECK.icons], created_at: now }
+  const deck2: TcgDeck = { ...deck, id: uid(), name: 'Dragapult de ejemplo', icons: ['dragapult'] }
   const team: VgcTeam = { id: uid(), ...EXAMPLE_TEAM, created_at: now }
 
   const base: Omit<Tournament, 'id' | 'game' | 'name' | 'date'> = {
@@ -15,7 +16,7 @@ export function buildDemoPokemon(today: Date): Pick<Dataset, 'tcg_decks' | 'vgc_
     top_cut_format: 'bo3', made_top_cut: false, deck_id: null, team_id: null, status: 'finished', placement_bracket: null, placement: null, cp: null, notes: '', created_at: now,
   }
   const cup: Tournament = { ...base, id: uid(), game: 'tcg', name: 'League Cup de ejemplo', date: day(-12), location: 'Tienda de ejemplo', deck_id: deck.id, made_top_cut: true, placement_bracket: 4, placement: 3, cp: 32 }
-  const online: Tournament = { ...base, id: uid(), game: 'tcg', name: 'Torneo online de ejemplo', date: day(-5), mode: 'online', category: 'online', players: 120, swiss_rounds: 7, swiss_format: 'bo1', deck_id: deck.id, placement_bracket: 64, placement: 38 }
+  const online: Tournament = { ...base, id: uid(), game: 'tcg', name: 'Torneo online de ejemplo', date: day(-5), mode: 'online', category: 'online', players: 120, swiss_rounds: 7, swiss_format: 'bo1', deck_id: deck2.id, placement_bracket: 64, placement: 38 }
   const vgc: Tournament = { ...base, id: uid(), game: 'vgc', name: 'League Challenge VGC de ejemplo', date: day(-3), category: 'league_challenge', format: 'Regulación M-C', players: 18, swiss_rounds: 5, team_id: team.id, placement_bracket: 8, cp: 8 }
   const live: Tournament = { ...base, id: uid(), game: 'tcg', name: 'League Cup en juego', date: day(0), location: 'Tienda de ejemplo', players: 64, deck_id: deck.id, status: 'in_progress' }
 
@@ -74,5 +75,5 @@ export function buildDemoPokemon(today: Date): Pick<Dataset, 'tcg_decks' | 'vgc_
   v(4, 'LWW', ['Delphox', 'Whimsicott', 'Glimmora', 'Garchomp'], [king, sinis, chomp])
   v(5, 'WLL', ['Delphox', 'Farigiraf', 'Heracross', 'Garchomp'], [char, inc, sinis, king])
 
-  return { tcg_decks: [deck], vgc_teams: [team], tournaments: [live, vgc, online, cup], tournament_rounds: rounds }
+  return { tcg_decks: [deck, deck2], vgc_teams: [team], tournaments: [live, vgc, online, cup], tournament_rounds: rounds }
 }

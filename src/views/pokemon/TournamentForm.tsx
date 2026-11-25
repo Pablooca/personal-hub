@@ -125,9 +125,6 @@ export function TournamentForm({ tournament, defaultGame, onClose, onCreated }: 
       swiss_format: tournament ? x.swiss_format : mode === 'online' ? 'bo1' : 'bo3',
     }))
   }
-  function setGame(game: PokemonGame) {
-    setF((x) => ({ ...x, game, format: x.format === META.format || /^Regulaci/.test(x.format) ? (game === 'tcg' ? META.format : 'Regulación M-C') : x.format }))
-  }
   function applyOfficial() {
     if (!official) return
     setF((x) => ({
@@ -182,7 +179,7 @@ export function TournamentForm({ tournament, defaultGame, onClose, onCreated }: 
       open
       full
       onClose={onClose}
-      title={tournament ? 'Editar torneo' : 'Nuevo torneo'}
+      title={`${tournament ? 'Editar torneo' : 'Nuevo torneo'} · ${f.game.toUpperCase()}`}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -202,15 +199,9 @@ export function TournamentForm({ tournament, defaultGame, onClose, onCreated }: 
         }}
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <span className="label">Juego</span>
-              <Choice<PokemonGame> label="Juego" value={f.game} onChange={setGame} options={[{ value: 'tcg', label: 'TCG' }, { value: 'vgc', label: 'VGC' }]} />
-            </div>
-            <div>
-              <span className="label">Modalidad</span>
-              <Choice<Tournament['mode']> label="Modalidad" value={f.mode} onChange={setMode} options={[{ value: 'in_person', label: 'Presencial' }, { value: 'online', label: 'Online' }]} />
-            </div>
+          <div>
+            <span className="label">Modalidad</span>
+            <Choice<Tournament['mode']> label="Modalidad" value={f.mode} onChange={setMode} options={[{ value: 'in_person', label: 'Presencial' }, { value: 'online', label: 'Online' }]} />
           </div>
           <Field label="Nombre">
             <input className={cx('field', tried && !f.name.trim() && 'border-rose-500')} value={f.name} maxLength={160} onChange={(e) => set('name', e.target.value)} placeholder="League Cup Sevilla, Limitless Weekly…" />

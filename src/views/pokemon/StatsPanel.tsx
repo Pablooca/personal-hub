@@ -22,46 +22,40 @@ const inPeriod = (date: string, p: Period) => {
 
 const Kpi = ({ label, t, icon }: { label: string; t: Tally; icon?: ReactNode }) => <Stat label={label} value={fmtRate(winRate(t))} hint={played(t) ? `${recordText(t)} · ${played(t)} rondas` : 'Sin datos'} icon={icon} />
 
-export function StatsPanel() {
+export function StatsPanel({ game }: { game: PokemonGame }) {
   const { data } = useData()
-  const [game, setGame] = useState<PokemonGame | 'all'>('all')
   const [period, setPeriod] = useState<Period>('all')
-  const all = useMemo(() => matchesOf(data.tournaments, data.tournament_rounds), [data.tournaments, data.tournament_rounds])
-  const ms = useMemo(() => all.filter((m) => (game === 'all' || m.t.game === game) && inPeriod(m.t.date, period)), [all, game, period])
+  const all = useMemo(() => matchesOf(data.tournaments, data.tournament_rounds).filter((m) => m.t.game === game), [data.tournaments, data.tournament_rounds, game])
+  const ms = useMemo(() => all.filter((m) => inPeriod(m.t.date, period)), [all, period])
 
   if (!all.length)
     return (
       <Empty icon={<BarChart3 className="size-6 text-faint" />}>
-        <p>Las estadísticas aparecerán cuando registres rondas en tus torneos.</p>
+        <p>Las estadísticas aparecerán cuando registres rondas en tus torneos de {game.toUpperCase()}.</p>
       </Empty>
     )
 
-  const tcg = ms.filter((m) => m.t.game === 'tcg')
-  const vgc = ms.filter((m) => m.t.game === 'vgc')
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-3">
-        <Segmented value={game} onChange={setGame} options={[{ value: 'all', label: 'Todo' }, { value: 'tcg', label: 'TCG' }, { value: 'vgc', label: 'VGC' }]} />
         <Segmented value={period} onChange={setPeriod} options={[{ value: 'all', label: 'Siempre' }, { value: 'year', label: 'Este año' }, { value: '90', label: '90 días' }]} />
       </div>
       {!ms.length ? (
         <Empty>No hay rondas con estos filtros.</Empty>
       ) : (
         <>
-          <Global ms={ms} />
-          {tcg.length > 0 && <TcgStats ms={tcg} />}
-          {vgc.length > 0 && <VgcStats ms={vgc} />}
+          <Global ms={ms} game={game} />
+          {game === 'tcg' ? <TcgStats ms={ms} /> : <VgcStats ms={ms} />}
         </>
       )}
     </div>
   )
 }
 
-function Global({ ms }: { ms: Match[] }) {
+function Global({ ms, game }: { ms: Match[]; game: PokemonGame }) {
   const by = (f: (m: Match) => boolean) => tally(ms.filter(f))
   const turn = turnTally(ms)
   const dice = diceTally(ms)
-  const tcgMatches = ms.filter((m) => m.t.game === 'tcg')
   return (
     <section>
       <h2 className="mb-3 text-base font-semibold">Global</h2>
@@ -71,7 +65,7 @@ function Global({ ms }: { ms: Match[] }) {
         <Kpi label="BO3" t={by((m) => m.format === 'bo3')} />
         <Stat label="Torneos" value={new Set(ms.map((m) => m.t.id)).size} hint={`${new Set(ms.filter((m) => m.t.made_top_cut).map((m) => m.t.id)).size} con Top Cut`} />
       </div>
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className={cx('mt-3 grid grid-cols-1 gap-3', game === 'tcg' && 'lg:grid-cols-2')}>
         <Card title="Fase y formato">
           <WinBar label="Suizo · BO1" tally={by((m) => m.r.phase === 'swiss' && m.format === 'bo1')} />
           <WinBar label="Suizo · BO3" tally={by((m) => m.r.phase === 'swiss' && m.format === 'bo3')} />
@@ -81,22 +75,18 @@ function Global({ ms }: { ms: Match[] }) {
           <WinBar label="Presencial" tally={by((m) => m.t.mode === 'in_person')} />
           <WinBar label="Online" tally={by((m) => m.t.mode === 'online')} />
         </Card>
-        <Card title="Dado y turno de salida (TCG)">
-          {tcgMatches.length ? (
-            <>
-              <WinBar label="Ganando el dado" tally={dice.won} />
-              <WinBar label="Perdiendo el dado" tally={dice.lost} />
-              <div className="my-2 border-t border-line" />
-              <WinBar label="Saliendo 1.º" tally={turn.first} hint="Por partida" />
-              <WinBar label="Saliendo 2.º" tally={turn.second} hint="Por partida" />
-              <p className="mt-2 text-xs text-muted">
-                {dice.rate === null ? 'Aún no has anotado el dado.' : `Has ganado el dado el ${fmtRate(dice.rate)} de las veces.`} El turno se cuenta por partida; el dado, por ronda.
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-muted">El turno de salida solo se registra en TCG.</p>
-          )}
-        </Card>
+        {game === 'tcg' && (
+          <Card title="Dado y turno de salida">
+            <WinBar label="Ganando el dado" tally={dice.won} />
+            <WinBar label="Perdiendo el dado" tally={dice.lost} />
+            <div className="my-2 border-t border-line" />
+            <WinBar label="Saliendo 1.º" tally={turn.first} hint="Por partida" />
+            <WinBar label="Saliendo 2.º" tally={turn.second} hint="Por partida" />
+            <p className="mt-2 text-xs text-muted">
+              {dice.rate === null ? 'Aún no has anotado el dado.' : `Has ganado el dado el ${fmtRate(dice.rate)} de las veces.`} El turno se cuenta por partida; el dado, por ronda.
+            </p>
+          </Card>
+        )}
       </div>
     </section>
   )
@@ -107,18 +97,19 @@ function TcgStats({ ms }: { ms: Match[] }) {
   const { data } = useData()
   const [deckId, setDeckId] = useState('')
   const decks = useMemo(() => [...groupTally(ms, (m) => m.t.deck_id ?? 'none').entries()].sort((a, b) => played(b[1]) - played(a[1])), [ms])
-  const scoped = useMemo(() => (deckId ? ms.filter((m) => (m.t.deck_id ?? 'none') === deckId) : ms), [ms, deckId])
-  const matrix = useMemo(() => matchupMatrix(ms), [ms])
+  const picked = decks.some(([id]) => id === deckId) ? deckId : ''
+  const scoped = useMemo(() => (picked ? ms.filter((m) => (m.t.deck_id ?? 'none') === picked) : ms), [ms, picked])
+  const matrix = useMemo(() => matchupMatrix(scoped), [scoped])
   const turn = turnTally(scoped)
   const dice = diceTally(scoped)
   const deckOf = (id: string) => data.tcg_decks.find((d) => d.id === id)
   const deckName = (id: string) => deckOf(id)?.name ?? 'Sin mazo asignado'
   const name = (c: { id: string; name: string }) => ARCHETYPE.get(c.id)?.name ?? c.name
-  const unknown = ms.filter((m) => !m.r.opponent_archetype).length
+  const unknown = scoped.filter((m) => !m.r.opponent_archetype).length
 
   return (
     <section>
-      <h2 className="mb-3 text-base font-semibold">TCG por mazo</h2>
+      <h2 className="mb-3 text-base font-semibold">Por mazo</h2>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card title="Rendimiento de mis mazos">
           {decks.map(([id, t]) => (
@@ -137,14 +128,7 @@ function TcgStats({ ms }: { ms: Match[] }) {
         <Card
           title="Salida y dado"
           action={
-            <select className="field h-8 w-44" aria-label="Mazo" value={deckId} onChange={(e) => setDeckId(e.target.value)}>
-              <option value="">Todos los mazos</option>
-              {decks.map(([id]) => (
-                <option key={id} value={id}>
-                  {deckName(id)}
-                </option>
-              ))}
-            </select>
+            <DeckFilter value={picked} onChange={setDeckId} decks={decks.map(([id]) => ({ id, name: deckName(id) }))} />
           }
         >
           <WinBar label="Saliendo 1.º" tally={turn.first} />
@@ -154,7 +138,12 @@ function TcgStats({ ms }: { ms: Match[] }) {
         </Card>
       </div>
 
-      <Card className="mt-3" title="Matriz de emparejamientos" bodyClass="p-0">
+      <Card
+        className="mt-3"
+        title="Matriz de emparejamientos"
+        bodyClass="p-0"
+        action={<DeckFilter value={picked} onChange={setDeckId} decks={decks.map(([id]) => ({ id, name: deckName(id) }))} />}
+      >
         {matrix.cols.length ? (
           <>
             <div className="scrollbar-thin relative overflow-x-auto" tabIndex={0} role="region" aria-label="Matriz de emparejamientos">
@@ -209,10 +198,23 @@ function TcgStats({ ms }: { ms: Match[] }) {
             </div>
           </>
         ) : (
-          <p className="p-4 text-sm text-muted">Anota el mazo del rival en tus rondas para ver la matriz.</p>
+          <p className="p-4 text-sm text-muted">{picked ? 'Con este mazo aún no has anotado ningún mazo rival.' : 'Anota el mazo del rival en tus rondas para ver la matriz.'}</p>
         )}
       </Card>
     </section>
+  )
+}
+
+function DeckFilter({ value, onChange, decks }: { value: string; onChange: (id: string) => void; decks: { id: string; name: string }[] }) {
+  return (
+    <select className="field h-9 w-40 min-w-0 sm:w-56" aria-label="Filtrar por mazo" value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Todos los mazos</option>
+      {decks.map((d) => (
+        <option key={d.id} value={d.id}>
+          {d.name}
+        </option>
+      ))}
+    </select>
   )
 }
 
@@ -268,7 +270,7 @@ function VgcStats({ ms }: { ms: Match[] }) {
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold">VGC</h2>
+        <h2 className="text-base font-semibold">Por equipo y Pokémon</h2>
         {teams.length > 1 && (
           <select className="field h-9 w-52" aria-label="Equipo" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
             <option value="">Todos los equipos</option>
