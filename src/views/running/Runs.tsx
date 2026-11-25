@@ -157,7 +157,7 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
   const hrN = hr.trim() ? Math.round(Number(hr)) : null
   const hrOk = hrN === null || (hrN >= 40 && hrN <= 240)
   const sane = avg === null || (avg >= 100 && avg <= 1500)
-  const ok = Boolean(date && kmN && kmN <= 200 && secs && sane && hrOk && !editing && missingSections(blocks).length === 0)
+  const ok = Boolean(date && kmN && kmN <= 200 && secs && sane && hrOk && !editing && missingSections(blocks).length === 0 && !blocks.some((b) => b.done && b.splits.some((x) => Number.isNaN(x))))
   const estimated = (kmN !== null && kmTyped === null) || (secs !== null && typed === null)
 
   async function save() {
@@ -364,6 +364,6 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
 const plain = ({ done: _d, splits: _s, ...b }: RunBlock): WorkoutBlock => b
 /** Drop trailing empty reps (the optional 6th one…). */
 const trim = (list: (number | null)[]) => {
-  const last = list.findLastIndex((x) => x !== null)
-  return list.slice(0, last + 1)
+  const clean = list.map((x) => (Number.isNaN(x) ? null : x))
+  return clean.slice(0, clean.findLastIndex((x) => x !== null) + 1)
 }

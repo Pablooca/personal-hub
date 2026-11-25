@@ -21,11 +21,16 @@ export const newBlock = (kind: BlockKind): WorkoutBlock => {
 }
 
 // -------------------------------------------------------------------- format
-const clock = (s: number) => `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, '0')}`
+/** 270 → "4:30" · 5126 → "1:25:26" */
+export function clock(s: number): string {
+  const t = Math.round(s)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return t >= 3600 ? `${Math.floor(t / 3600)}:${pad(Math.floor((t % 3600) / 60))}:${pad(t % 60)}` : `${Math.floor(t / 60)}:${pad(t % 60)}`
+}
 const dec = (n: number) => String(Math.round(n * 1000) / 1000).replace('.', ',')
 
 /** 30 → "30 s" · 300 → "5 min" · 90 → "1:30 min" */
-export const fmtSeconds = (s: number) => (s < 60 || (s < 90 && s % 60) ? `${s} s` : s % 60 ? `${clock(s)} min` : `${s / 60} min`)
+export const fmtSeconds = (s: number) => (s < 60 || (s < 90 && s % 60) ? `${s} s` : s % 60 ? (s >= 3600 ? clock(s) : `${clock(s)} min`) : `${s / 60} min`)
 export const fmtMeters = (m: number) => (m >= 1000 && m % 100 === 0 ? `${dec(m / 1000)} km` : `${dec(m)} m`)
 export const fmtAmount = (b: Pick<WorkoutBlock, 'unit' | 'amount'>) => (b.unit === 'm' ? fmtMeters(b.amount) : fmtSeconds(b.amount))
 export const fmtReps = (b: Pick<WorkoutBlock, 'reps' | 'reps_max'>) => (b.reps_max && b.reps_max > b.reps ? `${b.reps}–${b.reps_max}` : String(b.reps))
@@ -48,9 +53,13 @@ export function formatBlock(b: WorkoutBlock): string {
 export const formatWorkout = (blocks: readonly WorkoutBlock[]) => blocks.map(formatBlock).join(' + ')
 
 // --------------------------------------------------------------------- parse
-/** "800", "800 m", "1 km", "30 s", "5 min", "5'", '30"', "1:30" */
+/** "800", "800 m", "1 km", "30 s", "5 min", "5'", '30"', "1:30", "1:25:26", "1h25" */
 export function parseAmount(text: string): { unit: 's' | 'm'; amount: number } | null {
   const t = text.trim().toLowerCase().replace(/\s+/g, '').replace(',', '.')
+  const hms = t.match(/^(\d{1,2}):(\d{2}):(\d{2})h?$/)
+  if (hms) return Number(hms[2]) < 60 && Number(hms[3]) < 60 ? positive('s', Number(hms[1]) * 3600 + Number(hms[2]) * 60 + Number(hms[3])) : null
+  const h = t.match(/^(\d{1,2})h(?:(\d{1,2})(?:m|min)?)?$/)
+  if (h) return Number(h[2] ?? 0) < 60 ? positive('s', Number(h[1]) * 3600 + Number(h[2] ?? 0) * 60) : null
   const mmss = t.match(/^(\d{1,3}):(\d{2})(?:min|m|')?$/)
   if (mmss) return Number(mmss[2]) < 60 ? positive('s', Number(mmss[1]) * 60 + Number(mmss[2])) : null
   const m = t.match(/^(\d+(?:\.\d+)?)(km|mts?|metros|m|min(?:utos?)?|['’′](?!['’′])|seg(?:undos?)?|s|"|″|”|''|’’)?$/)
@@ -66,7 +75,7 @@ export function parseAmount(text: string): { unit: 's' | 'm'; amount: number } |
 }
 const positive = (unit: 's' | 'm', n: number) => {
   const amount = Math.round(n)
-  return amount > 0 && amount <= (unit === 's' ? 5 * 3600 : 60_000) ? { unit, amount } : null
+  return amount > 0 && amount <= (unit === 's' ? 12 * 3600 : 100_000) ? { unit, amount } : null
 }
 /** Recovery: "3'", "3 min", "30 s", "1:30"; a bare number is minutes up to 10 and seconds above. */
 export function parseRecovery(text: string): number | null {
@@ -78,7 +87,7 @@ export function parseRecovery(text: string): number | null {
   const a = parseAmount(t)
   return a && a.unit === 's' && a.amount <= 3600 ? a.amount : null
 }
-/** "4:30" or "45 s" → seconds */
+/** "4:30", "1:25:26" or "45 s" → seconds */
 export function parseTarget(text: string): number | null {
   const t = text.trim().replace(/\/km$/i, '')
   const a = parseAmount(/^\d+$/.test(t) ? `${t} s` : t)
@@ -140,13 +149,13 @@ export function parseWorkout(text: string): { blocks: WorkoutBlock[]; errors: st
     }
     let target_kind: WorkoutBlock['target_kind'] = null
     let target_s: number | null = null
-    const tgt = t.match(/(?:(@|\ba\b|\ben\b)\s*)(\d{1,2}:\d{2})\s*(\/\s*km)?/)
+    const tgt = t.match(/(?:(@|\ba\b|\ben\b)\s*)(\d{1,2}(?::\d{2}){1,2})\s*(\/\s*km)?/)
     if (tgt) {
       target_s = parseTarget(tgt[2])
       target_kind = target_s ? (tgt[1] === 'en' && !tgt[3] ? 'time' : 'pace') : null
       t = t.replace(tgt[0], ' ')
     }
-    const m = t.trim().match(/^(?:(\d{1,2})(?:\s*[-–a]\s*(\d{1,2}))?\s*[x×]\s*)?(\d+(?::\d{2})?(?:[.,]\d+)?\s*(?:km|mts?|metros|min\w*|seg\w*|m|s|''|"|″|'|′)?)\s*(?:de|por|al?)?$/)
+    const m = t.trim().match(/^(?:(\d{1,2})(?:\s*[-–a]\s*(\d{1,2}))?\s*[x×]\s*)?(\d+(?::\d{2}){0,2}(?:[.,]\d+)?\s*(?:km|mts?|metros|min\w*|seg\w*|m|s|''|"|″|'|′)?)\s*(?:de|por|al?)?$/)
     const amount = m && parseAmount(m[3])
     const reps = m?.[1] ? Number(m[1]) : 1
     const max = m?.[2] ? Number(m[2]) : null

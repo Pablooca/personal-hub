@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, BookmarkPlus, Plus, Trash2, Type, X } from 'lucide-
 import { Button, Check, cx } from '../../components/ui'
 import { fmtDuration, fmtKm, fmtPace } from '../../lib/running'
 import {
-  BLOCK_LABELS, MAIN_KINDS, SECTIONS, SECTION_LABELS, blockPace, blockTime, core, estimate, fmtAmount, fmtSeconds, formatBlock, formatWorkout, newBlock, parseAmount, parseRecovery,
+  BLOCK_LABELS, MAIN_KINDS, SECTIONS, SECTION_LABELS, blockPace, blockTime, clock, core, estimate, fmtAmount, fmtSeconds, formatBlock, formatWorkout, newBlock, parseAmount, parseRecovery,
   parseTarget, parseWorkout, ensureSections, repsDone, sectionOf, splitPace, type Section,
 } from '../../lib/workout'
 import type { BlockKind, RunBlock, RunType, WorkoutBlock } from '../../lib/types'
@@ -24,7 +24,6 @@ interface Draft {
   down: string
 }
 
-const clock = (s: number) => fmtPace(s)
 const toDraft = (b: WorkoutBlock, id: number): Draft => ({
   id,
   kind: b.kind,
@@ -243,7 +242,7 @@ function BlockRow({ d, section, first, last, removable, onChange, onMove, onRemo
         <div className="mt-2 flex items-end gap-2">
           <label className="min-w-0 flex-1" htmlFor={`${id}-t`}>
             <span className="label">Objetivo</span>
-            <input id={`${id}-t`} className={field('target')} value={d.target} onChange={(e) => onChange({ target: e.target.value })} placeholder="Opcional: 4:30" />
+            <input id={`${id}-t`} className={field('target')} value={d.target} onChange={(e) => onChange({ target: e.target.value })} placeholder={several ? 'Opcional: 4:30' : 'Opcional'} />
           </label>
           <select className="field w-36 shrink-0" aria-label="El objetivo es" value={timeTarget ? 'time' : 'pace'} disabled={amount?.unit === 's'} onChange={(e) => onChange({ targetKind: e.target.value as 'time' | 'pace' })}>
             <option value="time">{several ? 'por serie' : 'en total'}</option>
@@ -407,16 +406,22 @@ function RepsDone({ block: b, onChange }: { block: RunBlock; onChange: (n: numbe
 }
 
 function Splits({ block: b, onChange }: { block: RunBlock; onChange: (s: (number | null)[]) => void }) {
-  const [text, setText] = useState(() => b.splits.map((s) => (s ? clock(s) : '')))
+  const [text, setText] = useState(() => b.splits.map((s) => (s ? clock(s) : Number.isNaN(s) ? '?' : '')))
   const perRep = b.unit === 'm'
   const target = perRep ? blockTime(b) : blockPace(b)
   const goal = blockPace(b)
-  const parse = (t: string) => (t.trim() ? parseTarget(t) : null)
+  /** null = empty · NaN = written but not valid (the run can't be saved until it is fixed). */
+  const parse = (t: string): number | null => {
+    if (!t.trim()) return null
+    const v = parseTarget(t)
+    const p = v ? splitPace(b, v) : 0
+    return v && p >= 100 && p <= 1500 ? v : Number.NaN
+  }
   function commit(list: string[]) {
     setText(list)
     onChange(list.map(parse))
   }
-  const values = text.map(parse).filter((v): v is number => v !== null)
+  const values = text.map(parse).filter((v): v is number => Boolean(v))
   const avg = values.length ? values.reduce((a, v) => a + splitPace(b, v), 0) / values.length : null
   const several = text.length > 1
   const fill = text.find((t) => parse(t)) ?? (target ? clock(target) : '')
@@ -434,9 +439,10 @@ function Splits({ block: b, onChange }: { block: RunBlock; onChange: (s: (number
               </span>
               <input
                 className={cx('field num', several && 'px-2 text-center', t.trim() && !v && 'border-rose-500')}
+                aria-invalid={Boolean(t.trim()) && !v}
                 aria-label={several ? `Serie ${i + 1}` : 'Bloque principal'}
                 value={t}
-                placeholder={target ? clock(target) : perRep ? 'm:ss' : 'min/km'}
+                placeholder={target ? clock(target) : perRep ? (several ? 'm:ss' : 'h:mm:ss o mm:ss') : 'min/km'}
                 onChange={(e) => commit(text.map((x, j) => (j === i ? e.target.value : x)))}
               />
               {off !== null && several && <span className={cx('mt-0.5 block text-center font-mono text-[10px]', off > 0.04 ? 'text-amber-800 dark:text-amber-300' : 'text-faint')}>{off === 0 ? '=' : `${off > 0 ? '+' : '−'}${Math.abs(Math.round(splitPace(b, v!) - goal!))} s/km`}</span>}
@@ -444,6 +450,7 @@ function Splits({ block: b, onChange }: { block: RunBlock; onChange: (s: (number
           )
         })}
       </div>
+      {text.some((t) => Number.isNaN(parse(t))) && <p className="mt-1.5 text-xs text-rose-700 dark:text-rose-400">{perRep ? `Ese tiempo no cuadra con ${fmtAmount(b)}. Escríbelo como mm:ss o h:mm:ss (por ejemplo, 1:25:26).` : 'Escribe el ritmo como m:ss por km.'}</p>}
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
         {several && (
           <>

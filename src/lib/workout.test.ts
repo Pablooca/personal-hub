@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { HILLS, SERIES_800 } from './workout.samples.ts'
-import { highlight, blockPace, defaultBlocks, ensureSections, missingSections, padRunBlocks, sectionOf, blockTime, completion, easyPace, estimate, fmtSeconds, formatWorkout, newBlock, parseAmount, parseRecovery, parseWorkout, repDrift, repsDone, targetPace, toRunBlocks, workPace } from './workout.ts'
+import { clock, parseTarget, highlight, blockPace, defaultBlocks, ensureSections, missingSections, padRunBlocks, sectionOf, blockTime, completion, easyPace, estimate, fmtSeconds, formatWorkout, newBlock, parseAmount, parseRecovery, parseWorkout, repDrift, repsDone, targetPace, toRunBlocks, workPace } from './workout.ts'
 import { evaluate, parsePlan, planToCsv } from './running.ts'
 import type { RaceGoal, Run, RunPlanSession } from './types.ts'
 
@@ -176,4 +176,19 @@ test('a session can mix 800s and hills', () => {
   assert.deepEqual(mix.map((b) => b.kind), ['warmup', 'main', 'hills', 'cooldown'])
   assert.equal(completion(mix, toRunBlocks(mix))!.done, 7)
   assert.equal(targetPace(mix), 338)
+})
+
+test('block times accept hours: 1:25:26', () => {
+  assert.equal(parseTarget('1:25:26'), 5126)
+  assert.equal(parseTarget('4:30'), 270)
+  assert.equal(parseTarget('85:26'), 5126)
+  assert.equal(parseTarget('1:75:00'), null)
+  assert.deepEqual(parseAmount('1h25'), { unit: 's', amount: 5100 })
+  assert.deepEqual([clock(270), clock(5126), clock(3600)], ['4:30', '1:25:26', '1:00:00'])
+  const long = parseWorkout('5 min + 14 km suave en 1:25:26 + 5 min').blocks
+  assert.deepEqual([long[1].target_kind, long[1].target_s, Math.round(blockPace(long[1])!)], ['time', 5126, 366])
+  assert.deepEqual(parseWorkout(formatWorkout(long)).blocks, long)
+  const byTime = parseWorkout('5 min + 1:25:26 suave + 5 min').blocks
+  assert.equal(byTime[1].amount, 5126)
+  assert.deepEqual(parseWorkout(formatWorkout(byTime)).blocks, byTime)
 })
