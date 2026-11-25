@@ -3,7 +3,7 @@ import { CalendarDays, Globe, MapPin, Plus, Trophy, Users } from 'lucide-react'
 import { Badge, Button, Empty, cx } from '../../components/ui'
 import { fromDateKey } from '../../lib/dates'
 import { fmtDate } from '../../lib/format'
-import { recordText, swissRecord } from '../../lib/pokemon/stats'
+import { scored, recordText, swissRecord } from '../../lib/pokemon/stats'
 import { CATEGORY_LABELS, placementLabel } from '../../lib/pokemon/structure'
 import { parseTeam } from '../../lib/pokemon/team'
 import type { PokemonGame, TcgDeck, Tournament, TournamentStatus, VgcTeam } from '../../lib/types'
@@ -126,7 +126,7 @@ export function Tournaments({ game, initialId = null, onCalculator }: { game: Po
                     {swiss.rounds > 0 && (
                       <span className="num text-lg font-semibold">
                         {recordText(swiss)}
-                        {cut.length > 0 && <span className="text-sm text-muted"> +{cut.filter((r) => r.result === 'win' || r.result === 'bye').length}</span>}
+                        {cut.length > 0 && <span className="text-sm text-muted"> +{cut.filter((r) => scored(r.result) === 'win').length}</span>}
                       </span>
                     )}
                     <span className={cx('text-right text-xs text-muted', !placementLabel(t) && !t.cp && 'hidden')}>

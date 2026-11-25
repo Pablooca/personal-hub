@@ -225,7 +225,7 @@ export type TournamentCategory = (typeof TOURNAMENT_CATEGORIES)[number]
 export const TOURNAMENT_STATUSES = ['planned', 'in_progress', 'finished', 'dropped'] as const
 export type TournamentStatus = (typeof TOURNAMENT_STATUSES)[number]
 
-export const ROUND_RESULTS = ['win', 'loss', 'tie', 'bye'] as const
+export const ROUND_RESULTS = ['win', 'loss', 'tie', 'bye', 'no_show'] as const
 export type RoundResult = (typeof ROUND_RESULTS)[number]
 
 export type RoundPhase = 'swiss' | 'top_cut'

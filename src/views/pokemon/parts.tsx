@@ -305,6 +305,7 @@ export const RESULT_STYLES = {
   loss: { label: 'Derrota', short: 'D', cls: 'bg-rose-500/12 text-rose-700 dark:text-rose-300 border-rose-500/30' },
   tie: { label: 'Empate', short: 'E', cls: 'bg-surface-2 text-muted border-line-strong' },
   bye: { label: 'Bye', short: 'B', cls: 'bg-surface-2 text-muted border-line-strong' },
+  no_show: { label: 'No Show', short: 'NS', cls: 'bg-surface-2 text-muted border-line-strong' },
 } as const
 
 export const FORMAT_LABEL = { bo1: 'BO1', bo3: 'BO3' } as const

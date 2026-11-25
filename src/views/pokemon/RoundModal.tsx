@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Plus, Search, Trash2, X } from 'lucide-react'
 import { Button, Field, Modal, cx } from '../../components/ui'
 import { cutRoundLabel } from '../../lib/pokemon/structure'
-import { decided, maxGames, resultFromGames, rivalKey } from '../../lib/pokemon/stats'
+import { decided, isFreeWin, maxGames, resultFromGames, rivalKey, scored } from '../../lib/pokemon/stats'
 import { NATURES, natureLabel, parseTeam } from '../../lib/pokemon/team'
 import type { MatchFormat, RivalPokemon, RoundGame, RoundPhase, RoundResult, Tournament, TournamentRound, VgcTeam } from '../../lib/types'
 import { useData } from '../../state/data'
@@ -14,7 +14,7 @@ const RESULTS: RoundGame['result'][] = ['win', 'loss', 'tie']
 
 function Toggle<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { value: T; label: string; cls?: string }[]; onChange: (v: T) => void }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex gap-1">
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1">
       {options.map((o) => (
         <button
           key={o.value}
@@ -22,7 +22,7 @@ function Toggle<T extends string>({ label, value, options, onChange }: { label: 
           role="radio"
           aria-checked={o.value === value}
           onClick={() => onChange(o.value)}
-          className={cx('min-h-10 flex-1 rounded-lg border px-2.5 text-sm transition', o.value === value ? cx('font-semibold', o.cls ?? 'border-accent bg-accent/10') : 'border-line bg-surface-2 text-muted hover:text-fg')}
+          className={cx('min-h-10 flex-1 rounded-lg border px-2.5 text-sm whitespace-nowrap transition', options.length > 4 && 'basis-[30%]', o.value === value ? cx('font-semibold', o.cls ?? 'border-accent bg-accent/10') : 'border-line bg-surface-2 text-muted hover:text-fg')}
         >
           {o.label}
         </button>
@@ -63,8 +63,10 @@ export function RoundModal({
   const [notes, setNotes] = useState(round?.notes ?? '')
 
   const customInvalid = tcg && rival.id === 'other' && rival.icons.length === 0
+  /** Nothing was played: no games, dice or decks to record. A no-show still has a rival. */
+  const unplayed = result !== null && isFreeWin(result)
   const tieInCut = phase === 'top_cut' && result === 'tie'
-  const ok = result !== null && !tieInCut && !(customInvalid && result !== 'bye')
+  const ok = result !== null && !tieInCut && !(customInvalid && !unplayed)
 
   function changeGames(next: RoundGame[]) {
     setGames(next)
@@ -89,20 +91,21 @@ export function RoundModal({
   async function save(another: boolean) {
     if (!ok || result === null) return
     const bye = result === 'bye'
+    const free = isFreeWin(result)
     const row = {
       tournament_id: t.id,
       phase,
       number,
       result,
-      games: bye ? [] : games,
-      won_dice: bye || !tcg ? null : dice,
-      went_first: bye || !tcg ? null : (games[0]?.first ?? first),
+      games: free ? [] : games,
+      won_dice: free || !tcg ? null : dice,
+      went_first: free || !tcg ? null : (games[0]?.first ?? first),
       opponent_name: bye ? '' : opponent.trim(),
-      opponent_archetype: bye || !tcg ? '' : rival.id,
-      opponent_icons: bye || !tcg ? [] : rival.icons,
-      opponent_deck_name: bye || !tcg ? '' : rival.name.trim(),
-      opponent_pokemon: bye || tcg ? [] : mons.filter((m) => m.species).map((m) => ({ ...m, moves: m.moves.filter(Boolean) })),
-      my_pokemon: bye || tcg ? [] : mine,
+      opponent_archetype: free || !tcg ? '' : rival.id,
+      opponent_icons: free || !tcg ? [] : rival.icons,
+      opponent_deck_name: free || !tcg ? '' : rival.name.trim(),
+      opponent_pokemon: free || tcg ? [] : mons.filter((m) => m.species).map((m) => ({ ...m, moves: m.moves.filter(Boolean) })),
+      my_pokemon: free || tcg ? [] : mine,
       notes,
     }
     onSaved(another)
@@ -145,7 +148,7 @@ export function RoundModal({
           <Button variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
-          {!round && (phase === 'swiss' ? t.swiss_rounds === null || number < t.swiss_rounds : result === 'win') && (
+          {!round && (phase === 'swiss' ? t.swiss_rounds === null || number < t.swiss_rounds : result !== null && scored(result) === 'win') && (
             <Button className="hidden sm:inline-flex" disabled={!ok} onClick={() => void save(true)}>
               Guardar y siguiente
             </Button>
@@ -159,7 +162,7 @@ export function RoundModal({
       <div className={cx('mx-auto grid max-w-6xl grid-cols-1 gap-6', tcg ? 'lg:grid-cols-[360px_minmax(0,1fr)]' : 'lg:grid-cols-[340px_minmax(0,1fr)]')}>
         {/* ------------------------------------------------------------ result */}
         <div className="space-y-5">
-          {tcg && result !== 'bye' && (
+          {tcg && !unplayed && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <span className="label">Dado</span>
@@ -172,7 +175,7 @@ export function RoundModal({
             </div>
           )}
 
-          {result !== 'bye' && (
+          {!unplayed && (
             <div>
               <span className="label">{format === 'bo1' ? 'Partida' : 'Partidas (al mejor de 3)'}</span>
               <div className="space-y-2">
@@ -223,11 +226,11 @@ export function RoundModal({
               label="Resultado de la ronda"
               value={result ?? 'none'}
               onChange={(v) => v !== 'none' && setResult(v)}
-              options={(['win', 'loss', 'tie', 'bye'] as const)
+              options={(['win', 'loss', 'tie', 'bye', 'no_show'] as const)
                 .filter((r) => phase === 'swiss' || r !== 'tie')
                 .map((r) => ({ value: r, label: RESULT_STYLES[r].label, cls: RESULT_STYLES[r].cls }))}
             />
-            <p className="mt-1.5 text-xs text-muted">{tieInCut ? 'En el Top Cut no puede haber empate: añade la partida que falta.' : 'Se calcula con las partidas; cámbialo si hubo empate acordado o abandono.'}</p>
+            <p className="mt-1.5 text-xs text-muted">{tieInCut ? 'En el Top Cut no puede haber empate: añade la partida que falta.' : result === 'no_show' ? 'El rival no se presentó: ganas la ronda, pero no cuenta en tus estadísticas de partidas.' : 'Se calcula con las partidas; cámbialo si hubo empate acordado o abandono.'}</p>
           </div>
 
           {result !== 'bye' && (
@@ -241,7 +244,7 @@ export function RoundModal({
         </div>
 
         {/* ---------------------------------------------------------- opponent */}
-        {result !== 'bye' && (
+        {!unplayed && (
           <div className="min-w-0 lg:border-l lg:border-line lg:pl-6">
             {tcg ? (
               <>

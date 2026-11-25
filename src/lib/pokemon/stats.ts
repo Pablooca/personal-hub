@@ -11,6 +11,11 @@ export const played = (t: Tally) => t.w + t.l + t.t
 /** Same definition as Limitless: ties count as played, not as won. */
 export const winRate = (t: Tally) => (played(t) ? (t.w / played(t)) * 100 : null)
 export const recordText = (t: Tally) => (t.t ? `${t.w}-${t.l}-${t.t}` : `${t.w}-${t.l}`)
+/** Won without playing: a bye, or a rival who did not show up. Gives 3 points but is not a match. */
+export const isFreeWin = (r: RoundResult) => r === 'bye' || r === 'no_show'
+/** What the round gives in the standings. */
+export const scored = (r: RoundResult): 'win' | 'loss' | 'tie' => (r === 'bye' || r === 'no_show' ? 'win' : r)
+
 export function addResult(t: Tally, result: RoundResult | RoundGame['result']) {
   if (result === 'win') t.w++
   else if (result === 'loss') t.l++
@@ -41,22 +46,22 @@ export interface Match {
   format: MatchFormat
 }
 
-/** Every round joined with its tournament; byes are excluded (they are not matches). */
+/** Every round joined with its tournament; byes and no-shows are excluded (nothing was played). */
 export function matchesOf(tournaments: Tournament[], rounds: TournamentRound[]): Match[] {
   const byId = new Map(tournaments.map((t) => [t.id, t]))
   const out: Match[] = []
   for (const r of rounds) {
     const t = byId.get(r.tournament_id)
-    if (t && r.result !== 'bye') out.push({ t, r, format: roundFormat(t, r) })
+    if (t && !isFreeWin(r.result)) out.push({ t, r, format: roundFormat(t, r) })
   }
   return out
 }
 
-/** Swiss record including byes (they give 3 points). */
+/** Swiss record including byes and no-shows (they give 3 points). */
 export function swissRecord(rounds: TournamentRound[]): Tally & { points: number; rounds: number } {
   const t = emptyTally()
   const swiss = rounds.filter((r) => r.phase === 'swiss')
-  for (const r of swiss) addResult(t, r.result === 'bye' ? 'win' : r.result)
+  for (const r of swiss) addResult(t, scored(r.result))
   return { ...t, points: t.w * 3 + t.t, rounds: swiss.length }
 }
 

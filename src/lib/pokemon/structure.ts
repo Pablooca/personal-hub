@@ -101,7 +101,7 @@ export function cpFor(category: TournamentCategory, placement: number | null, pl
 }
 
 // --------------------------------------------------------------- placement
-export const PLACEMENT_BRACKETS = [1, 2, 4, 8, 16, 32, 64, 256, 1024] as const
+export const PLACEMENT_BRACKETS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 1024] as const
 export const bracketLabel = (b: number) => (b === 1 ? 'Campeón' : b === 2 ? 'Finalista' : `Top ${b}`)
 /** Bracket of an exact position; null beyond the last one. */
 export const bracketOf = (position: number): number | null => PLACEMENT_BRACKETS.find((b) => position <= b) ?? null
@@ -119,7 +119,7 @@ export function placementLabel(t: { placement: number | null; placement_bracket?
 
 /**
  * CP from what is known about the final placement. A bracket can span two CP tiers
- * (Top 256 = 65th–256th): then both are returned and nothing should be auto-filled.
+ * (Top 1024 = 257th–1024th): then both are returned and nothing should be auto-filled.
  */
 export function cpForPlacement(category: TournamentCategory, bracket: number | null, position: number | null, players: number | null): { min: number; max: number } | null {
   if (position) {

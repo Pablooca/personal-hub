@@ -5,7 +5,7 @@ import { fromDateKey } from '../../lib/dates'
 import { capitalize, fmtDate } from '../../lib/format'
 import { asymmetricCap, CATEGORY_LABELS, bracketOf, cpForPlacement, cutRoundLabel, eventKind, placementLabel, structureFor } from '../../lib/pokemon/structure'
 import { type SimConfig } from '../../lib/pokemon/simulate'
-import { recordText, roundFormat, swissRecord } from '../../lib/pokemon/stats'
+import { isFreeWin, recordText, roundFormat, swissRecord } from '../../lib/pokemon/stats'
 import type { MatchFormat, RoundPhase, Tournament, TournamentRound } from '../../lib/types'
 import { useData } from '../../state/data'
 import { useToast } from '../../state/toast'
@@ -86,8 +86,8 @@ export function TournamentDetail({ tournament: t, onBack, onCalculator }: { tour
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               {r.phase === 'top_cut' && <span className="text-sm font-semibold">{cutRoundLabel(t.top_cut_size, r.number)}</span>}
-              {r.result === 'bye' ? (
-                <span className="text-sm text-muted">Bye</span>
+              {isFreeWin(r.result) ? (
+                <span className="text-sm text-muted">{st.label}</span>
               ) : t.game === 'tcg' ? (
                 <>
                   <DeckIcons icons={r.opponent_icons} size={30} label={r.opponent_deck_name || 'Mazo sin identificar'} />
@@ -109,7 +109,7 @@ export function TournamentDetail({ tournament: t, onBack, onCalculator }: { tour
               {FORMAT_LABEL[f]}
               {r.games.length > 0 && f === 'bo3' && ` · ${r.games.filter((g) => g.result === 'win').length}-${r.games.filter((g) => g.result === 'loss').length}`}
             </span>
-            {t.game === 'tcg' && r.result !== 'bye' && (
+            {t.game === 'tcg' && !isFreeWin(r.result) && (
               <span>
                 {r.went_first === null ? '' : r.went_first ? '1.º' : '2.º'}
                 {r.won_dice !== null && (r.went_first !== null ? ' · ' : '')}

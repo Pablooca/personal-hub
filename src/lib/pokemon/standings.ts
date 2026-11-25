@@ -3,6 +3,7 @@
  * The field is simulated player by player; my own opponents use the records I noted.
  */
 import type { RivalRecord, RoundResult, TopCutType } from '../types'
+import { scored } from './stats.ts'
 import { mulberry32, type SimConfig } from './simulate.ts'
 
 /** Handbook 5.3.3.1: wins ÷ rounds, 25 %–100 % (75 % after dropping); byes are ignored. */
@@ -126,9 +127,9 @@ export interface Chances {
 /** Record of an opponent right after our match, assuming Swiss pairing (same score as me). */
 export function estimatedRival(before: { w: number; l: number; t: number }, mine: RoundResult): RivalRecord {
   return {
-    w: before.w + (mine === 'loss' ? 1 : 0),
-    l: before.l + (mine === 'win' ? 1 : 0),
-    t: before.t + (mine === 'tie' ? 1 : 0),
+    w: before.w + (scored(mine) === 'loss' ? 1 : 0),
+    l: before.l + (scored(mine) === 'win' ? 1 : 0),
+    t: before.t + (scored(mine) === 'tie' ? 1 : 0),
     dropped: false,
     bye: false,
   }
@@ -139,7 +140,7 @@ export function recordsBefore(rounds: readonly MyRound[]) {
   const acc = { w: 0, l: 0, t: 0 }
   return rounds.map((r) => {
     const before = { ...acc }
-    if (r.result === 'win' || r.result === 'bye') acc.w++
+    if (scored(r.result) === 'win') acc.w++
     else if (r.result === 'loss') acc.l++
     else acc.t++
     return before
@@ -218,7 +219,7 @@ export function chances(
           sum += finish(known?.rival ?? estimatedRival(known ? before[r] : me, result))
           opps++
         }
-        if (result === 'win' || result === 'bye') me.w++
+        if (scored(result) === 'win') me.w++
         else if (result === 'loss') me.l++
         else me.t++
       }

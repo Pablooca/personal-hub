@@ -171,17 +171,19 @@ test('Championship Points with kickers', () => {
 })
 
 test('final placement: brackets, exact position and CP', () => {
-  assert.deepEqual([1, 2, 3, 6, 16, 17, 100, 256, 700, 2000].map(bracketOf), [1, 2, 4, 8, 16, 32, 256, 256, 1024, null])
-  assert.deepEqual([bracketRange(1), bracketRange(4), bracketRange(256)], [[1, 1], [3, 4], [65, 256]])
+  assert.deepEqual([1, 2, 3, 6, 16, 17, 100, 256, 700, 2000].map(bracketOf), [1, 2, 4, 8, 16, 32, 128, 256, 1024, null])
+  assert.deepEqual([bracketRange(1), bracketRange(4), bracketRange(128), bracketRange(256)], [[1, 1], [3, 4], [65, 128], [129, 256]])
   assert.equal(placementLabel({ placement: null, placement_bracket: 1 }), 'Campeón')
   assert.equal(placementLabel({ placement: 6, placement_bracket: 8 }), 'Top 8 · 6.º')
   assert.equal(placementLabel({ placement: 38 }), 'Top 64 · 38.º')
   assert.equal(placementLabel({ placement: 2000, placement_bracket: null }), '2000.º')
   assert.equal(placementLabel({ placement: null, placement_bracket: null }), null)
   assert.deepEqual(cpForPlacement('league_cup', 8, null, 40), { min: 25, max: 25 })
-  // 65th–128th = 80 CP, 129th–256th = 60 CP
-  assert.deepEqual(cpForPlacement('regional', 256, null, 1500), { min: 60, max: 80 })
-  assert.deepEqual(cpForPlacement('regional', 256, 100, 1500), { min: 80, max: 80 })
+  assert.deepEqual(cpForPlacement('regional', 128, null, 1500), { min: 80, max: 80 })
+  assert.deepEqual(cpForPlacement('regional', 256, null, 1500), { min: 60, max: 60 })
+  // 257th–512th = 45 CP, 513th–1024th = 22 CP
+  assert.deepEqual(cpForPlacement('regional', 1024, null, 2500), { min: 22, max: 45 })
+  assert.deepEqual(cpForPlacement('regional', 128, 100, 1500), { min: 80, max: 80 })
 })
 
 test('labels and records', () => {
@@ -269,6 +271,12 @@ test('byes give points but are not matches; the top cut uses its own format', ()
   const ms = matchesOf([T({})], rounds)
   assert.equal(ms.length, 3)
   assert.deepEqual(ms.map((m) => m.format), ['bo1', 'bo1', 'bo3'])
+})
+
+test('a no-show is a Swiss win but not a match', () => {
+  const rounds = [R({}), R({ number: 2, result: 'no_show' }), R({ number: 3, result: 'loss' })]
+  assert.deepEqual(swissRecord(rounds), { w: 2, l: 1, t: 0, points: 6, rounds: 3 })
+  assert.equal(matchesOf([T({})], rounds).length, 2)
 })
 
 test('turn and dice tallies', () => {

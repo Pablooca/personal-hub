@@ -21,6 +21,10 @@ test('win percentage follows the handbook examples', () => {
 
 test('Op Win %: byes of mine are skipped, missing records are estimated from the Swiss pairing', () => {
   assert.equal(currentOwp([{ result: 'win', rival: rec(1, 1) }, { result: 'bye', rival: null }]), 0.5)
+  // The rival of a no-show is an opponent like any other, with a loss.
+  assert.equal(currentOwp([{ result: 'win', rival: rec(1, 1) }, { result: 'no_show', rival: rec(1, 3) }]), 0.375)
+  assert.deepEqual(recordsBefore([{ result: 'no_show', rival: null }, { result: 'tie', rival: null }])[1], { w: 1, l: 0, t: 0 })
+  assert.deepEqual([...bracketChances(8, ['no_show'], 0.5, [4])], [[4, 1]])
   assert.deepEqual(recordsBefore([{ result: 'win', rival: null }, { result: 'bye', rival: null }, { result: 'loss', rival: null }]), [{ w: 0, l: 0, t: 0 }, { w: 1, l: 0, t: 0 }, { w: 2, l: 0, t: 0 }])
   assert.deepEqual(estimatedRival({ w: 2, l: 0, t: 0 }, 'loss'), rec(3, 0))
   assert.equal(currentOwp([]), null)

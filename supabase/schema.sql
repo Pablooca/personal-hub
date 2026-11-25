@@ -654,7 +654,7 @@ create table if not exists public.tournament_rounds (
   tournament_id       uuid not null references public.tournaments (id) on delete cascade,
   phase               text not null default 'swiss' check (phase in ('swiss', 'top_cut')),
   number              integer not null check (number between 1 and 40),
-  result              text not null check (result in ('win', 'loss', 'tie', 'bye')),
+  result              text not null check (result in ('win', 'loss', 'tie', 'bye', 'no_show')),
   games               jsonb not null default '[]'::jsonb check (jsonb_typeof(games) = 'array'),
   won_dice            boolean,
   went_first          boolean,
@@ -669,7 +669,13 @@ create table if not exists public.tournament_rounds (
 );
 
 -- Upgrade path: final placement by bracket (champion, finalist, top 4…) besides the exact position.
-alter table public.tournaments add column if not exists placement_bracket integer check (placement_bracket in (1, 2, 4, 8, 16, 32, 64, 256, 1024));
+alter table public.tournaments add column if not exists placement_bracket integer;
+alter table public.tournaments drop constraint if exists tournaments_placement_bracket_check;
+alter table public.tournaments add constraint tournaments_placement_bracket_check check (placement_bracket in (1, 2, 4, 8, 16, 32, 64, 128, 256, 1024));
+
+-- Upgrade path: a rival who did not show up.
+alter table public.tournament_rounds drop constraint if exists tournament_rounds_result_check;
+alter table public.tournament_rounds add constraint tournament_rounds_result_check check (result in ('win', 'loss', 'tie', 'bye', 'no_show'));
 
 -- Upgrade path: how each opponent is doing during the event (drives Op Win % and the standing chances).
 alter table public.tournament_rounds add column if not exists opponent_record jsonb check (opponent_record is null or jsonb_typeof(opponent_record) = 'object');

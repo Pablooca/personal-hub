@@ -98,7 +98,9 @@ function RivalRow({ t, round: r, estimate, played }: { t: Tournament; round: Tou
           {st.short}
         </span>
         <span className="flex min-w-0 flex-1 basis-28 items-center gap-2">
-          {t.game === 'tcg' ? (
+          {r.result === 'no_show' ? (
+            <span className="shrink-0 text-xs text-muted">{st.label}</span>
+          ) : t.game === 'tcg' ? (
             <DeckIcons icons={r.opponent_icons} size={28} label={r.opponent_deck_name || 'Mazo sin identificar'} />
           ) : (
             <span className="flex -space-x-2">
