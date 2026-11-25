@@ -9,6 +9,7 @@ import { addResult, emptyTally, matchesOf, played, recordText, tally, winRate } 
 import type { MatchFormat, PokemonGame, PokemonMatch } from '../../lib/types'
 import { useData } from '../../state/data'
 import { MatchModal } from './MatchModal'
+import { OwnFilter, useOwnFilter } from './OwnFilter'
 import { OwnIcons } from './Tournaments'
 import { DeckIcons, FORMAT_LABEL, RESULT_STYLES, SpeciesSprite, fmtRate } from './parts'
 
@@ -23,18 +24,14 @@ export function Matches({ game, initialId = null }: { game: PokemonGame; initial
   /** Number that changes to start a blank form again. */
   const [adding, setAdding] = useState<number | null>(null)
   const [format, setFormat] = useState<MatchFormat | 'all'>('all')
-  const [own, setOwn] = useState('')
   const [limit, setLimit] = useState(40)
 
   const all = useMemo(
     () => data.pokemon_matches.filter((m) => m.game === game).sort((a, b) => b.date.localeCompare(a.date) || (b.replays[0]?.at ?? b.created_at).localeCompare(a.replays[0]?.at ?? a.created_at)),
     [data.pokemon_matches, game],
   )
-  const ownOf = (m: PokemonMatch) => (game === 'tcg' ? m.deck_id : m.team_id) ?? 'none'
-  const library: { id: string; name: string }[] = game === 'tcg' ? data.tcg_decks : data.vgc_teams
-  const usedOwn = [...new Set(all.map(ownOf))]
-  const picked = usedOwn.includes(own) ? own : ''
-  const list = all.filter((m) => (format === 'all' || m.format === format) && (!picked || ownOf(m) === picked))
+  const own = useOwnFilter(game, all)
+  const list = all.filter((m) => (format === 'all' || m.format === format) && own.matches(m))
   const asMatches = matchesOf([], [], list)
   const games = list.reduce((a, m) => m.games.reduce((x, g) => addResult(x, g.result), a), emptyTally())
   const points = ratingPoints(list)
@@ -56,18 +53,9 @@ export function Matches({ game, initialId = null }: { game: PokemonGame; initial
         </Empty>
       ) : (
         <>
-          <div className="mb-4 flex flex-wrap gap-2">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
             <Segmented value={format} onChange={setFormat} options={[{ value: 'all', label: 'Todas' }, { value: 'bo1', label: 'BO1' }, { value: 'bo3', label: 'BO3' }]} />
-            {usedOwn.length > 1 && (
-              <select className="field h-9 w-auto max-w-60" aria-label={game === 'tcg' ? 'Mazo' : 'Equipo'} value={picked} onChange={(e) => setOwn(e.target.value)}>
-                <option value="">{game === 'tcg' ? 'Todos los mazos' : 'Todos los equipos'}</option>
-                {usedOwn.map((id) => (
-                  <option key={id} value={id}>
-                    {library.find((x) => x.id === id)?.name ?? (game === 'tcg' ? 'Sin mazo asignado' : 'Sin equipo asignado')}
-                  </option>
-                ))}
-              </select>
-            )}
+            <OwnFilter game={game} filter={own} />
           </div>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Stat label="Winrate" value={fmtRate(winRate(tally(asMatches)))} hint={`${recordText(tally(asMatches))} · ${list.length} ${list.length === 1 ? 'enfrentamiento' : 'enfrentamientos'}`} />

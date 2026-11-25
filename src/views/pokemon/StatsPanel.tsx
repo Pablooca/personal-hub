@@ -9,6 +9,7 @@ import { natureLabel, parseTeam } from '../../lib/pokemon/team'
 import type { PokemonGame } from '../../lib/types'
 import { useData } from '../../state/data'
 import { ARCHETYPE } from './data'
+import { OwnFilter, ownId, useOwnFilter } from './OwnFilter'
 import { ReplayStatsSection } from './ReplayReport'
 import { DeckIcons, SpeciesSprite, WinBar, fmtRate, heat } from './parts'
 
@@ -50,14 +51,10 @@ export function StatsPanel({ game }: { game: PokemonGame }) {
   const both = all.some((m) => m.source === 'match') && all.some((m) => m.source === 'tournament')
   /** Everything in the period and source: what the decks or teams are compared with. */
   const wide = useMemo(() => all.filter((m) => inPeriod(m.t.date, period) && (!both || source === 'all' || m.source === source)), [all, period, source, both])
-  const ownOf = (m: Match) => (game === 'tcg' ? m.t.deck_id : m.t.team_id) ?? 'none'
-  const library: { id: string; name: string }[] = game === 'tcg' ? data.tcg_decks : data.vgc_teams
-  const used = useMemo(() => [...groupTally(all, (m) => (game === 'tcg' ? m.t.deck_id : m.t.team_id) ?? 'none').entries()].sort((a, b) => played(b[1]) - played(a[1])).map(([id]) => id), [all, game])
-  const [own, setOwn] = useState('')
-  const picked = used.includes(own) ? own : ''
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const ms = useMemo(() => (picked ? wide.filter((m) => ownOf(m) === picked) : wide), [wide, picked, game])
-  const nameOf = (id: string) => library.find((x) => x.id === id)?.name ?? (game === 'tcg' ? 'Sin mazo asignado' : 'Sin equipo asignado')
+  const contexts = useMemo(() => all.map((m) => m.t), [all])
+  const own = useOwnFilter(game, contexts)
+  const { picked, setPicked } = own
+  const ms = useMemo(() => (picked ? wide.filter((m) => ownId(game, m.t) === picked) : wide), [wide, picked, game])
   const replayed = useMemo(() => {
     const ids = new Set(ms.filter((m) => m.source === 'match').map((m) => m.t.id))
     return data.pokemon_matches.filter((m) => ids.has(m.id) && m.replays.length > 0)
@@ -73,14 +70,7 @@ export function StatsPanel({ game }: { game: PokemonGame }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <select className="field h-9 w-full min-w-0 sm:w-64 pointer-coarse:h-11" aria-label={game === 'tcg' ? 'Filtrar por mazo' : 'Filtrar por equipo'} value={picked} onChange={(e) => setOwn(e.target.value)}>
-          <option value="">{game === 'tcg' ? 'Todos los mazos' : 'Todos los equipos'}</option>
-          {used.map((id) => (
-            <option key={id} value={id}>
-              {nameOf(id)}
-            </option>
-          ))}
-        </select>
+        <OwnFilter game={game} filter={own} />
         <Segmented value={period} onChange={setPeriod} options={[{ value: 'all', label: 'Siempre' }, { value: 'year', label: 'Este año' }, { value: '90', label: '90 días' }]} />
         {both && <Segmented value={source} onChange={setSource} options={[{ value: 'all', label: 'Todo' }, { value: 'tournament', label: 'Torneos' }, { value: 'match', label: 'Partidas sueltas' }]} />}
       </div>
@@ -89,7 +79,7 @@ export function StatsPanel({ game }: { game: PokemonGame }) {
       ) : (
         <>
           <Global ms={ms} game={game} />
-          {game === 'tcg' ? <TcgStats ms={ms} wide={wide} picked={picked} onPick={setOwn} /> : <VgcStats ms={ms} wide={wide} picked={picked} onPick={setOwn} />}
+          {game === 'tcg' ? <TcgStats ms={ms} wide={wide} picked={picked} onPick={setPicked} /> : <VgcStats ms={ms} wide={wide} picked={picked} onPick={setPicked} />}
           {replayed.length > 0 && <ReplayStatsSection matches={replayed} />}
         </>
       )}
@@ -164,8 +154,6 @@ function TcgStats({ ms, wide, picked, onPick }: Scope) {
   const { data } = useData()
   const decks = useMemo(() => [...groupTally(wide, (m) => m.t.deck_id ?? 'none').entries()].sort((a, b) => played(b[1]) - played(a[1])), [wide])
   const matrix = useMemo(() => matchupMatrix(ms), [ms])
-  const turn = turnTally(ms)
-  const dice = diceTally(ms)
   const deckOf = (id: string) => data.tcg_decks.find((d) => d.id === id)
   const deckName = (id: string) => deckOf(id)?.name ?? 'Sin mazo asignado'
   const name = (c: { id: string; name: string }) => ARCHETYPE.get(c.id)?.name ?? c.name
@@ -174,8 +162,7 @@ function TcgStats({ ms, wide, picked, onPick }: Scope) {
   return (
     <section>
       <h2 className="mb-3 text-base font-semibold">Por mazo</h2>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Card title="Rendimiento de mis mazos">
+      <Card title="Rendimiento de mis mazos">
           {decks.map(([id, t]) => (
             <PickRow key={id} on={picked === id} name={deckName(id)} onClick={() => onPick(picked === id ? '' : id)}>
               <WinBar
@@ -189,14 +176,7 @@ function TcgStats({ ms, wide, picked, onPick }: Scope) {
               />
             </PickRow>
           ))}
-        </Card>
-        <Card title="Salida y dado">
-          <WinBar label="Saliendo 1.º" tally={turn.first} />
-          <WinBar label="Saliendo 2.º" tally={turn.second} />
-          <WinBar label="Ganando el dado" tally={dice.won} />
-          <WinBar label="Perdiendo el dado" tally={dice.lost} />
-        </Card>
-      </div>
+      </Card>
 
       <Card
         className="mt-3"

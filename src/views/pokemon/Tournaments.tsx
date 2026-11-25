@@ -3,16 +3,17 @@ import { CalendarDays, Globe, MapPin, Plus, Trophy, Users } from 'lucide-react'
 import { Badge, Button, Empty, cx } from '../../components/ui'
 import { fromDateKey } from '../../lib/dates'
 import { fmtDate } from '../../lib/format'
-import { scored, recordText, swissRecord } from '../../lib/pokemon/stats'
+import { matchesOf, played, recordText, scored, swissRecord, tally, winRate } from '../../lib/pokemon/stats'
 import { CATEGORY_LABELS, placementLabel } from '../../lib/pokemon/structure'
 import { parseTeam } from '../../lib/pokemon/team'
 import type { PokemonGame, TcgDeck, Tournament, TournamentStatus, VgcTeam } from '../../lib/types'
 import { useData } from '../../state/data'
 import type { CalcSeed } from './Calculator'
 import { CpCard } from './CpCard'
+import { OwnFilter, useOwnFilter } from './OwnFilter'
 import { TournamentDetail } from './TournamentDetail'
 import { TournamentForm } from './TournamentForm'
-import { DeckIcons, FORMAT_LABEL, SpeciesSprite } from './parts'
+import { DeckIcons, FORMAT_LABEL, SpeciesSprite, fmtRate } from './parts'
 
 export const STATUS_LABELS: Record<TournamentStatus, { label: string; cls: string }> = {
   planned: { label: 'Próximo', cls: 'border-line-strong text-muted' },
@@ -43,18 +44,21 @@ export function Tournaments({ game, initialId = null, onCalculator }: { game: Po
   const [openId, setOpenId] = useState<string | null>(initialId)
   const open = data.tournaments.find((t) => t.id === openId)
 
-  const list = useMemo(
+  const all = useMemo(
     () =>
       data.tournaments
         .filter((t) => t.game === game)
         .sort((a, b) => ORDER[a.status] - ORDER[b.status] || (a.status === 'planned' ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date))),
     [data.tournaments, game],
   )
+  const own = useOwnFilter(game, all)
+  const list = all.filter(own.matches)
   const rounds = useMemo(() => {
     const m = new Map<string, typeof data.tournament_rounds>()
     for (const r of data.tournament_rounds) m.set(r.tournament_id, [...(m.get(r.tournament_id) ?? []), r])
     return m
   }, [data.tournament_rounds])
+  const record = tally(matchesOf(list, list.flatMap((t) => rounds.get(t.id) ?? [])))
   const totalCp = list.reduce((a, t) => a + (t.cp ?? 0), 0)
 
   if (open) return <TournamentDetail tournament={open} onBack={() => setOpenId(null)} onCalculator={onCalculator} />
@@ -71,8 +75,15 @@ export function Tournaments({ game, initialId = null, onCalculator }: { game: Po
               · <span className="num font-semibold text-fg">{totalCp}</span> CP
             </>
           )}
+          {played(record) > 0 && (
+            <>
+              {' '}
+              · <span className="num font-semibold text-fg">{recordText(record)}</span> en rondas ({fmtRate(winRate(record))})
+            </>
+          )}
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 max-sm:w-full">
+          {all.length > 0 && <OwnFilter game={game} filter={own} />}
           <Button variant="primary" onClick={() => setEditing('new')}>
             <Plus className="size-4" /> Nuevo torneo
           </Button>
