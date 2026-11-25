@@ -31,6 +31,7 @@ Energy: 15
 10 Fire Energy MEE 10
 5 Lightning Energy MEE 12`,
   notes: '',
+  is_built: true,
 }
 
 export const EXAMPLE_TEAM = {

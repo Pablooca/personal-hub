@@ -674,6 +674,80 @@ alter table public.tournaments add column if not exists placement_bracket intege
 -- Upgrade path: how each opponent is doing during the event (drives Op Win % and the standing chances).
 alter table public.tournament_rounds add column if not exists opponent_record jsonb check (opponent_record is null or jsonb_typeof(opponent_record) = 'object');
 
+-- Decks physically built lock their cards (see owned_cards).
+alter table public.tcg_decks add column if not exists is_built boolean not null default true;
+
+create table if not exists public.deck_versions (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  deck_id     uuid not null references public.tcg_decks (id) on delete cascade,
+  from_date   date not null,
+  list_text   text not null check (char_length(list_text) <= 10000),
+  note        text not null default '' check (char_length(note) <= 500),
+  created_at  timestamptz not null default now()
+);
+create index if not exists deck_versions_deck_idx on public.deck_versions (deck_id, from_date);
+
+create table if not exists public.matchup_notes (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  deck_id     uuid references public.tcg_decks (id) on delete cascade,
+  archetype   text not null check (char_length(archetype) between 1 and 300),
+  name        text not null default '',
+  icons       jsonb not null default '[]'::jsonb check (jsonb_typeof(icons) = 'array'),
+  notes       text not null default '' check (char_length(notes) <= 5000),
+  created_at  timestamptz not null default now()
+);
+create index if not exists matchup_notes_user_idx on public.matchup_notes (user_id, archetype);
+
+-- Card collection: one row per print + language + condition + finish.
+create table if not exists public.owned_cards (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  tcgdex_id       text not null check (char_length(tcgdex_id) between 1 and 60),
+  set_code        text not null default '',
+  set_name        text not null default '',
+  number          text not null default '',
+  name            text not null check (char_length(name) between 1 and 200),
+  name_en         text not null default '',
+  category        text not null default 'pokemon' check (category in ('pokemon', 'trainer', 'energy')),
+  signature       text not null default '',
+  rarity          text not null default '',
+  image           text,
+  language        text not null default 'es',
+  condition       text not null default 'NM' check (condition in ('MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO')),
+  finish          text not null default 'normal',
+  first_edition   boolean not null default false,
+  signed          boolean not null default false,
+  altered         boolean not null default false,
+  grade_company   text not null default '',
+  grade           text not null default '',
+  quantity        integer not null default 1 check (quantity between 1 and 9999),
+  location        text not null default '',
+  for_sale        boolean not null default false,
+  paid            numeric(12, 2) check (paid is null or paid >= 0),
+  acquired_at     date,
+  cm_product      integer,  -- Cardmarket product id
+  ref_low         numeric(12, 2),  -- Cardmarket daily guide, any language
+  ref_trend       numeric(12, 2),
+  ref_date        date,
+  own_price       numeric(12, 2) check (own_price is null or own_price >= 0),  -- lowest in this language
+  own_price_date  date,
+  notes           text not null default '' check (char_length(notes) <= 2000),
+  created_at      timestamptz not null default now()
+);
+create index if not exists owned_cards_user_idx on public.owned_cards (user_id, set_code, number);
+
+create table if not exists public.collection_snapshots (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  date        date not null,
+  total       numeric(14, 2) not null default 0,
+  cards       integer not null default 0,
+  created_at  timestamptz not null default now(),
+  constraint collection_snapshots_day unique (user_id, date)
+);
+
 create index if not exists tcg_decks_user_idx on public.tcg_decks (user_id);
 create index if not exists vgc_teams_user_idx on public.vgc_teams (user_id);
 create index if not exists tournaments_user_date_idx on public.tournaments (user_id, date desc);
@@ -763,6 +837,10 @@ create index if not exists runs_plan_idx on public.runs (plan_id);
 alter table public.tcg_decks         enable row level security;
 alter table public.vgc_teams         enable row level security;
 alter table public.tournaments       enable row level security;
+alter table public.deck_versions     enable row level security;
+alter table public.matchup_notes     enable row level security;
+alter table public.owned_cards       enable row level security;
+alter table public.collection_snapshots enable row level security;
 alter table public.tournament_rounds enable row level security;
 alter table public.race_goals        enable row level security;
 alter table public.run_plan          enable row level security;
@@ -782,6 +860,10 @@ begin
     select * from (values
       ('tcg_decks',         'true'),
       ('vgc_teams',         'true'),
+      ('owned_cards',       'true'),
+      ('collection_snapshots', 'true'),
+      ('deck_versions',     'exists (select 1 from public.tcg_decks d where d.id = deck_id and d.user_id = (select auth.uid()))'),
+      ('matchup_notes',     '(deck_id is null or exists (select 1 from public.tcg_decks d where d.id = deck_id and d.user_id = (select auth.uid())))'),
       ('tournaments',       '(deck_id is null or exists (select 1 from public.tcg_decks d where d.id = deck_id and d.user_id = (select auth.uid())))'
                             ' and (team_id is null or exists (select 1 from public.vgc_teams v where v.id = team_id and v.user_id = (select auth.uid())))'),
       ('tournament_rounds', 'exists (select 1 from public.tournaments p where p.id = tournament_id and p.user_id = (select auth.uid()))'),
@@ -817,7 +899,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'race_goals', 'run_plan', 'runs', 'run_workouts', 'category_rules', 'bills', 'shoes'] loop
+  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'race_goals', 'run_plan', 'runs', 'run_workouts', 'category_rules', 'bills', 'shoes', 'deck_versions', 'matchup_notes', 'owned_cards', 'collection_snapshots'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

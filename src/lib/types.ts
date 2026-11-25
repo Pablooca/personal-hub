@@ -240,6 +240,82 @@ export interface TcgDeck {
   icons: string[]
   list_text: string
   notes: string
+  /** Physically built: its cards are not available for anything else. */
+  is_built: boolean
+  created_at: string
+}
+
+/** Past lists of a deck; the current one is in the deck itself. */
+export interface DeckVersion {
+  id: string
+  user_id?: string
+  deck_id: string
+  from_date: string // YYYY-MM-DD
+  list_text: string
+  note: string
+  created_at: string
+}
+
+/** Plan against an archetype, for one deck or for all (deck_id = null). */
+export interface MatchupNote {
+  id: string
+  user_id?: string
+  deck_id: string | null
+  archetype: string // rivalKey
+  name: string
+  icons: string[]
+  notes: string
+  created_at: string
+}
+
+/** Cards I own: one row per print + language + condition + finish. */
+export interface OwnedCard {
+  id: string
+  user_id?: string
+  tcgdex_id: string
+  set_code: string
+  set_name: string
+  number: string
+  /** Name in the card's own language. */
+  name: string
+  name_en: string
+  category: 'pokemon' | 'trainer' | 'energy'
+  /** Same signature = same card for deck building (reprints). */
+  signature: string
+  rarity: string
+  image: string | null
+  language: string
+  condition: string
+  finish: string
+  first_edition: boolean
+  signed: boolean
+  altered: boolean
+  grade_company: string
+  grade: string
+  quantity: number
+  location: string
+  for_sale: boolean
+  paid: number | null
+  acquired_at: string | null
+  cm_product: number | null
+  /** Cardmarket's daily guide: lowest and trend in any language. */
+  ref_low: number | null
+  ref_trend: number | null
+  ref_date: string | null
+  /** Lowest price in this card's language, noted by hand. */
+  own_price: number | null
+  own_price_date: string | null
+  notes: string
+  created_at: string
+}
+
+/** Value of the collection on a day. */
+export interface CollectionSnapshot {
+  id: string
+  user_id?: string
+  date: string
+  total: number
+  cards: number
   created_at: string
 }
 
@@ -463,6 +539,10 @@ export interface Tables {
   category_rules: CategoryRule
   bills: Bill
   shoes: Shoe
+  deck_versions: DeckVersion
+  matchup_notes: MatchupNote
+  owned_cards: OwnedCard
+  collection_snapshots: CollectionSnapshot
 }
 
 export type TableName = keyof Tables

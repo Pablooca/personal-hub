@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { BarChart3, Calculator as CalcIcon, Layers, Trophy, Users } from 'lucide-react'
+import { BarChart3, Calculator as CalcIcon, Layers, Library, Trophy, Users } from 'lucide-react'
 import { PageHeader } from '../../components/Shell'
 import { cx } from '../../components/ui'
 import type { Target } from '../../lib/agenda'
 import { useData } from '../../state/data'
 import { useFocusTarget } from '../../state/nav'
 import { Calculator, type CalcSeed } from './Calculator'
+import { Collection } from './Collection'
 import { Decks } from './Decks'
 import { StatsPanel } from './StatsPanel'
 import { Teams } from './Teams'
@@ -14,7 +15,7 @@ import { META, loadChampions } from './data'
 
 /** TCG and VGC are two separate worlds; only the calculator is shared. */
 type Area = 'tcg' | 'vgc' | 'calculator'
-type Tab = 'tournaments' | 'library' | 'stats'
+type Tab = 'tournaments' | 'library' | 'collection' | 'stats'
 
 const AREAS: { id: Area; label: string }[] = [
   { id: 'tcg', label: 'TCG' },
@@ -32,7 +33,7 @@ function initial(): { area: Area; tab: Tab } {
     if (tab === 'calculator') return { area: 'calculator', tab: 'tournaments' }
     if (tab === 'decks') return { area: 'tcg', tab: 'library' }
     if (tab === 'teams') return { area: 'vgc', tab: 'library' }
-    return { area: AREAS.some((a) => a.id === area) ? area! : 'tcg', tab: tab === 'library' || tab === 'stats' ? tab : 'tournaments' }
+    return { area: AREAS.some((a) => a.id === area) ? area! : 'tcg', tab: tab === 'library' || tab === 'stats' || tab === 'collection' ? tab : 'tournaments' }
   } catch {
     return { area: 'tcg', tab: 'tournaments' }
   }
@@ -73,7 +74,7 @@ export function PokemonView() {
   const [target, setTarget] = useState<Target | null>(null)
   useFocusTarget(['tournament', 'deck', 'team', 'card'], (t) => {
     const game: Area = t.kind === 'team' || (t.kind === 'tournament' && data.tournaments.find((x) => x.id === t.id)?.game === 'vgc') ? 'vgc' : 'tcg'
-    go({ area: game, tab: t.kind === 'tournament' ? 'tournaments' : 'library' })
+    go({ area: game, tab: t.kind === 'tournament' ? 'tournaments' : t.kind === 'card' ? 'collection' : 'library' })
     setTarget(t)
   })
 
@@ -81,6 +82,7 @@ export function PokemonView() {
   const tabs: { id: Tab; label: string; icon: typeof Trophy }[] = [
     { id: 'tournaments', label: 'Torneos', icon: Trophy },
     area === 'vgc' ? { id: 'library', label: 'Equipos', icon: Users } : { id: 'library', label: 'Mazos', icon: Layers },
+    ...(area === 'tcg' ? [{ id: 'collection' as const, label: 'Colección', icon: Library }] : []),
     { id: 'stats', label: 'Estadísticas', icon: BarChart3 },
   ]
 
@@ -94,7 +96,7 @@ export function PokemonView() {
             key={a.id}
             type="button"
             aria-pressed={area === a.id}
-            onClick={() => go({ area: a.id })}
+            onClick={() => go({ area: a.id, ...(a.id === 'vgc' && tab === 'collection' ? { tab: 'library' as const } : {}) })}
             className={cx(
               'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold transition',
               area === a.id ? 'bg-surface text-fg shadow-sm ring-1 ring-line' : 'text-muted hover:text-fg',
@@ -131,6 +133,7 @@ export function PokemonView() {
           <div id="pk-panel" role="tabpanel" aria-labelledby={`pk-tab-${tab}`}>
             {tab === 'tournaments' && <Tournaments key={`${game}-${target?.kind === 'tournament' ? target.id : ''}`} game={game} initialId={target?.kind === 'tournament' ? target.id : null} onCalculator={openCalculator} />}
             {tab === 'library' && (game === 'tcg' ? <Decks key={target?.id} initialId={target?.kind === 'deck' ? target.id : null} /> : <Teams key={target?.id} initialId={target?.kind === 'team' ? target.id : null} />)}
+            {tab === 'collection' && game === 'tcg' && <Collection key={target?.id} initialId={target?.kind === 'card' ? target.id : null} />}
             {tab === 'stats' && <StatsPanel key={game} game={game} />}
           </div>
         </>

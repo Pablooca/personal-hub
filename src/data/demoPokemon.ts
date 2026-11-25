@@ -1,14 +1,14 @@
 import { addDays, toDateKey } from '../lib/dates'
 import { uid } from '../lib/format'
 import { EXAMPLE_DECK, EXAMPLE_TEAM } from '../lib/pokemon/examples'
-import type { Dataset, RivalPokemon, TcgDeck, Tournament, TournamentRound, VgcTeam } from '../lib/types'
+import type { Dataset, OwnedCard, RivalPokemon, TcgDeck, Tournament, TournamentRound, VgcTeam } from '../lib/types'
 
 /** Fictional tournaments for Demo Mode. */
-export function buildDemoPokemon(today: Date): Pick<Dataset, 'tcg_decks' | 'vgc_teams' | 'tournaments' | 'tournament_rounds'> {
+export function buildDemoPokemon(today: Date): Pick<Dataset, 'tcg_decks' | 'vgc_teams' | 'tournaments' | 'tournament_rounds' | 'deck_versions' | 'matchup_notes' | 'owned_cards' | 'collection_snapshots'> {
   const now = new Date().toISOString()
   const day = (n: number) => toDateKey(addDays(today, n))
   const deck: TcgDeck = { id: uid(), ...EXAMPLE_DECK, icons: [...EXAMPLE_DECK.icons], created_at: now }
-  const deck2: TcgDeck = { ...deck, id: uid(), name: 'Dragapult de ejemplo', icons: ['dragapult'] }
+  const deck2: TcgDeck = { ...deck, id: uid(), name: 'Dragapult de ejemplo', icons: ['dragapult'], is_built: false }
   const team: VgcTeam = { id: uid(), ...EXAMPLE_TEAM, created_at: now }
 
   const base: Omit<Tournament, 'id' | 'game' | 'name' | 'date'> = {
@@ -75,5 +75,16 @@ export function buildDemoPokemon(today: Date): Pick<Dataset, 'tcg_decks' | 'vgc_
   v(4, 'LWW', ['Delphox', 'Whimsicott', 'Glimmora', 'Garchomp'], [king, sinis, chomp])
   v(5, 'WLL', ['Delphox', 'Farigiraf', 'Heracross', 'Garchomp'], [char, inc, sinis, king])
 
-  return { tcg_decks: [deck, deck2], vgc_teams: [team], tournaments: [live, vgc, online, cup], tournament_rounds: rounds }
+  const card = (id: string, set: string, number: string, name: string, quantity: number, low: number, o: Partial<OwnedCard> = {}): OwnedCard => ({
+    id: uid(), tcgdex_id: id, set_code: set, set_name: '', number, name, name_en: name, category: 'pokemon', signature: `p|${name.toLowerCase()}`, rarity: 'Rara Doble', image: null, language: 'es', condition: 'NM', finish: 'holo',
+    first_edition: false, signed: false, altered: false, grade_company: '', grade: '', quantity, location: 'Archivador 1', for_sale: false, paid: null, acquired_at: null, cm_product: null, ref_low: low, ref_trend: low * 1.6,
+    ref_date: day(-1), own_price: null, own_price_date: null, notes: '', created_at: now, ...o,
+  })
+  const owned_cards: OwnedCard[] = [
+    card('me01-104', 'MEG', '104', 'Mega Kangaskhan ex', 5, 0.4, { own_price: 0.9, own_price_date: day(-3) }),
+    card('sv08-076', 'SSP', '76', 'Latias ex', 2, 0.1),
+    card('me01-131', 'MEG', '131', 'Ultra Ball', 6, 0.02, { category: 'trainer', signature: 't|ultra ball', finish: 'normal', rarity: 'Infrecuente', location: 'Caja' }),
+    card('sv06-165', 'TWM', '165', 'Unfair Stamp', 1, 7.99, { category: 'trainer', signature: 't|unfair stamp', rarity: 'ACE SPEC', language: 'en', for_sale: true }),
+  ]
+  return { deck_versions: [], matchup_notes: [], owned_cards, collection_snapshots: [], tcg_decks: [deck, deck2], vgc_teams: [team], tournaments: [live, vgc, online, cup], tournament_rounds: rounds }
 }

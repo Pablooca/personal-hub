@@ -71,6 +71,10 @@ const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   study_files: { column: 'created_at', ascending: false },
   tcg_decks: { column: 'created_at', ascending: true },
   vgc_teams: { column: 'created_at', ascending: true },
+  deck_versions: { column: 'from_date', ascending: true },
+  matchup_notes: { column: 'created_at', ascending: true },
+  owned_cards: { column: 'created_at', ascending: true },
+  collection_snapshots: { column: 'date', ascending: true },
   tournaments: { column: 'date', ascending: false },
   tournament_rounds: { column: 'number', ascending: true },
   shoes: { column: 'created_at', ascending: true },
@@ -91,6 +95,15 @@ function normalise<K extends TableName>(table: K, row: Tables[K]): Tables[K] {
   if (table === 'categories') {
     const c = row as Tables['categories']
     return { ...c, budget: c.budget === null || c.budget === undefined ? null : Number(c.budget) } as Tables[K]
+  }
+  if (table === 'owned_cards') {
+    const x = row as Tables['owned_cards']
+    const n = (v: number | null) => (v === null || v === undefined ? null : Number(v))
+    return { ...x, paid: n(x.paid), ref_low: n(x.ref_low), ref_trend: n(x.ref_trend), own_price: n(x.own_price) } as Tables[K]
+  }
+  if (table === 'collection_snapshots') {
+    const x = row as Tables['collection_snapshots']
+    return { ...x, total: Number(x.total) } as Tables[K]
   }
   if (table === 'shoes') {
     const x = row as Tables['shoes']
@@ -282,7 +295,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v19'
+const DEMO_KEY = 'ph-demo-dataset-v20'
 export const STUDY_BUCKET = 'study-files'
 
 function readDemo(): Dataset {

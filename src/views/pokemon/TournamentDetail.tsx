@@ -12,6 +12,7 @@ import { useToast } from '../../state/toast'
 import type { CalcSeed } from './Calculator'
 import { ChancesCard, RivalsCard } from './Rivals'
 import { RoundModal } from './RoundModal'
+import { RoundTimer } from './RoundTimer'
 import { CUT_SIZES, PlacementFields, TopCutFormatQuestion, TournamentForm } from './TournamentForm'
 import { OwnIcons, STATUS_LABELS } from './Tournaments'
 import { DeckIcons, FORMAT_LABEL, RESULT_STYLES, SpeciesSprite } from './parts'
@@ -233,6 +234,7 @@ export function TournamentDetail({ tournament: t, onBack, onCalculator }: { tour
         </div>
 
         <aside className="min-w-0">
+          {(t.status === 'in_progress' || t.status === 'planned') && <RoundTimer id={t.id} format={cut.length || t.made_top_cut ? (t.top_cut_format ?? t.swiss_format) : t.swiss_format} />}
           <Card title="Posibilidades">
             {cfg ? (
               <ChancesCard tournament={t} cfg={cfg} swiss={swiss} cut={cut} />

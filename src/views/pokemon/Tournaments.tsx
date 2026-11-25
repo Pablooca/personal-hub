@@ -9,6 +9,7 @@ import { parseTeam } from '../../lib/pokemon/team'
 import type { PokemonGame, TcgDeck, Tournament, TournamentStatus, VgcTeam } from '../../lib/types'
 import { useData } from '../../state/data'
 import type { CalcSeed } from './Calculator'
+import { CpCard } from './CpCard'
 import { TournamentDetail } from './TournamentDetail'
 import { TournamentForm } from './TournamentForm'
 import { DeckIcons, FORMAT_LABEL, SpeciesSprite } from './parts'
@@ -60,6 +61,7 @@ export function Tournaments({ game, initialId = null, onCalculator }: { game: Po
 
   return (
     <>
+      <CpCard game={game} />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">
           {list.length} {list.length === 1 ? 'torneo' : 'torneos'}

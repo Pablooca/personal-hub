@@ -6,6 +6,7 @@ import { decided, maxGames, resultFromGames, rivalKey } from '../../lib/pokemon/
 import { NATURES, natureLabel, parseTeam } from '../../lib/pokemon/team'
 import type { MatchFormat, RivalPokemon, RoundGame, RoundPhase, RoundResult, Tournament, TournamentRound, VgcTeam } from '../../lib/types'
 import { useData } from '../../state/data'
+import { RivalNote } from './DeckExtras'
 import { META, SPECIES, useChampions, type Champions } from './data'
 import { Combobox, DeckIcons, FORMAT_LABEL, RESULT_STYLES, SpeciesSprite, SpritePicker } from './parts'
 
@@ -242,7 +243,12 @@ export function RoundModal({
         {/* ---------------------------------------------------------- opponent */}
         {result !== 'bye' && (
           <div className="min-w-0 lg:border-l lg:border-line lg:pl-6">
-            {tcg ? <RivalDeckPicker value={rival} onChange={setRival} invalid={customInvalid} /> : <VgcSide mons={mons} setMons={setMons} mine={mine} setMine={setMine} team={team} />}
+            {tcg ? (
+              <>
+                <RivalDeckPicker value={rival} onChange={setRival} invalid={customInvalid} />
+                <RivalNote key={`${rival.id}-${rival.icons.join()}-${rival.name}`} deckId={t.deck_id} rival={rival} />
+              </>
+            ) : <VgcSide mons={mons} setMons={setMons} mine={mine} setMine={setMine} team={team} />}
           </div>
         )}
       </div>
@@ -259,7 +265,7 @@ export interface RivalDeck {
 
 const TOP = 30
 
-function RivalDeckPicker({ value, onChange, invalid }: { value: RivalDeck; onChange: (v: RivalDeck) => void; invalid: boolean }) {
+export function RivalDeckPicker({ value, onChange, invalid }: { value: RivalDeck; onChange: (v: RivalDeck) => void; invalid: boolean }) {
   const { data } = useData()
   const [query, setQuery] = useState('')
   const [all, setAll] = useState(false)

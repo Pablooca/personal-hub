@@ -120,6 +120,7 @@ export function search(d: Dataset, query: string, limit = 40): SearchHit[] {
   for (const l of d.work_logs) add('Horas', { kind: 'worklog', id: l.id }, l.description || l.jira_key || 'Horas', `${l.date}${l.jira_key ? ` · ${l.jira_key}` : ''}`, '', l.date)
   for (const t of d.tournaments) add('Torneos', { kind: 'tournament', id: t.id }, t.name, `${t.game.toUpperCase()} · ${t.date}`, `${t.location} ${t.notes}`, t.date)
   for (const k of d.tcg_decks) add('Mazos', { kind: 'deck', id: k.id }, k.name, k.format, k.list_text)
+  for (const c of d.owned_cards) add('Colección', { kind: 'card', id: c.id }, c.name, `${c.set_code} ${c.number} · ${c.quantity}×`, `${c.name_en} ${c.set_name} ${c.location}`)
   for (const k of d.vgc_teams) add('Equipos', { kind: 'team', id: k.id }, k.name, k.regulation, k.paste)
   for (const g of d.race_goals) add('Carreras', { kind: 'goal', id: g.id }, g.name, g.date)
   for (const r of d.runs) add('Entrenamientos', { kind: 'run', id: r.id }, `${RUN[r.type]} · ${km(r.distance_km)}`, r.date, r.notes, r.date)

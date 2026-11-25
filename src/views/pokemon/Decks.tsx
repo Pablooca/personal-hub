@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Copy, ExternalLink, Layers, Pencil, Plus, Trash2, XCircle } from 'lucide-react'
 import { Badge, Button, Empty, Field, Modal, Segmented, cx } from '../../components/ui'
+import { toDateKey } from '../../lib/dates'
 import { DECK_SECTIONS, DECK_SIZE, formatDeck, isBasicEnergy, parseDeck, type DeckCard, type DeckSection, type ParsedDeck } from '../../lib/pokemon/deck'
 import { EXAMPLE_DECK } from '../../lib/pokemon/examples'
 import { cardImage, cardSlug, cardUrl } from '../../lib/pokemon/sprites'
@@ -8,6 +9,8 @@ import { emptyTally, matchesOf, played, recordText, tally, winRate } from '../..
 import type { TcgDeck } from '../../lib/types'
 import { useData } from '../../state/data'
 import { useToast } from '../../state/toast'
+import { useAllocation } from './Collection'
+import { MatchupNotes, Owned, Versions, useSaveVersion } from './DeckExtras'
 import { KNOWN_SLUGS, META } from './data'
 import { DeckIcons, Sprite, SpritePicker, fmtRate } from './parts'
 
@@ -68,6 +71,7 @@ export function Decks({ initialId = null }: { initialId?: string | null }) {
                       <span className="num">
                         {p.counts.pokemon}/{p.counts.trainer}/{p.counts.energy}
                       </span>
+                      {d.is_built !== false && <span>Montado</span>}
                       {p.valid ? (
                         <span className="inline-flex items-center gap-1 text-emerald-800 dark:text-emerald-400">
                           <CheckCircle2 className="size-3.5" /> 60 cartas
@@ -224,8 +228,10 @@ function DeckContents({ deck, mode }: { deck: ParsedDeck; mode: 'cards' | 'list'
 
 function DeckViewer({ deck, onClose, onEdit }: { deck: TcgDeck; onClose: () => void; onEdit: () => void }) {
   const toast = useToast()
-  const [mode, setMode] = useState<'cards' | 'list'>('cards')
+  const { update } = useData()
+  const [mode, setMode] = useState<'cards' | 'list' | 'owned' | 'versions' | 'notes'>('cards')
   const p = useMemo(() => parse(deck.list_text), [deck.list_text])
+  const { alloc, prints } = useAllocation()
   async function copy() {
     try {
       await navigator.clipboard.writeText(formatDeck(p))
@@ -258,11 +264,14 @@ function DeckViewer({ deck, onClose, onEdit }: { deck: TcgDeck; onClose: () => v
       <div className="mx-auto max-w-6xl space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Counters deck={p} />
-          <Segmented value={mode} onChange={setMode} options={[{ value: 'cards', label: 'Cartas' }, { value: 'list', label: 'Lista' }]} />
+          <Segmented value={mode} onChange={setMode} options={[{ value: 'cards', label: 'Cartas' }, { value: 'list', label: 'Lista' }, { value: 'owned', label: 'Tengo' }, { value: 'versions', label: 'Versiones' }, { value: 'notes', label: 'Rivales' }]} />
         </div>
+        <label className="flex min-h-9 items-center gap-2 text-sm">
+          <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={deck.is_built !== false} onChange={(e) => void update('tcg_decks', deck.id, { is_built: e.target.checked })} /> Montado: sus cartas no están disponibles para otros mazos
+        </label>
         {(!p.valid || p.warnings.length > 0) && <DeckProblems deck={p} />}
-        <DeckContents deck={p} mode={mode} />
-        {deck.notes && <p className="text-sm whitespace-pre-wrap text-muted">{deck.notes}</p>}
+        {mode === 'owned' ? <Owned deck={deck} parsed={p} alloc={alloc} prints={prints} /> : mode === 'versions' ? <Versions deck={deck} /> : mode === 'notes' ? <MatchupNotes deckId={deck.id} /> : <DeckContents deck={p} mode={mode} />}
+        {deck.notes && (mode === 'cards' || mode === 'list') && <p className="text-sm whitespace-pre-wrap text-muted">{deck.notes}</p>}
       </div>
     </Modal>
   )
@@ -276,6 +285,8 @@ function DeckEditor({ deck, onClose, onDeleted }: { deck: TcgDeck | null; onClos
   const [format, setFormat] = useState(deck?.format ?? META.format)
   const [text, setText] = useState(deck?.list_text ?? '')
   const [notes, setNotes] = useState(deck?.notes ?? '')
+  const [change, setChange] = useState('')
+  const saveVersion = useSaveVersion()
   const [icons, setIcons] = useState<string[]>(deck?.icons ?? [])
   const [picking, setPicking] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -288,8 +299,10 @@ function DeckEditor({ deck, onClose, onDeleted }: { deck: TcgDeck | null; onClos
     if (!p.cards.length) return toast('error', 'Pega la lista del mazo.')
     const row = { name: name.trim(), format: format.trim(), list_text: text.trim(), notes, icons: shownIcons }
     onClose()
-    if (deck) await update('tcg_decks', deck.id, row)
-    else await create('tcg_decks', row)
+    if (deck) {
+      await saveVersion(deck, row.list_text, change.trim(), toDateKey(new Date()))
+      await update('tcg_decks', deck.id, row)
+    } else await create('tcg_decks', { ...row, is_built: true })
     if (!p.valid) toast('error', `Guardado, pero la lista no es legal: ${p.errors[0]}`)
   }
 
@@ -347,6 +360,11 @@ function DeckEditor({ deck, onClose, onDeleted }: { deck: TcgDeck | null; onClos
               placeholder={'Pokémon: 14\n4 Mega Kangaskhan ex MEG 104\n…\n\nTrainer: 31\n…\n\nEnergy: 15\n…'}
             />
           </Field>
+          {deck && text.trim() !== deck.list_text.trim() && (
+            <Field label="Qué has cambiado (opcional)">
+              <input className="field" value={change} maxLength={500} onChange={(e) => setChange(e.target.value)} placeholder="Se guarda como versión nueva" />
+            </Field>
+          )}
           <Field label="Notas">
             <textarea className="field min-h-16" value={notes} maxLength={5000} onChange={(e) => setNotes(e.target.value)} />
           </Field>

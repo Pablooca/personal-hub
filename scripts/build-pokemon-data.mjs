@@ -171,4 +171,31 @@ writeFileSync(
   new URL('tcg-meta.json', OUT),
   JSON.stringify({ format: FORMAT, source: 'play.limitlesstcg.com', updated: new Date().toISOString().slice(0, 10), archetypes, aceSpecs: [...new Set(ace)].sort() }),
 )
-console.log({ species: species.length, legal: Object.keys(mons).length, items: items.length, moves: moveNames.length, stones: Object.keys(stones).length, archetypes: archetypes.length, aceSpecs: new Set(ace).size, format: FORMAT })
+// ----------------------------------------------------------------- TCG sets
+// PTCG Live code ↔ TCGdex id, to find any print by "MEG 104".
+const TCGDEX = 'https://api.tcgdex.net/v2'
+const tryJson = async (url) => {
+  for (let i = 0; i < 4; i++) {
+    const r = await fetch(url).catch(() => null)
+    if (r?.ok) return r.json()
+    await new Promise((ok) => setTimeout(ok, 400 * (i + 1)))
+  }
+  throw new Error(url)
+}
+const enSets = await tryJson(`${TCGDEX}/en/sets`)
+const esNames = new Map((await tryJson(`${TCGDEX}/es/sets`)).map((s) => [s.id, s.name]))
+const sets = []
+let next = 0
+await Promise.all(
+  Array.from({ length: 8 }, async () => {
+    while (next < enSets.length) {
+      const d = await tryJson(`${TCGDEX}/en/sets/${enSets[next++].id}`)
+      if (d.serie?.id === 'tcgp') continue // Pokémon TCG Pocket: not physical cards
+      const code = d.abbreviation?.official ?? d.tcgOnline ?? ''
+      sets.push([d.id, code, d.name, esNames.get(d.id) ?? d.name, d.releaseDate, d.cardCount?.official ?? 0])
+    }
+  }),
+)
+sets.sort((a, b) => b[4].localeCompare(a[4]))
+writeFileSync(new URL('tcg-sets.json', OUT), JSON.stringify(sets))
+console.log({ sets: sets.length, species: species.length, legal: Object.keys(mons).length, items: items.length, moves: moveNames.length, stones: Object.keys(stones).length, archetypes: archetypes.length, aceSpecs: new Set(ace).size, format: FORMAT })

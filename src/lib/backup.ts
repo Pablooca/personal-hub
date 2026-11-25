@@ -20,7 +20,14 @@ export const TABLE_FIELDS: { [K in TableName]: readonly string[] } = {
   study_subjects: ['id', 'program_id', 'name', 'code', 'credits', 'semester', 'professor', 'color', 'status', 'final_grade', 'target_grade', 'created_at'],
   study_assessments: ['id', 'subject_id', 'name', 'weight', 'grade', 'kind', 'due_at', 'is_done', 'created_at'],
   study_files: ['id', 'subject_id', 'name', 'topic', 'storage_path', 'size_bytes', 'created_at'],
-  tcg_decks: ['id', 'name', 'format', 'icons', 'list_text', 'notes', 'created_at'],
+  tcg_decks: ['id', 'name', 'format', 'icons', 'list_text', 'notes', 'is_built', 'created_at'],
+  deck_versions: ['id', 'deck_id', 'from_date', 'list_text', 'note', 'created_at'],
+  matchup_notes: ['id', 'deck_id', 'archetype', 'name', 'icons', 'notes', 'created_at'],
+  owned_cards: [
+    'id', 'tcgdex_id', 'set_code', 'set_name', 'number', 'name', 'name_en', 'category', 'signature', 'rarity', 'image', 'language', 'condition', 'finish', 'first_edition', 'signed', 'altered',
+    'grade_company', 'grade', 'quantity', 'location', 'for_sale', 'paid', 'acquired_at', 'cm_product', 'ref_low', 'ref_trend', 'ref_date', 'own_price', 'own_price_date', 'notes', 'created_at',
+  ],
+  collection_snapshots: ['id', 'date', 'total', 'cards', 'created_at'],
   vgc_teams: ['id', 'name', 'regulation', 'paste', 'notes', 'created_at'],
   tournaments: [
     'id', 'game', 'name', 'date', 'mode', 'location', 'category', 'format', 'players', 'swiss_rounds', 'swiss_format', 'has_top_cut',
@@ -44,7 +51,7 @@ export const BACKUP_TABLES = Object.keys(TABLE_FIELDS) as TableName[]
 
 export const BACKUP_SCOPES: { id: string; label: string; tables: TableName[] }[] = [
   { id: 'all', label: 'Todo', tables: BACKUP_TABLES },
-  { id: 'pokemon', label: 'Solo Pokémon', tables: ['tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds'] },
+  { id: 'pokemon', label: 'Solo Pokémon', tables: ['tcg_decks', 'vgc_teams', 'deck_versions', 'matchup_notes', 'owned_cards', 'collection_snapshots', 'tournaments', 'tournament_rounds'] },
   { id: 'running', label: 'Solo Running', tables: ['shoes', 'race_goals', 'run_plan', 'runs', 'run_workouts'] },
 ]
 
@@ -60,6 +67,10 @@ export const TABLE_LABELS: Record<TableName, string> = {
   study_subjects: 'Asignaturas',
   study_assessments: 'Entregas y exámenes',
   study_files: 'Apuntes (fichas)',
+  deck_versions: 'Versiones de mazo',
+  matchup_notes: 'Notas de emparejamiento',
+  owned_cards: 'Cartas de la colección',
+  collection_snapshots: 'Valor de la colección',
   tcg_decks: 'Mazos TCG',
   vgc_teams: 'Equipos VGC',
   tournaments: 'Torneos',
@@ -156,7 +167,7 @@ export function planImport(current: Dataset, backup: ParsedBackup['data'], mode:
     if (!incoming?.length) continue
     const mine = current[t] as unknown as Row[]
     const ids = new Set(mine.map((r) => r.id))
-    const natural = (r: Row) => (t === 'categories' ? `${String(r.type)}|${String(r.name)}` : t === 'accounts' ? String(r.name) : t === 'study_files' ? String(r.storage_path) : null)
+    const natural = (r: Row) => (t === 'categories' ? `${String(r.type)}|${String(r.name)}` : t === 'accounts' ? String(r.name) : t === 'study_files' ? String(r.storage_path) : t === 'collection_snapshots' ? String(r.date) : null)
     const names = new Map(mine.map((r) => [natural(r), r.id]))
     const primary = t === 'accounts' ? mine.find((r) => r.is_primary) : undefined
     let add = 0
