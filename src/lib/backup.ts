@@ -28,7 +28,7 @@ export const TABLE_FIELDS: { [K in TableName]: readonly string[] } = {
   ],
   tournament_rounds: [
     'id', 'tournament_id', 'phase', 'number', 'result', 'games', 'won_dice', 'went_first', 'opponent_name', 'opponent_archetype',
-    'opponent_icons', 'opponent_deck_name', 'opponent_pokemon', 'my_pokemon', 'notes', 'created_at',
+    'opponent_icons', 'opponent_deck_name', 'opponent_pokemon', 'opponent_record', 'my_pokemon', 'notes', 'created_at',
   ],
   race_goals: ['id', 'name', 'date', 'distance_km', 'previous_best_s', 'target_s', 'notes', 'created_at'],
   run_plan: ['id', 'goal_id', 'date', 'type', 'distance_km', 'pace_s', 'description', 'blocks', 'created_at'],

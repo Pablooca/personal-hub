@@ -129,6 +129,13 @@ test('slow key sessions raise a pace alert; the recorded work pace is what count
   assert.ok(r.alerts.some((a) => a.text.includes('más lentas')))
 })
 
+test('a run on the day of a planned session fulfils it, whatever its type; other weeks do not inflate the km', () => {
+  const plan = [P('2026-10-13', 'easy', 8), P('2026-10-14', 'interval', 8)]
+  const runs = [R('2026-10-13', 'tempo', 7, 2400), R('2026-10-14', 'interval', 7, 3000), R('2026-11-02', 'easy', 12, 4800), R('2026-11-20', 'easy', 30, 9000)]
+  const r = evaluate(goal, plan, runs, '2026-11-25')
+  assert.deepEqual([r.adherence.done, r.adherence.due, r.adherence.doneKm, r.adherence.kmPct], [2, 2, 14, 87.5])
+})
+
 test('no data → no verdict; today’s pending session is not missed yet', () => {
   assert.equal(evaluate(goal, [], [], '2026-11-25').light, 'none')
   const r = evaluate(goal, [P('2026-11-25', 'easy', 8)], [], '2026-11-25')

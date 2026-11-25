@@ -23,7 +23,7 @@ export function buildDemoPokemon(today: Date): Pick<Dataset, 'tcg_decks' | 'vgc_
   const add = (t: Tournament, o: Partial<TournamentRound> & Pick<TournamentRound, 'number' | 'result'>) =>
     rounds.push({
       id: uid(), tournament_id: t.id, phase: 'swiss', games: [], won_dice: null, went_first: null, opponent_name: '', opponent_archetype: '', opponent_icons: [], opponent_deck_name: '',
-      opponent_pokemon: [], my_pokemon: [], notes: '', created_at: now, ...o,
+      opponent_pokemon: [], opponent_record: null, my_pokemon: [], notes: '', created_at: now, ...o,
     })
 
   const META: Record<string, [string, string[]]> = {
@@ -53,6 +53,10 @@ export function buildDemoPokemon(today: Date): Pick<Dataset, 'tcg_decks' | 'vgc_
   tcg(live, 1, 'basic-box', 'WW', true, true)
   tcg(live, 2, 'dragapult', 'WLW', false, true)
   tcg(live, 3, 'mega-rayquaza', 'LL', false, false)
+  ;[{ w: 1, l: 2, t: 0 }, { w: 2, l: 1, t: 0 }].forEach((r, i) => {
+    const round = rounds.find((x) => x.tournament_id === live.id && x.number === i + 1)
+    if (round) round.opponent_record = { ...r, dropped: false, bye: false }
+  })
 
   const mon = (species: string, item: string, nature: string, ...moves: string[]): RivalPokemon => ({ species, item, nature, moves })
   const inc = mon('Incineroar', 'Sitrus Berry', 'Careful', 'Fake Out', 'Flare Blitz', 'Parting Shot', 'Protect')

@@ -325,7 +325,9 @@ export function evaluate(goal: RaceGoal, planAll: RunPlanSession[], runsAll: Run
   const due = plan.filter((p) => p.date < today || (p.date === today && matched.has(p.id)))
   const done = due.filter((p) => matched.has(p.id))
   const plannedKm = due.reduce((a, p) => a + p.distance_km, 0)
-  const doneKm = inPlan.reduce((a, r) => a + r.distance_km, 0)
+  // Only weeks that had something planned: runs outside the plan say nothing about sticking to it.
+  const dueWeeks = new Set(due.map((p) => weekOf(p.date)))
+  const doneKm = inPlan.filter((r) => dueWeeks.has(weekOf(r.date))).reduce((a, r) => a + r.distance_km, 0)
   const pct = due.length ? (done.length / due.length) * 100 : null
   const kmPct = plannedKm ? (doneKm / plannedKm) * 100 : null
   const adherenceScore = pct === null || kmPct === null ? null : clamp((Math.min(100, pct) + Math.min(100, kmPct)) / 2)

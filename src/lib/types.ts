@@ -264,6 +264,16 @@ export interface RivalPokemon {
   moves: string[]
 }
 
+/** Record of an opponent as the event goes on (our match included). */
+export interface RivalRecord {
+  w: number
+  l: number
+  t: number
+  dropped: boolean
+  /** One of the wins was a bye: it does not count for Op Win %. */
+  bye: boolean
+}
+
 export interface TournamentRound {
   id: string
   user_id?: string
@@ -281,6 +291,8 @@ export interface TournamentRound {
   opponent_deck_name: string
   /** VGC: up to 4 Pokémon seen. */
   opponent_pokemon: RivalPokemon[]
+  /** null = not noted. */
+  opponent_record: RivalRecord | null
   /** VGC: the species I brought from my own team. */
   my_pokemon: string[]
   notes: string

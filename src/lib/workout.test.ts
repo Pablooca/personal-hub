@@ -40,6 +40,8 @@ test('amounts and recoveries', () => {
   assert.deepEqual(parseAmount("5'"), { unit: 's', amount: 300 })
   assert.deepEqual(parseAmount("30''"), { unit: 's', amount: 30 })
   assert.deepEqual(parseAmount('1:30'), { unit: 's', amount: 90 })
+  assert.equal(parseAmount('9 m'), null)
+  assert.deepEqual(parseAmount('9 min'), { unit: 's', amount: 540 })
   assert.equal(parseAmount('30'), null)
   assert.equal(parseRecovery('3'), 180)
   assert.equal(parseRecovery('30'), 30)

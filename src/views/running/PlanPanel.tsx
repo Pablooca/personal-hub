@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState } from 'react'
 import { CheckCircle2, ChevronDown, Circle, CopyPlus, Download, FileUp, Pencil, Plus, Trash2, XCircle } from 'lucide-react'
-import { Button, Card, Empty, Field, Modal, cx } from '../../components/ui'
+import { Badge, Button, Card, Empty, Field, Modal, cx } from '../../components/ui'
 import { fromDateKey, toDateKey } from '../../lib/dates'
 import { downloadText } from '../../lib/download'
 import { capitalize, fmtDate } from '../../lib/format'
-import { RUN_TYPE_LABELS, RUN_TYPE_SHORT, daysBetween, fmtKm, fmtPace, goalPace, matchRuns, parseKm, parsePace, parsePlan, planToCsv, runPace, shiftDay, weekOf, type PlanDraft } from '../../lib/running'
+import { RUN_TYPE_LABELS, RUN_TYPE_SHORT, daysBetween, fmtDuration, fmtKm, fmtPace, goalPace, matchRuns, parseKm, parsePace, parsePlan, planToCsv, runPace, shiftDay, weekOf, type PlanDraft } from '../../lib/running'
 import { defaultBlocks, easyPace, ensureSections, estimate, formatWorkout, missingSections, targetPace } from '../../lib/workout'
 import { RUN_TYPES, type RaceGoal, type Run, type RunPlanSession, type RunType, type WorkoutBlock } from '../../lib/types'
 import { useData } from '../../state/data'
@@ -25,8 +25,10 @@ export function PlanPanel({ goal, onComplete }: { goal: RaceGoal; onComplete: (s
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
   }, [plan])
   const thisWeek = weekOf(today)
-  const [showPast, setShowPast] = useState(false)
   const past = weeks.filter(([w]) => w < thisWeek)
+  // With nothing ahead there would be only a link to show: open the past instead.
+  const [pastChoice, setShowPast] = useState<boolean | null>(null)
+  const showPast = pastChoice ?? past.length === weeks.length
   const visible = showPast ? weeks : weeks.filter(([w]) => w >= thisWeek)
 
   return (
@@ -51,7 +53,7 @@ export function PlanPanel({ goal, onComplete }: { goal: RaceGoal; onComplete: (s
       ) : (
         <div className="space-y-3">
           {past.length > 0 && (
-            <button type="button" className="min-h-9 text-sm font-medium text-accent hover:underline" onClick={() => setShowPast((x) => !x)}>
+            <button type="button" className="min-h-9 text-sm font-medium text-accent hover:underline" onClick={() => setShowPast(!showPast)}>
               {showPast ? 'Ocultar semanas pasadas' : `Ver ${past.length} ${past.length === 1 ? 'semana pasada' : 'semanas pasadas'}`}
             </button>
           )}
@@ -68,7 +70,7 @@ export function PlanPanel({ goal, onComplete }: { goal: RaceGoal; onComplete: (s
                     Semana del {fmtDate(fromDateKey(w), { day: 'numeric', month: 'short' })}
                     <span className="text-xs font-normal text-muted">
                       {w === thisWeek ? 'esta semana · ' : ''}
-                      {left > 0 ? `faltan ${left}` : left === 0 ? 'semana de la carrera' : ''} · {fmtKm(km)} km
+                      {left > 0 ? `faltan ${left}` : left === 0 ? 'semana de la carrera' : ''} · {fmtKm(km)} km · {list.filter((p) => matched.has(p.id)).length} de {list.length} {list.length === 1 ? 'hecha' : 'hechas'}
                     </span>
                   </span>
                 }
@@ -90,6 +92,7 @@ export function PlanPanel({ goal, onComplete }: { goal: RaceGoal; onComplete: (s
                           <span className={cx('size-2 shrink-0 rounded-full', TYPE_DOT[p.type])} aria-hidden />
                           <span className="min-w-0 flex-1">
                             <span className="text-sm font-medium">{RUN_TYPE_SHORT[p.type]}</span>
+                            {run ? <DoneBadge /> : missed && <span className="ml-2 text-xs text-rose-700 dark:text-rose-400">No hecha</span>}
                             {p.description && <span className="block truncate text-xs text-muted">{p.description}</span>}
                             <StructureSummary blocks={p.blocks} className="mt-1" />
                           </span>
@@ -123,6 +126,8 @@ export function PlanPanel({ goal, onComplete }: { goal: RaceGoal; onComplete: (s
     </>
   )
 }
+
+const DoneBadge = () => <Badge className="ml-2 border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">Hecha</Badge>
 
 // --------------------------------------------------------- quick week editor
 interface Row {
@@ -181,6 +186,13 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
     return km !== null && km <= 200 && (!r.pace.trim() || parsePace(r.pace) !== null) && r.blocks !== null && missingSections(r.blocks).length === 0
   }
   const ok = rows.every(valid)
+  // Which rows are already run (also while typing a new one): a run on that day counts.
+  const done = useMemo(() => {
+    const sessions = rows.map((r, i) => ({ id: r.id ?? `new-${i}`, goal_id: goal.id, date: shiftDay(week, r.day), type: r.type, distance_km: 1, pace_s: null, description: '', blocks: [], created_at: '' }))
+    const others = plan.filter((p) => weekOf(p.date) !== week)
+    const m = matchRuns([...others, ...sessions], data.runs)
+    return sessions.map((s) => m.get(s.id) ?? null)
+  }, [rows, plan, week, goal.id, data.runs])
   const total = rows.reduce((a, r) => a + (parseKm(r.km) ?? 0), 0)
   const nextFree = () => {
     const used = new Set(rows.map((r) => r.day))
@@ -269,6 +281,11 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
               <Trash2 className="size-4" />
             </button>
           </div>
+          {done[i] && (
+            <p className="mt-2 flex items-center gap-1.5 text-sm text-emerald-800 dark:text-emerald-300">
+              <CheckCircle2 className="size-4 shrink-0 text-emerald-500" /> Hecha: {RUN_TYPE_SHORT[done[i].type].toLowerCase()} de {fmtKm(done[i].distance_km)} km en {fmtDuration(done[i].duration_s)}
+            </p>
+          )}
           <button type="button" aria-expanded={open === i} onClick={() => setOpen(open === i ? null : i)} className="mt-2 flex min-h-9 w-full items-center gap-2 text-left text-xs font-medium text-accent">
             <ChevronDown className={cx('size-4 shrink-0 transition', open === i && 'rotate-180')} /> {open === i ? 'Cerrar estructura' : 'Calentamiento, bloque principal y enfriamiento'}
           </button>

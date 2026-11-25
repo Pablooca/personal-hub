@@ -67,9 +67,10 @@ export function parseAmount(text: string): { unit: 's' | 'm'; amount: number } |
   const n = Number(m[1])
   const u = m[2] ?? ''
   if (u === 'km') return positive('m', n * 1000)
-  if (/^(m|mts?|metros)$/.test(u)) return positive('m', n)
+  if (/^(m|mts?|metros)$/.test(u)) return n >= 20 ? positive('m', n) : null
   if (/^(min|minutos?)$/.test(u) || /^min/.test(u) || /^['’′]$/.test(u)) return positive('s', n * 60)
   if (u) return positive('s', n)
+  // "9 m" is never nine metres: most likely minutes, so make the writer say which.
   // A bare number: metres when it looks like a track distance, otherwise ambiguous.
   return n >= 100 ? positive('m', n) : null
 }

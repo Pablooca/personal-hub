@@ -4,16 +4,17 @@ import { Badge, Button, Card, Empty, Field, Modal, Stat, cx } from '../../compon
 import { fromDateKey } from '../../lib/dates'
 import { capitalize, fmtDate } from '../../lib/format'
 import { asymmetricCap, CATEGORY_LABELS, bracketOf, cpForPlacement, cutRoundLabel, eventKind, placementLabel, structureFor } from '../../lib/pokemon/structure'
-import { myChance, myFinalPoints, scenarios, simulateSwiss, type SimConfig } from '../../lib/pokemon/simulate'
+import { type SimConfig } from '../../lib/pokemon/simulate'
 import { recordText, roundFormat, swissRecord } from '../../lib/pokemon/stats'
 import type { MatchFormat, RoundPhase, Tournament, TournamentRound } from '../../lib/types'
 import { useData } from '../../state/data'
 import { useToast } from '../../state/toast'
 import type { CalcSeed } from './Calculator'
+import { ChancesCard, RivalsCard } from './Rivals'
 import { RoundModal } from './RoundModal'
 import { CUT_SIZES, PlacementFields, TopCutFormatQuestion, TournamentForm } from './TournamentForm'
 import { OwnIcons, STATUS_LABELS } from './Tournaments'
-import { DeckIcons, FORMAT_LABEL, RESULT_STYLES, SpeciesSprite, fmtRate } from './parts'
+import { DeckIcons, FORMAT_LABEL, RESULT_STYLES, SpeciesSprite } from './parts'
 
 /** Simulator settings that match a tournament. */
 export function simFor(t: Tournament): SimConfig | null {
@@ -54,13 +55,6 @@ export function TournamentDetail({ tournament: t, onBack, onCalculator }: { tour
   const eliminated = cut.some((r) => r.result === 'loss')
 
   const cfg = useMemo(() => simFor(t), [t])
-  const road = useMemo(() => {
-    if (!cfg || !cfg.topCut || swissDone) return null
-    const sim = simulateSwiss({ ...cfg, sims: 400 })
-    const me = { wins: rec.w, losses: rec.l, ties: rec.t }
-    return { sim, list: scenarios(me, cfg.rounds, sim, cfg.phase), chance: myChance(myFinalPoints(me, cfg.rounds, 0.5, cfg.tieRate, cfg.phase), sim) }
-  }, [cfg, swissDone, rec.w, rec.l, rec.t])
-
   const next = (list: TournamentRound[]) => list.reduce((a, r) => Math.max(a, r.number), 0) + 1
 
   function addRound(phase: RoundPhase) {
@@ -195,6 +189,8 @@ export function TournamentDetail({ tournament: t, onBack, onCalculator }: { tour
             )}
           </Card>
 
+          {swiss.some((r) => r.result !== 'bye') && <RivalsCard tournament={t} rounds={swiss} />}
+
           {(t.made_top_cut || cut.length > 0) && (
             <Card
               title={`Top Cut · ${t.top_cut_format ? FORMAT_LABEL[t.top_cut_format] : 'formato sin definir'}`}
@@ -237,28 +233,11 @@ export function TournamentDetail({ tournament: t, onBack, onCalculator }: { tour
         </div>
 
         <aside className="min-w-0">
-          <Card title="Camino al Top Cut">
-            {road && cfg ? (
-              <>
-                <div className="text-center">
-                  <div className="num text-3xl font-semibold">{fmtRate(road.chance * 100)}</div>
-                  <p className="text-xs text-muted">de clasificarte con {recordText(rec)}, si ganas la mitad de lo que queda</p>
-                </div>
-                <ul className="mt-4 space-y-1">
-                  {road.list.map((s) => (
-                    <li key={s.wins} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm odd:bg-surface-2">
-                      <span>
-                        {s.wins + s.losses === 0 ? 'Final' : `${s.wins}-${s.losses} en lo que queda`} <span className="num text-xs text-muted">→ {s.points} pts</span>
-                      </span>
-                      <span className="num font-semibold">{fmtRate(s.qualify * 100)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
+          <Card title="Posibilidades">
+            {cfg ? (
+              <ChancesCard tournament={t} cfg={cfg} swiss={swiss} cut={cut} />
             ) : (
-              <p className="text-sm text-muted">
-                {!t.has_top_cut ? 'Este torneo no tiene Top Cut.' : swissDone ? 'Las rondas suizas han terminado.' : 'Indica los inscritos y las rondas suizas para calcular tus opciones.'}
-              </p>
+              <p className="text-sm text-muted">Indica los inscritos y las rondas suizas para calcular tus opciones.</p>
             )}
             {t.players && (
               <Button

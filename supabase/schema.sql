@@ -638,6 +638,9 @@ create table if not exists public.tournament_rounds (
 -- Upgrade path: final placement by bracket (champion, finalist, top 4…) besides the exact position.
 alter table public.tournaments add column if not exists placement_bracket integer check (placement_bracket in (1, 2, 4, 8, 16, 32, 64, 256, 1024));
 
+-- Upgrade path: how each opponent is doing during the event (drives Op Win % and the standing chances).
+alter table public.tournament_rounds add column if not exists opponent_record jsonb check (opponent_record is null or jsonb_typeof(opponent_record) = 'object');
+
 create index if not exists tcg_decks_user_idx on public.tcg_decks (user_id);
 create index if not exists vgc_teams_user_idx on public.vgc_teams (user_id);
 create index if not exists tournaments_user_date_idx on public.tournaments (user_id, date desc);

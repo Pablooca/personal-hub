@@ -232,6 +232,7 @@ function BlockRow({ d, section, first, last, removable, onChange, onMove, onRemo
         )}
         {!main && removable && <IconBtn label="Quitar bloque" onClick={onRemove} icon={Trash2} />}
       </div>
+      {/^\s*\d{1,2}\s*m\s*$/i.test(d.amount) && !amount && <p className="mt-1.5 text-xs text-rose-700 dark:text-rose-400">«m» son metros. Para minutos escribe «{Number.parseInt(d.amount, 10)} min».</p>}
       {hills && several && (
         <label className="mt-2 block">
           <span className="label">Descanso entre repeticiones (opcional)</span>

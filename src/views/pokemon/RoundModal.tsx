@@ -107,8 +107,9 @@ export function RoundModal({
       notes,
     }
     onSaved(another)
-    if (round) await update('tournament_rounds', round.id, row)
-    else await create('tournament_rounds', row)
+    // The rival's record is kept in its own card: never overwrite it from here.
+    if (round) await update('tournament_rounds', round.id, bye ? { ...row, opponent_record: null } : row)
+    else await create('tournament_rounds', { ...row, opponent_record: null })
   }
 
   const title = phase === 'swiss' ? `Ronda ${number}` : cutRoundLabel(t.top_cut_size, number)

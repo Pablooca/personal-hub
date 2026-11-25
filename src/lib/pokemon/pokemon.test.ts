@@ -252,7 +252,7 @@ const T = (o: Partial<Tournament>): Tournament => ({
 })
 const R = (o: Partial<TournamentRound>): TournamentRound => ({
   id: Math.random().toString(), tournament_id: 't', phase: 'swiss', number: 1, result: 'win', games: [], won_dice: null, went_first: null, opponent_name: '', opponent_archetype: '', opponent_icons: [],
-  opponent_deck_name: '', opponent_pokemon: [], my_pokemon: [], notes: '', created_at: '', ...o,
+  opponent_deck_name: '', opponent_pokemon: [], opponent_record: null, my_pokemon: [], notes: '', created_at: '', ...o,
 })
 
 test('match results from games', () => {

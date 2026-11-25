@@ -56,7 +56,7 @@ export function RunsPanel({ goal, onOpen }: { goal: RaceGoal | null; onOpen: (r:
                       </span>
                     )}
                     {r.blocks.length > 0 && (r.type === 'interval' || r.type === 'tempo') && <span>{highlight(r.blocks).filter((b) => b.done).map((b) => formatBlock({ ...b, reps_max: null, reps: repsDone(b) })).join(' + ')}</span>}
-                    {s && <span>Plan: {fmtKm(s.distance_km)} km{s.pace_s ? ` a ${fmtPace(s.pace_s)}` : ''}</span>}
+                    {s && <span className="text-emerald-800 dark:text-emerald-300">✓ Plan: {fmtKm(s.distance_km)} km{s.pace_s ? ` a ${fmtPace(s.pace_s)}` : ''}</span>}
                   </span>
                 </span>
                 <span className="text-right">
@@ -115,6 +115,14 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
         .sort((a, b) => Math.abs(daysBetween(a.date, date)) - Math.abs(daysBetween(b.date, date)) || a.date.localeCompare(b.date)),
     [data.run_plan, taken, goal, date, planId],
   )
+
+  // Without a choice the run counts for the session of its day: say which one.
+  const auto = useMemo(() => {
+    const own: Run = { ...(run ?? { id: 'new', created_at: '', notes: '', is_test: false, avg_hr: null, rpe: null, work_pace_s: null, blocks: [], duration_s: 1, distance_km: 1 }), plan_id: null, date, type }
+    const plan = data.run_plan.filter((p) => !goal || p.goal_id === goal.id)
+    for (const [id, r] of matchRuns(plan, [...data.runs.filter((x) => x.id !== own.id), own])) if (r.id === own.id) return plan.find((p) => p.id === id) ?? null
+    return null
+  }, [data.run_plan, data.runs, goal, run, date, type])
 
   function load(list: WorkoutBlock[]) {
     setBlocks(toRunBlocks(list))
@@ -222,10 +230,10 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
             {candidates.length > 0 && (
               <Field label="Sesión del planning" className="sm:col-span-2">
                 <select className="field" value={planId} onChange={(e) => choosePlan(e.target.value)}>
-                  <option value="">Ninguna (o la de ese mismo día)</option>
+                  <option value="">{auto ? `Automática: ${sessionLabel(auto)}` : 'Ninguna'}</option>
                   {candidates.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {fmtDate(fromDateKey(p.date), { weekday: 'short', day: 'numeric', month: 'short' })} · {RUN_TYPE_SHORT[p.type]} {fmtKm(p.distance_km)} km
+                      {sessionLabel(p)}
                     </option>
                   ))}
                 </select>
@@ -360,6 +368,7 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
   )
 }
 
+const sessionLabel = (p: RunPlanSession) => `${fmtDate(fromDateKey(p.date), { weekday: 'short', day: 'numeric', month: 'short' })} · ${RUN_TYPE_SHORT[p.type]} ${fmtKm(p.distance_km)} km`
 /** Blocks without what was recorded. */
 const plain = ({ done: _d, splits: _s, ...b }: RunBlock): WorkoutBlock => b
 /** Drop trailing empty reps (the optional 6th one…). */
