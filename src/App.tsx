@@ -5,8 +5,10 @@ import { supabase } from './lib/supabase'
 import { clearLocalCopy, createHybridRepository } from './data/hybrid'
 import { createLocalRepository, createSupabaseRepository, resetDemoData, type Repository } from './data/repository'
 import { DataProvider, useData } from './state/data'
+import { NavProvider } from './state/nav'
 import { useTheme } from './state/theme'
 import { Login } from './components/Login'
+import { GlobalDialogs } from './components/GlobalDialogs'
 import { NAV, Shell, type ViewId } from './components/Shell'
 import { Button } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -184,6 +186,7 @@ function Workspace(props: {
   const clearOpenProject = useCallback(() => setOpenProjectId(null), [])
 
   return (
+    <NavProvider onNavigate={navigate}>
     <Shell view={view} onNavigate={navigate} {...props}>
       {error ? (
         <div className="card mx-auto mt-10 max-w-lg p-6 text-sm">
@@ -227,5 +230,7 @@ function Workspace(props: {
         </>
       )}
     </Shell>
+    {!loading && !error && <GlobalDialogs />}
+    </NavProvider>
   )
 }

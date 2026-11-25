@@ -11,7 +11,7 @@ export const BACKUP_VERSION = 1
 export const TABLE_FIELDS: { [K in TableName]: readonly string[] } = {
   events: ['id', 'title', 'description', 'start_at', 'end_at', 'category', 'is_completed', 'all_day', 'series_id', 'created_at'],
   projects: ['id', 'title', 'area', 'status', 'progress', 'priority', 'description', 'start_date', 'deadline', 'repo_url', 'notes', 'created_at', 'updated_at'],
-  project_tasks: ['id', 'project_id', 'category', 'title', 'status', 'is_done', 'jira_key', 'description', 'priority', 'start_date', 'due_date', 'created_at'],
+  project_tasks: ['id', 'project_id', 'category', 'title', 'status', 'is_done', 'jira_key', 'description', 'priority', 'start_date', 'due_date', 'recurrence', 'created_at'],
   transactions: ['id', 'date', 'type', 'category', 'concept', 'amount', 'account', 'created_at'],
   categories: ['id', 'name', 'type', 'color', 'created_at'],
   accounts: ['id', 'name', 'kind', 'color', 'is_primary', 'created_at'],

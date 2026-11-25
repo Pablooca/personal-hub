@@ -298,7 +298,7 @@ export function Templates({ type, current, onApply }: { type: RunType; current: 
         </select>
         )}
         {same ? (
-          <Button key="del" type="button" variant="danger" onClick={() => void remove('run_workouts', same.id).then(() => toast('success', 'Plantilla eliminada'))} aria-label="Eliminar plantilla">
+          <Button key="del" type="button" variant="danger" onClick={() => void remove('run_workouts', same.id)} aria-label="Eliminar plantilla">
             <Trash2 className="size-4" />
           </Button>
         ) : (

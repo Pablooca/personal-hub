@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { TABLES, cascadeRemove, completeDataset, emptyDataset } from '../data/dataset.ts'
 import type { Repository } from '../data/repository'
-import { planImport, type ImportMode, type ParsedBackup } from '../lib/backup'
+import { TABLE_LABELS, planImport, type ImportMode, type ParsedBackup } from '../lib/backup'
 import { uid } from '../lib/format'
 import type { Dataset, NewRow, TableName, Tables } from '../lib/types'
 import { useToast } from './toast'
@@ -16,8 +16,9 @@ interface DataApi {
   create<K extends TableName>(table: K, row: NewRow<K>): Promise<Tables[K] | null>
   createMany<K extends TableName>(table: K, rows: NewRow<K>[]): Promise<Tables[K][] | null>
   update<K extends TableName>(table: K, id: string, patch: Partial<Tables[K]>): Promise<void>
-  remove(table: TableName, id: string): Promise<void>
-  removeMany(table: TableName, ids: string[]): Promise<void>
+  /** Deletes and offers to undo it for a few seconds (pass `silent` to skip the message). */
+  remove(table: TableName, id: string, opts?: { silent?: boolean }): Promise<void>
+  removeMany(table: TableName, ids: string[], opts?: { silent?: boolean }): Promise<void>
   updateWhere<K extends TableName>(table: K, column: keyof Tables[K] & string, value: string, patch: Partial<Tables[K]>): Promise<void>
   setPrimaryAccount(id: string): Promise<void>
   /** Upload a PDF to private storage and register it. */
@@ -213,33 +214,77 @@ export function DataProvider({ repo: source, children }: { repo: Repository; chi
     [repo, toast],
   )
 
+  /** Offer to put back what `removed` took away (the rows, their children and the links that were cleared). */
+  const offerUndo = useCallback(
+    (table: TableName, snapshot: Dataset, ids: Set<string>) => {
+      const after = cascadeRemove(snapshot, table, ids)
+      const restore: [TableName, { id: string }[]][] = []
+      let files = false
+      for (const t of TABLES) {
+        const was = snapshot[t] as { id: string }[]
+        const now = new Map((after[t] as { id: string }[]).map((r) => [r.id, r]))
+        const rows = was.filter((r) => now.get(r.id) !== r)
+        if (rows.length) restore.push([t, rows])
+        if (t === 'study_files' && rows.length) files = true
+      }
+      const n = ids.size
+      const message = `${TABLE_LABELS[table]}: ${n === 1 ? 'eliminado' : `${n} eliminados`}`
+      // The PDFs are already gone from storage: nothing to bring back.
+      if (files) return toast('success', message)
+      toast('success', message, {
+        label: 'Deshacer',
+        onClick: () => {
+          void (async () => {
+            setData((d) => {
+              const next = { ...d } as unknown as Record<TableName, { id: string }[]>
+              for (const [t, rows] of restore) {
+                const back = new Map(rows.map((r) => [r.id, r]))
+                next[t] = [...next[t].filter((r) => !back.has(r.id)), ...rows]
+              }
+              return next as unknown as Dataset
+            })
+            try {
+              for (const [t, rows] of restore) await repo.upsertMany(t, rows as never)
+            } catch (e) {
+              toast('error', `No se ha podido deshacer: ${errMsg(e)}`)
+              await reload()
+            }
+          })()
+        },
+      })
+    },
+    [repo, toast, setData, reload],
+  )
+
   const remove = useCallback<DataApi['remove']>(
-    async (table, id) => {
+    async (table, id, opts) => {
       const snapshot = dataRef.current
       setData((d) => cascadeRemove(d, table, new Set([id])))
       try {
         await repo.remove(table, id)
+        if (!opts?.silent) offerUndo(table, snapshot, new Set([id]))
       } catch (e) {
         setData(snapshot)
         toast('error', `No se ha podido eliminar: ${errMsg(e)}`)
       }
     },
-    [repo, toast],
+    [repo, toast, setData, offerUndo],
   )
 
   const removeMany = useCallback<DataApi['removeMany']>(
-    async (table, ids) => {
+    async (table, ids, opts) => {
       if (!ids.length) return
       const snapshot = dataRef.current
       setData((d) => cascadeRemove(d, table, new Set(ids)))
       try {
         await repo.removeMany(table, ids)
+        if (!opts?.silent) offerUndo(table, snapshot, new Set(ids))
       } catch (e) {
         setData(snapshot)
         toast('error', `No se ha podido eliminar: ${errMsg(e)}`)
       }
     },
-    [repo, toast, setData],
+    [repo, toast, setData, offerUndo],
   )
 
   const updateWhere = useCallback<DataApi['updateWhere']>(
@@ -337,7 +382,7 @@ export function DataProvider({ repo: source, children }: { repo: Repository; chi
         toast('error', `No se han podido borrar los PDF: ${errMsg(e)}`)
         return
       }
-      await removeMany('study_files', files.map((f) => f.id))
+      await removeMany('study_files', files.map((f) => f.id), { silent: true })
     },
     [repo, toast, removeMany],
   )

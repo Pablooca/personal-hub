@@ -136,3 +136,23 @@ input[type='range'] {
     scroll-behavior: auto !important;
   }
 }
+
+/* Soft entrance when changing section. */
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.view-in {
+  animation: view-in 180ms ease-out;
+}
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+[role='dialog'] {
+  animation: sheet-in 160ms ease-out;
+}

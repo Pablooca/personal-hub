@@ -50,6 +50,9 @@ export interface Repository {
   watchPending?(cb: (n: number, refused?: string) => void): () => void
 }
 
+/** Rows per request. */
+const PAGE = 1000
+
 /** PostgREST "relation not found" — the table hasn't been created (schema.sql not re-run). */
 const isMissingTable = (e: { code?: string; message?: string }) =>
   e.code === 'PGRST205' || e.code === '42P01' || /schema cache|does not exist/i.test(e.message ?? '')
@@ -125,15 +128,23 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
     kind: 'supabase',
 
     async loadAll() {
-      const results = await Promise.all(
-        TABLES.map((t) =>
-          client
+      // PostgREST caps every answer (1 000 rows by default): keep asking until a page comes back short.
+      const fetchAll = async (t: TableName) => {
+        const rows: unknown[] = []
+        for (;;) {
+          const res = await client
             .from(t)
             .select('*')
             .order(ORDER[t].column, { ascending: ORDER[t].ascending })
-            .limit(5000),
-        ),
-      )
+            .order('id', { ascending: true })
+            .range(rows.length, rows.length + PAGE - 1)
+          if (res.error) return { data: null, error: res.error }
+          const page = res.data ?? []
+          rows.push(...page)
+          if (page.length < PAGE) return { data: rows, error: null }
+        }
+      }
+      const results = await Promise.all(TABLES.map(fetchAll))
       const out = emptyDataset()
       const missing: TableName[] = []
       results.forEach((res, i) => {
@@ -256,7 +267,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v16'
+const DEMO_KEY = 'ph-demo-dataset-v17'
 export const STUDY_BUCKET = 'study-files'
 
 function readDemo(): Dataset {

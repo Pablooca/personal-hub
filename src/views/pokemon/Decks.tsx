@@ -26,9 +26,9 @@ export function suggestIcons(deck: ParsedDeck): string[] {
   return out
 }
 
-export function Decks() {
+export function Decks({ initialId = null }: { initialId?: string | null }) {
   const { data, create } = useData()
-  const [openId, setOpenId] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(initialId)
   const [editing, setEditing] = useState<TcgDeck | 'new' | null>(null)
   const open = data.tcg_decks.find((d) => d.id === openId)
   const records = useMemo(() => {

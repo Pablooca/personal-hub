@@ -3,12 +3,17 @@ import { ArrowRight, CalendarClock, CheckSquare, FolderKanban, PiggyBank, Plus, 
 import { PageHeader, type ViewId } from '../components/Shell'
 import { EventModal, type EventDraft } from '../components/EventModal'
 import { Badge, Button, Card, Check, Empty, ProgressBar, Segmented, Stat, cx } from '../components/ui'
-import { addDays, combineDateTime, daysUntil, isSameDay, monthKey, startOfDay, toDateKey, toTimeValue } from '../lib/dates'
+import { addDays, daysUntil, fromDateKey, isSameDay, monthKey, startOfDay, toDateKey } from '../lib/dates'
 import { inMonth, summarise, yearToDate } from '../lib/finance'
 import { capitalize, fmtDate, fmtMoney, fmtMonth, fmtPct, fmtTime, fmtWeekday } from '../lib/format'
-import { AREA_LABELS, AREA_STYLES, CATEGORY_STYLES, STATUS_STYLES } from '../lib/theme'
+import { AREA_LABELS, AREA_STYLES, CATEGORY_STYLES, SOURCE_STYLES, STATUS_STYLES } from '../lib/theme'
 import { categoryLabel, categoryNames } from '../lib/categories'
-import { usePrimaryAccountName } from './finance/TxForms'
+import { SOURCE_LABELS, type AgendaItem } from '../lib/agenda'
+import { useAgenda } from '../lib/useAgenda'
+import { TaskForm } from '../components/QuickAdd'
+import { useNav } from '../state/nav'
+import { useTaskActions } from '../state/useTasks'
+import { parseAmount, usePrimaryAccountName } from './finance/TxForms'
 import { LogHoursModal, type LogDraft } from '../components/LogHoursModal'
 import { fmtHours, hoursByDay, inLogMonth, monthDays, readDailyTarget } from '../lib/worklog'
 import { useOffDays } from '../lib/useHolidays'
@@ -56,35 +61,66 @@ export function Overview({ onNavigate, onOpenProject }: { onNavigate: (v: ViewId
   const hour = now.getHours()
   const greeting = hour < 6 ? 'Buenas noches' : hour < 13 ? 'Buenos días' : hour < 21 ? 'Buenas tardes' : 'Buenas noches'
 
+  const { items } = useAgenda()
+  const { open } = useNav()
+  const { setStatus } = useTaskActions()
+  const tomorrowKey = toDateKey(addDays(startOfDay(now), 1))
+  const weekKey = toDateKey(addDays(startOfDay(now), 7))
+  const todayItems = items.filter((i) => i.date === todayKey)
+  // Late tasks and deliveries never get lost; past runs and tournaments don't nag.
+  const late = items.filter((i) => i.date < todayKey && !i.done && (i.source === 'task' || i.source === 'study'))
+  const soon = items.filter((i) => i.date > todayKey && i.date <= weekKey && !i.done)
+  const total = today.length + todayItems.length
+  const done = doneToday + todayItems.filter((i) => i.done).length
+
+  function toggleItem(i: AgendaItem, v: boolean) {
+    if (i.target.kind === 'task') {
+      const t = data.project_tasks.find((x) => x.id === i.target.id)
+      if (t) void setStatus(t, v ? 'done' : 'todo')
+    } else if (i.source === 'study') void update('study_assessments', i.key.slice('study-'.length), { is_done: v })
+  }
+  const canToggle = (i: AgendaItem) => i.target.kind === 'task' || i.source === 'study'
+
+  const nextRace = data.race_goals.filter((g) => g.date >= todayKey).sort((a, b) => a.date.localeCompare(b.date))[0]
+  const nextTournament = data.tournaments.filter((t) => t.date >= todayKey && t.status !== 'finished' && t.status !== 'dropped').sort((a, b) => a.date.localeCompare(b.date))[0]
+  const nextExam = items.find((i) => i.source === 'study' && i.date >= todayKey && !i.done)
+  const inDays = (k: string) => {
+    const n = daysUntil(k)
+    return n === 0 ? 'hoy' : n === 1 ? 'mañana' : `en ${n} días`
+  }
+
   return (
     <>
-      <PageHeader eyebrow={fmtDate(now, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} title={greeting} />
+      <PageHeader keep eyebrow={fmtDate(now, { weekday: 'long', day: 'numeric', month: 'long' })} title={greeting} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Hoy" value={`${doneToday}/${today.length}`} hint="eventos completados" icon={<CheckSquare className="size-4" />} />
-        <Stat label="Proyectos activos" value={active.length} hint={`${data.projects.filter((p) => p.status === 'completed').length} completados`} icon={<FolderKanban className="size-4" />} />
+        <Stat label="Hoy" value={`${done}/${total}`} hint={late.length ? `${late.length} ${late.length === 1 ? 'pendiente' : 'pendientes'} de días anteriores` : total ? 'completado' : 'nada previsto'} icon={<CheckSquare className="size-4" />} />
+        <Stat label="Proyectos" value={active.length} hint={`activos · ${data.projects.filter((p) => p.status === 'completed').length} completados`} icon={<FolderKanban className="size-4" />} />
         <Stat
-          label="Balance · mes"
+          label="Balance"
           value={fmtMoney(month.net)}
           tone={month.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}
           hint={capitalize(fmtMonth(now))}
           icon={<Receipt className="size-4" />}
         />
-        <Stat
-          label={`Tasa de ahorro · ${now.getFullYear()}`}
-          value={fmtPct(ytd.savingsRate)}
-          hint={`Acumulado del año · este mes ${fmtPct(month.savingsRate)}`}
-          icon={<PiggyBank className="size-4" />}
-        />
+        <Stat label="Ahorro" value={fmtPct(ytd.savingsRate)} hint={`en ${now.getFullYear()} · este mes ${fmtPct(month.savingsRate)}`} icon={<PiggyBank className="size-4" />} />
       </div>
+
+      {(nextExam || nextRace || nextTournament) && (
+        <div className="scrollbar-none -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+          {nextExam && <Upcoming color="bg-violet-500" label={nextExam.title} detail={`${nextExam.detail} · ${inDays(nextExam.date)}`} onClick={() => open(nextExam.target)} />}
+          {nextRace && <Upcoming color="bg-rose-500" label={nextRace.name} detail={`Carrera · ${inDays(nextRace.date)}`} onClick={() => onNavigate('running')} />}
+          {nextTournament && <Upcoming color="bg-yellow-500" label={nextTournament.name} detail={`${nextTournament.game.toUpperCase()} · ${inDays(nextTournament.date)}`} onClick={() => open({ kind: 'tournament', id: nextTournament.id })} />}
+        </div>
+      )}
 
       <HoursNudge onNavigate={onNavigate} />
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        {/* ------------------------------------------------ agenda */}
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* ------------------------------------------------ today */}
         <Card
           className="lg:col-span-2"
-          title="Agenda"
+          title="Mi día"
           action={
             <div className="flex gap-1">
               <Button size="sm" variant="ghost" onClick={() => setDraft({ dateKey: todayKey })}>
@@ -96,40 +132,64 @@ export function Overview({ onNavigate, onOpenProject }: { onNavigate: (v: ViewId
             </div>
           }
         >
-          <div className="grid gap-5 md:grid-cols-2">
-            <div>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <div className="min-w-0">
               <div className="eyebrow mb-2">Hoy</div>
-              {today.length === 0 ? (
+              {total + late.length === 0 ? (
                 <Empty icon={<CalendarClock className="size-5" />}>Nada programado para hoy.</Empty>
               ) : (
                 <ul className="space-y-1.5">
                   {today.map((e) => (
                     <AgendaRow key={e.id} e={e} onToggle={(v) => update('events', e.id, { is_completed: v })} onOpen={() => setDraft(e)} />
                   ))}
+                  {todayItems.map((i) => (
+                    <ItemRow key={i.key} i={i} onToggle={canToggle(i) ? (v) => toggleItem(i, v) : undefined} onOpen={() => open(i.target)} />
+                  ))}
                 </ul>
               )}
+              {late.length > 0 && (
+                <>
+                  <div className="eyebrow mt-4 mb-2 text-rose-700 dark:text-rose-400">Atrasado</div>
+                  <ul className="space-y-1.5">
+                    {late.slice(0, 5).map((i) => (
+                      <ItemRow key={i.key} i={i} showDay onToggle={canToggle(i) ? (v) => toggleItem(i, v) : undefined} onOpen={() => open(i.target)} />
+                    ))}
+                  </ul>
+                  {late.length > 5 && <p className="mt-1.5 text-xs text-muted">y {late.length - 5} más</p>}
+                </>
+              )}
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="eyebrow mb-2">Próximos 7 días</div>
-              {upcoming.length === 0 ? (
-                <Empty>No hay eventos próximos.</Empty>
+              {upcoming.length + soon.length === 0 ? (
+                <Empty>No hay nada próximo.</Empty>
               ) : (
                 <ul className="space-y-1.5">
-                  {upcoming.map((e) => (
-                    <AgendaRow key={e.id} e={e} showDay onToggle={(v) => update('events', e.id, { is_completed: v })} onOpen={() => setDraft(e)} />
-                  ))}
+                  {[...upcoming.map((e) => ({ at: e.start_at, day: toDateKey(new Date(e.start_at)), e, i: null })), ...soon.map((i) => ({ at: `${i.date}T${i.time ?? '23:59'}`, day: i.date, e: null, i }))]
+                    .sort((a, b) => a.day.localeCompare(b.day) || a.at.localeCompare(b.at))
+                    .slice(0, 9)
+                    .map(({ e, i }) =>
+                      e ? (
+                        <AgendaRow key={e.id} e={e} showDay onToggle={(v) => update('events', e.id, { is_completed: v })} onOpen={() => setDraft(e)} />
+                      ) : (
+                        <ItemRow key={i!.key} i={i!} showDay tomorrow={tomorrowKey} onToggle={canToggle(i!) ? (v) => toggleItem(i!, v) : undefined} onOpen={() => open(i!.target)} />
+                      ),
+                    )}
                 </ul>
               )}
             </div>
           </div>
         </Card>
 
-        {/* ------------------------------------------------ quick capture */}
+        {/* ------------------------------------------------ side column */}
+        <div className="flex flex-col gap-4">
         <QuickCapture />
+        <MonthFinance month={month} now={now} onNavigate={onNavigate} />
+        </div>
 
         {/* ------------------------------------------------ projects */}
         <Card
-          className="lg:col-span-2"
+          className="lg:col-span-3"
           title="Proyectos activos"
           action={
             <Button size="sm" variant="ghost" onClick={() => onNavigate('projects')}>
@@ -140,7 +200,7 @@ export function Overview({ onNavigate, onOpenProject }: { onNavigate: (v: ViewId
           {active.length === 0 ? (
             <Empty icon={<FolderKanban className="size-5" />}>No hay proyectos activos.</Empty>
           ) : (
-            <ul className="divide-y divide-line">
+            <ul className="grid grid-cols-1 gap-x-8 lg:grid-cols-2">
               {active.slice(0, 6).map((p) => {
                 const tasks = data.project_tasks.filter((t) => t.project_id === p.id)
                 const due = p.deadline ? daysUntil(p.deadline) : null
@@ -178,7 +238,15 @@ export function Overview({ onNavigate, onOpenProject }: { onNavigate: (v: ViewId
           )}
         </Card>
 
-        {/* ------------------------------------------------ month finance */}
+      </div>
+
+      <EventModal draft={draft} onClose={() => setDraft(null)} />
+    </>
+  )
+}
+
+function MonthFinance({ month, now, onNavigate }: { month: ReturnType<typeof summarise>; now: Date; onNavigate: (v: ViewId) => void }) {
+  return (
         <Card
           title={`Finanzas · ${capitalize(fmtDate(now, { month: 'long' }))}`}
           action={
@@ -207,10 +275,6 @@ export function Overview({ onNavigate, onOpenProject }: { onNavigate: (v: ViewId
             )}
           </div>
         </Card>
-      </div>
-
-      <EventModal draft={draft} onClose={() => setDraft(null)} />
-    </>
   )
 }
 
@@ -223,6 +287,30 @@ function Row({ icon, label, value }: { icon: ReactNode; label: string; value: st
       </dt>
       <dd className="num font-medium">{value}</dd>
     </div>
+  )
+}
+
+const Upcoming = ({ color, label, detail, onClick }: { color: string; label: string; detail: string; onClick: () => void }) => (
+  <button type="button" onClick={onClick} className="flex min-h-12 max-w-72 shrink-0 items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-1.5 text-left transition hover:border-line-strong">
+    <span className={cx('h-7 w-1 shrink-0 rounded-full', color)} aria-hidden />
+    <span className="min-w-0">
+      <span className="block truncate text-sm font-medium">{label}</span>
+      <span className="block truncate text-xs text-muted">{detail}</span>
+    </span>
+  </button>
+)
+
+function ItemRow({ i, onToggle, onOpen, showDay, tomorrow }: { i: AgendaItem; onToggle?: (v: boolean) => void; onOpen: () => void; showDay?: boolean; tomorrow?: string }) {
+  const d = fromDateKey(i.date)
+  const day = i.date === tomorrow ? 'mañana' : `${fmtWeekday(d)} ${fmtDate(d, { day: '2-digit' })}`
+  return (
+    <li className={cx('flex items-center gap-3 rounded-lg border border-l-[3px] border-line bg-surface-2 px-3 transition hover:border-line-strong', SOURCE_STYLES[i.source].bar)}>
+      {onToggle ? <Check checked={i.done} onChange={onToggle} label={`Completar ${i.title}`} /> : <span className={cx('grid size-[18px] shrink-0 place-items-center')} aria-hidden><span className={cx('size-2 rounded-full', SOURCE_STYLES[i.source].dot)} /></span>}
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 py-2 text-left">
+        <span className={cx('block truncate text-sm', i.done && 'text-faint line-through')}>{i.title}</span>
+        <span className="num block truncate text-[11px] text-muted">{[showDay && day, i.time, i.detail || SOURCE_LABELS[i.source]].filter(Boolean).join(' · ')}</span>
+      </button>
+    </li>
   )
 }
 
@@ -249,75 +337,35 @@ function AgendaRow({ e, onToggle, onOpen, showDay }: { e: CalendarEvent; onToggl
 }
 
 function QuickCapture() {
-  const { create } = useData()
+  const { data, create } = useData()
   const toast = useToast()
   const [mode, setMode] = useState<'task' | 'expense'>('task')
   const [title, setTitle] = useState('')
-  const [time, setTime] = useState(() => {
-    const d = new Date()
-    d.setHours(d.getHours() + 1, 0, 0, 0)
-    return toTimeValue(d)
-  })
   const [amount, setAmount] = useState('')
-  const { data } = useData()
   const primary = usePrimaryAccountName()
   const expenseCategories = categoryNames(data, 'expense')
   const [category, setCategory] = useState(() => expenseCategories[0] ?? 'other')
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    const todayKey = toDateKey(new Date())
-    if (mode === 'task') {
-      if (!title.trim()) return
-      const start = combineDateTime(todayKey, time)
-      const end = new Date(new Date(start).getTime() + 30 * 60_000).toISOString()
-      const ok = await create('events', {
-        title: title.trim(),
-        description: '',
-        start_at: start,
-        end_at: end,
-        category: 'personal',
-        is_completed: false,
-        all_day: false,
-        series_id: null,
-      })
-      if (ok) toast('success', 'Tarea añadida a hoy')
-    } else {
-      const value = Number(amount.replace(',', '.'))
-      if (!Number.isFinite(value) || value <= 0) return
-      const ok = await create('transactions', {
-        date: todayKey,
-        type: 'expense',
-        category: category.trim() || 'other',
-        concept: title.trim(),
-        amount: Math.round(value * 100) / 100,
-        account: primary,
-      })
-      if (ok) toast('success', `Gasto de ${fmtMoney(value)} registrado`)
-      setAmount('')
-    }
+    const value = parseAmount(amount)
+    if (value === null) return
+    const ok = await create('transactions', { date: toDateKey(new Date()), type: 'expense', category: category.trim() || 'other', concept: title.trim(), amount: value, account: primary })
+    if (ok) toast('success', `Gasto de ${fmtMoney(value)} registrado`)
+    setAmount('')
     setTitle('')
   }
 
   return (
     <Card title="Captura rápida" action={<Segmented value={mode} onChange={setMode} options={[{ value: 'task', label: 'Tarea' }, { value: 'expense', label: 'Gasto' }]} />}>
-      <form onSubmit={submit} className="space-y-3">
-        <input
-          className="field"
-          placeholder={mode === 'task' ? 'p. ej. Escribir al tutor' : 'Concepto (p. ej. Café)'}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          maxLength={200}
-        />
-        {mode === 'task' ? (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted">Hoy a las</span>
-            <input type="time" aria-label="Hora" className="field num w-36" value={time} onChange={(e) => setTime(e.target.value)} />
-          </div>
-        ) : (
+      {mode === 'task' ? (
+        <TaskForm compact />
+      ) : (
+        <form onSubmit={submit} className="space-y-3">
+          <input className="field" aria-label="Concepto" placeholder="Concepto (p. ej. Café)" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
           <div className="grid grid-cols-2 gap-2">
-            <input className="field num" inputMode="decimal" placeholder="0,00 €" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <select className="field" value={category} onChange={(e) => setCategory(e.target.value)}>
+            <input className="field num" aria-label="Importe" inputMode="decimal" placeholder="0,00 €" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <select className="field" aria-label="Categoría" value={category} onChange={(e) => setCategory(e.target.value)}>
               {expenseCategories.map((c) => (
                 <option key={c} value={c}>
                   {categoryLabel(c)}
@@ -325,15 +373,12 @@ function QuickCapture() {
               ))}
             </select>
           </div>
-        )}
-        <Button type="submit" variant="primary" className="w-full" disabled={mode === 'task' ? !title.trim() : !amount}>
-          <Plus className="size-4" />
-          {mode === 'task' ? 'Añadir tarea' : 'Registrar gasto'}
-        </Button>
-        <p className="text-center font-mono text-[10px] text-faint">
-          {mode === 'task' ? 'Crea un evento de 30 min en la agenda de hoy' : `Hoy · cuenta «${primary}»`}
-        </p>
-      </form>
+          <Button type="submit" variant="primary" className="w-full" disabled={parseAmount(amount) === null}>
+            <Plus className="size-4" /> Registrar gasto
+          </Button>
+          <p className="text-center font-mono text-[10px] text-faint">Hoy · cuenta «{primary}»</p>
+        </form>
+      )}
     </Card>
   )
 }

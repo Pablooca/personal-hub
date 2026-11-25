@@ -19,10 +19,10 @@ const TYPE_ES: Record<string, string> = {
   Psychic: 'Psíquico', Bug: 'Bicho', Rock: 'Roca', Ghost: 'Fantasma', Dragon: 'Dragón', Dark: 'Siniestro', Steel: 'Acero', Fairy: 'Hada',
 }
 
-export function Teams() {
+export function Teams({ initialId = null }: { initialId?: string | null }) {
   const { data, create } = useData()
   const champions = useChampions()
-  const [openId, setOpenId] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(initialId)
   const [editing, setEditing] = useState<VgcTeam | 'new' | null>(null)
   const open = data.vgc_teams.find((t) => t.id === openId)
   const records = useMemo(() => {

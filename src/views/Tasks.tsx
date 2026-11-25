@@ -1,24 +1,42 @@
 import { useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
-import { Briefcase, CalendarDays, Clock, Plus, Search, User } from 'lucide-react'
+import { Briefcase, CalendarDays, Clock, KanbanSquare, List, Plus, Repeat, Search, User } from 'lucide-react'
 import { PageHeader } from '../components/Shell'
 import { LogHoursModal, type LogDraft } from '../components/LogHoursModal'
 import { TaskModal } from '../components/TaskModal'
-import { Button, Check, cx } from '../components/ui'
-import { TASK_CATEGORY_LABELS, newTask, taskStatusPatch } from '../lib/tasks'
+import { Button, Check, Empty, Segmented, cx } from '../components/ui'
+import { BUCKET_LABELS, RECURRENCE_LABELS, TASK_CATEGORY_LABELS, dueBucket, newTask, type DueBucket } from '../lib/tasks'
 import { AREA_DOT, PRIORITY_LABELS, PRIORITY_STYLES, TASK_STATUS_STYLES } from '../lib/theme'
-import { daysUntil, fromDateKey } from '../lib/dates'
+import { daysUntil, fromDateKey, toDateKey } from '../lib/dates'
 import { fmtDate } from '../lib/format'
 import { TASK_STATUSES, type Project, type ProjectTask, type TaskCategory, type TaskStatus } from '../lib/types'
 import { fmtHours } from '../lib/worklog'
 import { useData } from '../state/data'
+import { useTaskActions } from '../state/useTasks'
 
 /** 'all' | 'projects' | 'cat:work' | 'cat:personal' | <project id> */
 type Scope = string
 const DONE_VISIBLE = 12
+const LAYOUT_KEY = 'ph-tasks-layout'
 const JIRA_PREFIX = /^([A-Za-z][A-Za-z0-9]+-\d+)[\s:·-]+(.+)$/
 
 export function TasksView({ onOpenProject }: { onOpenProject: (projectId: string) => void }) {
-  const { data, create, update } = useData()
+  const { data, create } = useData()
+  const { setStatus } = useTaskActions()
+  const [layout, setLayout] = useState<'board' | 'dates'>(() => {
+    try {
+      return localStorage.getItem(LAYOUT_KEY) === 'dates' ? 'dates' : 'board'
+    } catch {
+      return 'board'
+    }
+  })
+  function changeLayout(v: 'board' | 'dates') {
+    setLayout(v)
+    try {
+      localStorage.setItem(LAYOUT_KEY, v)
+    } catch {
+      /* ignore */
+    }
+  }
   const [scope, setScope] = useState<Scope>('all')
   const [query, setQuery] = useState('')
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null)
@@ -64,7 +82,7 @@ export function TasksView({ onOpenProject }: { onOpenProject: (projectId: string
     setDragOver(null)
     const id = e.dataTransfer.getData('text/task-id')
     const t = data.project_tasks.find((x) => x.id === id)
-    if (t && t.status !== status) void update('project_tasks', id, taskStatusPatch(status))
+    if (t && t.status !== status) void setStatus(t, status)
   }
 
   const activeProjects = data.projects.filter((p) => p.status !== 'completed')
@@ -86,12 +104,22 @@ export function TasksView({ onOpenProject }: { onOpenProject: (projectId: string
   return (
     <>
       <PageHeader
-        eyebrow="Kanban de tareas"
+        eyebrow={layout === 'board' ? 'Kanban de tareas' : 'Tareas por fecha'}
         title="Tareas"
         actions={
-          <Button variant="primary" onClick={() => setAdding('todo')}>
-            <Plus className="size-4" /> <span className="max-sm:sr-only">Nueva tarea</span>
-          </Button>
+          <>
+            <Segmented
+              value={layout}
+              onChange={changeLayout}
+              options={[
+                { value: 'board', label: <><KanbanSquare className="size-3.5" /> Tablero</> },
+                { value: 'dates', label: <><List className="size-3.5" /> Por fecha</> },
+              ]}
+            />
+            <Button variant="primary" onClick={() => setAdding('todo')}>
+              <Plus className="size-4" /> <span className="max-sm:sr-only">Nueva tarea</span>
+            </Button>
+          </>
         }
       />
 
@@ -121,6 +149,24 @@ export function TasksView({ onOpenProject }: { onOpenProject: (projectId: string
         </select>
       </div>
 
+      {layout === 'dates' && (
+        <>
+          {adding && (
+            <div className="mb-4 max-w-xl">
+              <QuickAdd
+                scope={scope}
+                projects={activeProjects}
+                onCancel={() => setAdding(null)}
+                onAdd={async (title, owner, jira) => {
+                  await create('project_tasks', newTask(title, owner, 'todo', jira, { due_date: toDateKey(new Date()) }))
+                }}
+              />
+            </div>
+          )}
+          <ByDate tasks={tasks} projectsById={projectsById} onOpen={setEditing} onToggle={(t, v) => void setStatus(t, v ? 'done' : 'todo')} />
+        </>
+      )}
+      {layout === 'board' && (
       <div className="scrollbar-thin -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0 lg:grid lg:grid-cols-4 lg:overflow-visible">
         {TASK_STATUSES.map((status) => {
           let col = tasks.filter((t) => t.status === status)
@@ -173,7 +219,7 @@ export function TasksView({ onOpenProject }: { onOpenProject: (projectId: string
                     project={t.project_id ? projectsById.get(t.project_id) : undefined}
                     logged={loggedByTask.get(t.id) ?? 0}
                     onOpen={() => setEditing(t)}
-                    onToggle={(v) => update('project_tasks', t.id, taskStatusPatch(v ? 'done' : t.status === 'done' ? 'todo' : t.status))}
+                    onToggle={(v) => void setStatus(t, v ? 'done' : t.status === 'done' ? 'todo' : t.status)}
                     onLog={() => setLogDraft({ task_id: t.id })}
                   />
                 ))}
@@ -190,6 +236,7 @@ export function TasksView({ onOpenProject }: { onOpenProject: (projectId: string
           )
         })}
       </div>
+      )}
 
       {editing && (
         <TaskModal
@@ -202,6 +249,54 @@ export function TasksView({ onOpenProject }: { onOpenProject: (projectId: string
       )}
       <LogHoursModal draft={logDraft} onClose={() => setLogDraft(null)} />
     </>
+  )
+}
+
+const BUCKETS: DueBucket[] = ['overdue', 'today', 'week', 'later', 'none']
+
+/** Open tasks grouped by when they are due. */
+function ByDate({ tasks, projectsById, onOpen, onToggle }: { tasks: ProjectTask[]; projectsById: Map<string, Project>; onOpen: (t: ProjectTask) => void; onToggle: (t: ProjectTask, v: boolean) => void }) {
+  const today = toDateKey(new Date())
+  const groups = new Map<DueBucket, ProjectTask[]>()
+  for (const t of tasks) {
+    if (t.is_done) continue
+    const b = dueBucket(t.due_date, today)
+    groups.set(b, [...(groups.get(b) ?? []), t])
+  }
+  const rank = { high: 0, medium: 1, low: 2 }
+  if (!groups.size) return <Empty>No hay tareas abiertas.</Empty>
+  return (
+    <div className="space-y-4">
+      {BUCKETS.filter((b) => groups.has(b)).map((b) => (
+        <section key={b} className="card overflow-hidden">
+          <h2 className={cx('flex items-center gap-2 border-b border-line px-4 py-2.5 text-sm font-semibold', b === 'overdue' && 'text-rose-700 dark:text-rose-400')}>
+            {BUCKET_LABELS[b]} <span className="num text-xs font-normal text-muted">{groups.get(b)!.length}</span>
+          </h2>
+          <ul className="divide-y divide-line">
+            {groups
+              .get(b)!
+              .sort((x, y) => (x.due_date ?? '9').localeCompare(y.due_date ?? '9') || rank[x.priority] - rank[y.priority])
+              .map((t) => (
+                <li key={t.id} className="flex items-center gap-3 px-4">
+                  <Check checked={false} onChange={(v) => onToggle(t, v)} label={`Completar ${t.title}`} />
+                  <button type="button" onClick={() => onOpen(t)} className="flex min-h-12 min-w-0 flex-1 items-center gap-3 py-2 text-left">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm">{t.title}</span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-2">
+                        <OwnerTag t={t} project={t.project_id ? projectsById.get(t.project_id) : undefined} />
+                        {t.jira_key && <span className="font-mono text-[10px] text-muted">{t.jira_key}</span>}
+                        {t.recurrence && <Repeat className="size-3 text-faint" aria-label={RECURRENCE_LABELS[t.recurrence]} />}
+                      </span>
+                    </span>
+                    {t.priority === 'high' && <span className={cx('font-mono text-[10px] font-semibold uppercase', PRIORITY_STYLES.high)}>{PRIORITY_LABELS.high}</span>}
+                    {t.due_date && <span className={cx('num shrink-0 text-xs', b === 'overdue' ? 'text-rose-700 dark:text-rose-400' : 'text-muted')}>{fmtDate(fromDateKey(t.due_date))}</span>}
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </section>
+      ))}
+    </div>
   )
 }
 
@@ -274,21 +369,24 @@ function TaskCard({
                 {fmtDate(fromDateKey(t.due_date))}
               </span>
             )}
+            {t.recurrence && (
+              <span className="inline-flex text-faint" title={RECURRENCE_LABELS[t.recurrence]}>
+                <Repeat className="size-3" aria-label={RECURRENCE_LABELS[t.recurrence]} />
+              </span>
+            )}
+            {logged > 0 && <span className="num text-[11px] text-faint">{fmtHours(logged)}</span>}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onLog()
+              }}
+              className="-my-1 ml-auto inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 text-[11px] text-faint opacity-0 transition group-hover:opacity-100 hover:bg-surface-2 hover:text-fg focus:opacity-100 max-md:opacity-100"
+              title="Registrar horas"
+            >
+              <Clock className="size-3" /> Horas
+            </button>
           </div>
         </div>
-      </div>
-      <div className="mt-2 flex items-center justify-end gap-2">
-        {logged > 0 && <span className="num mr-auto text-[11px] text-faint">{fmtHours(logged)}</span>}
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onLog()
-          }}
-          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-faint opacity-0 transition group-hover:opacity-100 hover:bg-surface-2 hover:text-fg focus:opacity-100 max-md:opacity-100"
-          title="Registrar horas"
-        >
-          <Clock className="size-3" /> Horas
-        </button>
       </div>
     </article>
   )

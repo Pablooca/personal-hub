@@ -6,7 +6,6 @@ import { decided, maxGames, resultFromGames, rivalKey } from '../../lib/pokemon/
 import { NATURES, natureLabel, parseTeam } from '../../lib/pokemon/team'
 import type { MatchFormat, RivalPokemon, RoundGame, RoundPhase, RoundResult, Tournament, TournamentRound, VgcTeam } from '../../lib/types'
 import { useData } from '../../state/data'
-import { useToast } from '../../state/toast'
 import { META, SPECIES, useChampions, type Champions } from './data'
 import { Combobox, DeckIcons, FORMAT_LABEL, RESULT_STYLES, SpeciesSprite, SpritePicker } from './parts'
 
@@ -49,7 +48,6 @@ export function RoundModal({
   onSaved: (another: boolean) => void
 }) {
   const { create, update, remove } = useData()
-  const toast = useToast()
   const tcg = t.game === 'tcg'
   const format: MatchFormat = phase === 'top_cut' ? (t.top_cut_format ?? t.swiss_format) : t.swiss_format
 
@@ -137,7 +135,7 @@ export function RoundModal({
               aria-label="Eliminar ronda"
               onClick={() => {
                 onClose()
-                void remove('tournament_rounds', round.id).then(() => toast('success', 'Ronda eliminada'))
+                void remove('tournament_rounds', round.id)
               }}
             >
               <Trash2 className="size-4" /> <span className="max-sm:sr-only">Eliminar</span>

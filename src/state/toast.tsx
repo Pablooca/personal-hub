@@ -1,17 +1,21 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
 import { AlertTriangle, CheckCircle2, X } from 'lucide-react'
 
-type Toast = { id: number; kind: 'success' | 'error'; message: string }
+export interface ToastAction {
+  label: string
+  onClick: () => void
+}
+type Toast = { id: number; kind: 'success' | 'error'; message: string; action?: ToastAction }
 
-const ToastCtx = createContext<(kind: Toast['kind'], message: string) => void>(() => {})
+const ToastCtx = createContext<(kind: Toast['kind'], message: string, action?: ToastAction) => void>(() => {})
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  const push = useCallback((kind: Toast['kind'], message: string) => {
+  const push = useCallback((kind: Toast['kind'], message: string, action?: ToastAction) => {
     const id = Date.now() + Math.random()
-    setToasts((t) => [...t.slice(-3), { id, kind, message }])
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === 'error' ? 6000 : 2600)
+    setToasts((t) => [...t.slice(-3), { id, kind, message, action }])
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === 'error' || action ? 6500 : 2600)
   }, [])
 
   return (
@@ -30,6 +34,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-rose-500" />
             )}
             <span className="flex-1">{t.message}</span>
+            {t.action && (
+              <button
+                className="font-semibold text-accent hover:underline"
+                onClick={() => {
+                  setToasts((all) => all.filter((x) => x.id !== t.id))
+                  t.action?.onClick()
+                }}
+              >
+                {t.action.label}
+              </button>
+            )}
             <button
               className="text-faint hover:text-fg"
               onClick={() => setToasts((all) => all.filter((x) => x.id !== t.id))}

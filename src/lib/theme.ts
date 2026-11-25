@@ -1,3 +1,4 @@
+import type { AgendaSource } from './agenda'
 import type { AccountKind, EventCategory, Priority, ProjectArea, ProjectStatus, TaskStatus, TxType } from './types'
 
 /** Category palette — Tailwind classes kept literal so they are not purged. */
@@ -108,4 +109,14 @@ export const ACCOUNT_KIND_LABELS: Record<AccountKind, string> = {
   credit: 'Tarjeta de crédito',
   cash: 'Efectivo',
   investment: 'Inversión',
+}
+
+/** Derived agenda items (runs, deadlines, tournaments…). */
+export const SOURCE_STYLES: Record<AgendaSource, { dot: string; chip: string; bar: string }> = {
+  run: { dot: 'bg-rose-500', bar: 'border-l-rose-500', chip: 'bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-500/30' },
+  study: { dot: 'bg-violet-500', bar: 'border-l-violet-500', chip: 'bg-violet-500/10 text-violet-800 dark:text-violet-300 border-violet-500/30' },
+  tournament: { dot: 'bg-yellow-500', bar: 'border-l-yellow-500', chip: 'bg-yellow-500/12 text-yellow-900 dark:text-yellow-200 border-yellow-500/40' },
+  task: { dot: 'bg-sky-500', bar: 'border-l-sky-500', chip: 'bg-sky-500/10 text-sky-800 dark:text-sky-300 border-sky-500/30' },
+  project: { dot: 'bg-teal-500', bar: 'border-l-teal-500', chip: 'bg-teal-500/10 text-teal-800 dark:text-teal-300 border-teal-500/30' },
+  bill: { dot: 'bg-emerald-500', bar: 'border-l-emerald-500', chip: 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/30' },
 }

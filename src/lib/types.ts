@@ -50,6 +50,9 @@ export interface Project {
   updated_at: string
 }
 
+export const RECURRENCES = ['daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'yearly'] as const
+export type Recurrence = (typeof RECURRENCES)[number]
+
 export interface ProjectTask {
   id: string
   user_id?: string
@@ -63,6 +66,8 @@ export interface ProjectTask {
   priority: Priority
   start_date: string | null // YYYY-MM-DD
   due_date: string | null // YYYY-MM-DD
+  /** When completed, the next one is created. */
+  recurrence: Recurrence | null
   created_at: string
 }
 

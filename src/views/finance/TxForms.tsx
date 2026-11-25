@@ -107,7 +107,7 @@ const toRow = (v: TxDraft, amount: number) => ({
   account: v.account.trim() || 'Cuenta principal',
 })
 
-export function QuickEntry({ defaultDate, onManage }: { defaultDate: string; onManage: (tab: 'accounts' | 'categories') => void }) {
+export function QuickEntry({ defaultDate, onManage, bare, onDone }: { defaultDate: string; onManage: (tab: 'accounts' | 'categories') => void; bare?: boolean; onDone?: () => void }) {
   const { data, create } = useData()
   const toast = useToast()
   const primary = usePrimaryAccountName()
@@ -138,18 +138,11 @@ export function QuickEntry({ defaultDate, onManage }: { defaultDate: string; onM
     if (await create('transactions', toRow(v, amount))) {
       toast('success', `${TX_STYLES[v.type].label}: ${fmtMoney(amount)}`)
       setV(blank(v.type))
+      onDone?.()
     }
   }
 
-  return (
-    <Card
-      title="Registro rápido"
-      action={
-        <Button size="sm" variant="ghost" onClick={() => onManage('accounts')}>
-          <Settings2 className="size-3.5" /> Gestionar
-        </Button>
-      }
-    >
+  const form = (
       <form onSubmit={submit} className="space-y-4">
         <TxFields
           value={v}
@@ -170,13 +163,24 @@ export function QuickEntry({ defaultDate, onManage }: { defaultDate: string; onM
         </Button>
         {v.type === 'investment' && <p className="text-center font-mono text-[10px] text-faint">Mueve dinero de tu cuenta principal a «{v.account}».</p>}
       </form>
+  )
+  if (bare) return form
+  return (
+    <Card
+      title="Registro rápido"
+      action={
+        <Button size="sm" variant="ghost" onClick={() => onManage('accounts')}>
+          <Settings2 className="size-3.5" /> Gestionar
+        </Button>
+      }
+    >
+      {form}
     </Card>
   )
 }
 
 export function TxModal({ tx, onClose, onManage }: { tx: Transaction; onClose: () => void; onManage: (tab: 'accounts' | 'categories') => void }) {
   const { update, remove } = useData()
-  const toast = useToast()
   const [v, setV] = useState<TxDraft>({ type: tx.type, amount: String(tx.amount), date: tx.date, category: tx.category, concept: tx.concept, account: tx.account })
   const amount = parseAmount(v.amount)
 
@@ -199,7 +203,6 @@ export function TxModal({ tx, onClose, onManage }: { tx: Transaction; onClose: (
             onClick={async () => {
               onClose()
               await remove('transactions', tx.id)
-              toast('success', 'Movimiento eliminado')
             }}
           >
             <Trash2 className="size-4" /> Eliminar

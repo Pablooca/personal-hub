@@ -195,14 +195,15 @@ export function buildDemoDataset(today = new Date()): Dataset {
 
   // Open tasks get a staggered start/end and a rotating priority so the demo shows dates on cards.
   let taskN = 0
-  const taskExtras = (status: ProjectTask['status']): Pick<ProjectTask, 'description' | 'priority' | 'start_date' | 'due_date'> => {
+  const taskExtras = (status: ProjectTask['status']): Pick<ProjectTask, 'description' | 'priority' | 'start_date' | 'due_date' | 'recurrence'> => {
     const n = taskN++
-    if (status === 'done') return { description: '', priority: 'medium', start_date: day(-20 - n), due_date: day(-5 - n) }
+    if (status === 'done') return { description: '', priority: 'medium', start_date: day(-20 - n), due_date: day(-5 - n), recurrence: null }
     return {
       description: '',
       priority: (['high', 'medium', 'low'] as const)[n % 3],
       start_date: day(-3 + (n % 4)),
-      due_date: day(2 + ((n * 3) % 14)),
+      due_date: day(n === 4 ? 0 : 2 + ((n * 3) % 14)),
+      recurrence: n === 6 ? 'weekly' : null,
     }
   }
 

@@ -36,10 +36,10 @@ export function OwnIcons({ deck, team, size = 32 }: { deck?: TcgDeck | null; tea
 
 const ORDER: Record<TournamentStatus, number> = { in_progress: 0, planned: 1, finished: 2, dropped: 2 }
 
-export function Tournaments({ game, onCalculator }: { game: PokemonGame; onCalculator: (s: CalcSeed) => void }) {
+export function Tournaments({ game, initialId = null, onCalculator }: { game: PokemonGame; initialId?: string | null; onCalculator: (s: CalcSeed) => void }) {
   const { data } = useData()
   const [editing, setEditing] = useState<Tournament | 'new' | null>(null)
-  const [openId, setOpenId] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(initialId)
   const open = data.tournaments.find((t) => t.id === openId)
 
   const list = useMemo(

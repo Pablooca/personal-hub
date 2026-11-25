@@ -210,6 +210,9 @@ create index if not exists project_tasks_user_idx on public.project_tasks (user_
 -- =============================================================================
 --  4. TRANSACTIONS — personal finance ledger
 -- =============================================================================
+-- Upgrade path: recurring tasks (the app creates the next one when a task is completed).
+alter table public.project_tasks add column if not exists recurrence text check (recurrence in ('daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'yearly'));
+
 create table if not exists public.transactions (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,

@@ -10,9 +10,23 @@ import { EVENT_CATEGORIES, type CalendarEvent, type EventCategory } from '../lib
 import { useData } from '../state/data'
 import { DEFAULT_HOLIDAY_RULES, REGION_OPTIONS, RULE_LABELS, SCOPE_LABELS, holidayLabel, type Holiday, type HolidayRegion, type HolidayRules } from '../lib/holidays'
 import { useHolidayRules, useHolidays } from '../lib/useHolidays'
+import { AGENDA_SOURCES, SOURCE_LABELS, type AgendaItem, type AgendaSource } from '../lib/agenda'
+import { useAgenda } from '../lib/useAgenda'
+import { useNav } from '../state/nav'
+import { SOURCE_STYLES } from '../lib/theme'
 import { Modal } from '../components/ui'
 
 const timeLabel = (e: CalendarEvent) => (e.all_day ? 'Todo el día' : `${fmtTime(e.start_at)}–${fmtTime(e.end_at)}`)
+
+const HIDDEN_KEY = 'ph-calendar-hidden'
+type Filter = EventCategory | AgendaSource
+function readHidden(): Set<Filter> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? '[]') as Filter[])
+  } catch {
+    return new Set()
+  }
+}
 
 type Mode = 'month' | 'week'
 const HOUR_PX = 44
@@ -24,7 +38,9 @@ export function CalendarView() {
   const [mode, setMode] = useState<Mode>('month')
   const [cursor, setCursor] = useState(() => startOfDay(new Date()))
   const [selected, setSelected] = useState(() => startOfDay(new Date()))
-  const [hidden, setHidden] = useState<Set<EventCategory>>(new Set())
+  const [hidden, setHidden] = useState<Set<Filter>>(readHidden)
+  const { byDay: derived } = useAgenda()
+  const { open } = useNav()
   const [draft, setDraft] = useState<EventDraft | null>(null)
   const [rules, setRules] = useHolidayRules()
   const [showRules, setShowRules] = useState(false)
@@ -46,6 +62,16 @@ export function CalendarView() {
     return m
   }, [visible])
 
+  // Runs, deadlines, tournaments… computed from their own modules.
+  const extras = useMemo(() => {
+    const m = new Map<string, AgendaItem[]>()
+    for (const [k, list] of derived) {
+      const shown = list.filter((i) => !hidden.has(i.source))
+      if (shown.length) m.set(k, shown)
+    }
+    return m
+  }, [derived, hidden])
+
   const today = startOfDay(new Date())
   const step = (dir: 1 | -1) => setCursor((c) => (mode === 'month' ? addMonths(c, dir) : addDays(c, dir * 7)))
   const goToday = () => {
@@ -64,11 +90,18 @@ export function CalendarView() {
   const doneCount = checkable.filter((e) => e.is_completed).length
   const selectedHolidays = holidays.get(toDateKey(selected))
 
-  const toggleCategory = (c: EventCategory) =>
+  const selectedExtras = extras.get(toDateKey(selected)) ?? []
+
+  const toggleCategory = (c: Filter) =>
     setHidden((h) => {
       const n = new Set(h)
       if (n.has(c)) n.delete(c)
       else n.add(c)
+      try {
+        localStorage.setItem(HIDDEN_KEY, JSON.stringify([...n]))
+      } catch {
+        /* ignore */
+      }
       return n
     })
 
@@ -102,19 +135,31 @@ export function CalendarView() {
       />
 
       {/* category legend / filter */}
-      <div className="mb-4 flex flex-wrap gap-1.5">
+      <div className="scrollbar-none -mx-4 mb-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
         {EVENT_CATEGORIES.map((c) => (
           <button
             key={c}
             onClick={() => toggleCategory(c)}
             className={cx(
-              'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition',
+              'inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition',
               hidden.has(c) ? 'border-line text-faint line-through' : CATEGORY_STYLES[c].chip,
             )}
             aria-pressed={!hidden.has(c)}
           >
             <span className={cx('size-2 rounded-full', hidden.has(c) ? 'bg-faint' : CATEGORY_STYLES[c].dot)} />
             {CATEGORY_STYLES[c].label}
+          </button>
+        ))}
+        <span className="mx-1 w-px shrink-0 self-stretch bg-line" aria-hidden />
+        {AGENDA_SOURCES.map((c) => (
+          <button
+            key={c}
+            onClick={() => toggleCategory(c)}
+            aria-pressed={!hidden.has(c)}
+            className={cx('inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-md border border-dashed px-2 py-1 text-xs font-medium transition', hidden.has(c) ? 'border-line text-faint line-through' : SOURCE_STYLES[c].chip)}
+          >
+            <span className={cx('size-2 rounded-full', hidden.has(c) ? 'bg-faint' : SOURCE_STYLES[c].dot)} />
+            {SOURCE_LABELS[c]}
           </button>
         ))}
       </div>
@@ -127,6 +172,8 @@ export function CalendarView() {
               selected={selected}
               today={today}
               byDay={byDay}
+              extras={extras}
+              onOpenItem={(i) => open(i.target)}
               holidays={holidays}
               onSelect={setSelected}
               onCreate={(d) => setDraft({ dateKey: toDateKey(d) })}
@@ -137,6 +184,8 @@ export function CalendarView() {
               days={week}
               today={today}
               byDay={byDay}
+              extras={extras}
+              onOpenItem={(i) => open(i.target)}
               holidays={holidays}
               onOpen={setDraft}
               onCreate={(d, hour) =>
@@ -174,7 +223,7 @@ export function CalendarView() {
               ))}
             </div>
           )}
-          {selectedEvents.length === 0 ? (
+          {selectedEvents.length === 0 && selectedExtras.length === 0 ? (
             <Empty>
               Día libre.
               <Button size="sm" variant="ghost" onClick={() => setDraft({ dateKey: toDateKey(selected) })}>
@@ -207,6 +256,26 @@ export function CalendarView() {
                     </div>
                     {e.description && <p className="mt-1 line-clamp-2 text-xs text-muted">{e.description}</p>}
                   </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {selectedExtras.length > 0 && (
+            <ul className={cx('space-y-1.5', selectedEvents.length > 0 && 'mt-3 border-t border-line pt-3')}>
+              {selectedExtras.map((i) => (
+                <li key={i.key}>
+                  <button
+                    type="button"
+                    onClick={() => open(i.target)}
+                    className={cx('flex w-full items-start gap-3 rounded-lg border border-l-[3px] border-dashed border-line bg-surface-2 px-3 py-2.5 text-left hover:border-line-strong', SOURCE_STYLES[i.source].bar)}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className={cx('block text-sm font-medium', i.done && 'text-faint line-through')}>{i.title}</span>
+                      <span className="num block text-[11px] text-muted">
+                        {[i.time, SOURCE_LABELS[i.source], i.detail].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -282,11 +351,15 @@ function MonthGrid({
   selected,
   today,
   byDay,
+  extras,
+  onOpenItem,
   holidays,
   onSelect,
   onCreate,
   onOpen,
 }: {
+  extras: Map<string, AgendaItem[]>
+  onOpenItem: (i: AgendaItem) => void
   cursor: Date
   selected: Date
   today: Date
@@ -310,6 +383,7 @@ function MonthGrid({
       <div className="grid grid-cols-7">
         {days.map((d, i) => {
           const events = byDay.get(toDateKey(d)) ?? []
+          const more = extras.get(toDateKey(d)) ?? []
           const hol = holidays.get(toDateKey(d))
           const outside = d.getMonth() !== cursor.getMonth()
           const isSel = isSameDay(d, selected)
@@ -355,6 +429,9 @@ function MonthGrid({
                 {events.slice(0, 4).map((e) => (
                   <span key={e.id} className={cx('size-1.5 rounded-full', CATEGORY_STYLES[e.category].dot, e.is_completed && 'opacity-40')} />
                 ))}
+                {more.slice(0, Math.max(0, 6 - Math.min(4, events.length))).map((i) => (
+                  <span key={i.key} className={cx('size-1.5 rounded-[2px]', SOURCE_STYLES[i.source].dot, i.done && 'opacity-40')} />
+                ))}
               </div>
 
               {/* desktop: chips */}
@@ -369,14 +446,28 @@ function MonthGrid({
                     className={cx(
                       'flex w-full items-center gap-1 truncate rounded border px-1 py-px text-left text-[11px] leading-4',
                       CATEGORY_STYLES[e.category].chip,
-                      e.is_completed && 'line-through opacity-50',
+                      e.is_completed && 'line-through opacity-70',
                     )}
                   >
                     {!e.all_day && <span className="num shrink-0 opacity-70">{fmtTime(e.start_at)}</span>}
                     <span className="truncate">{e.title}</span>
                   </button>
                 ))}
-                {events.length > 3 && <div className="px-1 font-mono text-[10px] text-muted">+{events.length - 3} más</div>}
+                {more.slice(0, Math.max(1, 4 - Math.min(3, events.length))).map((i) => (
+                  <button
+                    key={i.key}
+                    onClick={(ev) => {
+                      ev.stopPropagation()
+                      onOpenItem(i)
+                    }}
+                    className={cx('flex w-full items-center gap-1 truncate rounded border border-dashed px-1 py-px text-left text-[11px] leading-4', SOURCE_STYLES[i.source].chip, i.done && 'line-through opacity-70')}
+                  >
+                    <span className="truncate">{i.title}</span>
+                  </button>
+                ))}
+                {Math.max(0, events.length - 3) + Math.max(0, more.length - Math.max(1, 4 - Math.min(3, events.length))) > 0 && (
+                  <div className="px-1 font-mono text-[10px] text-muted">+{Math.max(0, events.length - 3) + Math.max(0, more.length - Math.max(1, 4 - Math.min(3, events.length)))} más</div>
+                )}
               </div>
             </div>
           )
@@ -391,11 +482,15 @@ function WeekGrid({
   days,
   today,
   byDay,
+  extras,
+  onOpenItem,
   holidays,
   onOpen,
   onCreate,
   onSelect,
 }: {
+  extras: Map<string, AgendaItem[]>
+  onOpenItem: (i: AgendaItem) => void
   days: Date[]
   today: Date
   byDay: Map<string, CalendarEvent[]>
@@ -443,6 +538,11 @@ function WeekGrid({
                     className={cx('block w-full truncate rounded border px-1 text-left text-[10px] leading-4', CATEGORY_STYLES[e.category].chip)}
                   >
                     {e.title}
+                  </button>
+                ))}
+                {(extras.get(toDateKey(d)) ?? []).map((i) => (
+                  <button key={i.key} onClick={() => onOpenItem(i)} className={cx('block w-full truncate rounded border border-dashed px-1 text-left text-[10px] leading-4', SOURCE_STYLES[i.source].chip, i.done && 'line-through opacity-70')}>
+                    {i.title}
                   </button>
                 ))}
               </div>

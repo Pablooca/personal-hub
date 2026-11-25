@@ -51,7 +51,6 @@ const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : null)
 
 export function SubjectDetail({ subject, onBack }: { subject: StudySubject; onBack: () => void }) {
   const { data, update, remove, deleteStudyFiles } = useData()
-  const toast = useToast()
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const program = data.study_programs.find((p) => p.id === subject.program_id)
@@ -66,7 +65,6 @@ export function SubjectDetail({ subject, onBack }: { subject: StudySubject; onBa
     await deleteStudyFiles(files)
     onBack()
     await remove('study_subjects', subject.id)
-    toast('success', 'Asignatura eliminada')
   }
 
   return (

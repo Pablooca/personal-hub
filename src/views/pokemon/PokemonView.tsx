@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { BarChart3, Calculator as CalcIcon, Layers, Trophy, Users } from 'lucide-react'
 import { PageHeader } from '../../components/Shell'
 import { cx } from '../../components/ui'
+import type { Target } from '../../lib/agenda'
+import { useData } from '../../state/data'
+import { useFocusTarget } from '../../state/nav'
 import { Calculator, type CalcSeed } from './Calculator'
 import { Decks } from './Decks'
 import { StatsPanel } from './StatsPanel'
@@ -65,6 +68,15 @@ export function PokemonView() {
     [go],
   )
 
+  // Opened from search, the calendar or the overview.
+  const { data } = useData()
+  const [target, setTarget] = useState<Target | null>(null)
+  useFocusTarget(['tournament', 'deck', 'team', 'card'], (t) => {
+    const game: Area = t.kind === 'team' || (t.kind === 'tournament' && data.tournaments.find((x) => x.id === t.id)?.game === 'vgc') ? 'vgc' : 'tcg'
+    go({ area: game, tab: t.kind === 'tournament' ? 'tournaments' : 'library' })
+    setTarget(t)
+  })
+
   const game = area === 'calculator' ? null : area
   const tabs: { id: Tab; label: string; icon: typeof Trophy }[] = [
     { id: 'tournaments', label: 'Torneos', icon: Trophy },
@@ -117,8 +129,8 @@ export function PokemonView() {
             ))}
           </div>
           <div id="pk-panel" role="tabpanel" aria-labelledby={`pk-tab-${tab}`}>
-            {tab === 'tournaments' && <Tournaments key={game} game={game} onCalculator={openCalculator} />}
-            {tab === 'library' && (game === 'tcg' ? <Decks /> : <Teams />)}
+            {tab === 'tournaments' && <Tournaments key={`${game}-${target?.kind === 'tournament' ? target.id : ''}`} game={game} initialId={target?.kind === 'tournament' ? target.id : null} onCalculator={openCalculator} />}
+            {tab === 'library' && (game === 'tcg' ? <Decks key={target?.id} initialId={target?.kind === 'deck' ? target.id : null} /> : <Teams key={target?.id} initialId={target?.kind === 'team' ? target.id : null} />)}
             {tab === 'stats' && <StatsPanel key={game} game={game} />}
           </div>
         </>

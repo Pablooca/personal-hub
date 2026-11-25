@@ -1,10 +1,13 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   CloudOff,
   Database,
   Footprints,
   GraduationCap,
   MoreHorizontal,
+  Plus,
+  Search,
+  SlidersHorizontal,
   Swords,
   CalendarDays,
   Clock,
@@ -23,6 +26,8 @@ import {
 import { Logo } from './Logo'
 import { useData } from '../state/data'
 import { DataModal } from './DataModal'
+import { QuickAdd } from './QuickAdd'
+import { SearchPalette } from './SearchPalette'
 import { Button, Modal, cx } from './ui'
 import type { Theme } from '../state/theme'
 
@@ -40,8 +45,23 @@ export const NAV: { id: ViewId; label: string; icon: typeof LayoutDashboard }[] 
   { id: 'pokemon', label: 'Pokémon', icon: Swords },
 ]
 
-/** Always visible on phones; the rest live behind "Más". */
-const MOBILE: ViewId[] = ['overview', 'calendar', 'tasks', 'finance']
+/** One hue per module: active icon and page header. Text never depends on it. */
+export const MODULE_COLORS: Record<ViewId, string> = {
+  overview: '#0284c7', calendar: '#7c3aed', projects: '#0d9488', tasks: '#2563eb', studies: '#9333ea', hours: '#d97706', finance: '#059669', running: '#e11d48', pokemon: '#ca8a04',
+}
+
+/** Shortcuts of the phone bar (the rest live behind "Más"). Each person picks theirs. */
+const DEFAULT_BAR: ViewId[] = ['overview', 'calendar', 'tasks', 'finance']
+const BAR_KEY = 'ph-mobile-bar'
+function readBar(): ViewId[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(BAR_KEY) ?? 'null') as unknown
+    const ok = Array.isArray(raw) ? (raw.filter((v) => NAV.some((n) => n.id === v)) as ViewId[]) : []
+    return ok.length === 4 ? ok : DEFAULT_BAR
+  } catch {
+    return DEFAULT_BAR
+  }
+}
 
 interface Props {
   view: ViewId
@@ -68,10 +88,34 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
   const { offline, pending } = useData()
   const [showData, setShowData] = useState(false)
   const [more, setMore] = useState(false)
-  const inMore = !MOBILE.includes(view)
+  const [bar, setBar] = useState(readBar)
+  const [editBar, setEditBar] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const inMore = !bar.includes(view)
   const current = NAV.find((n) => n.id === view) ?? NAV[0]
   const syncLabel = offline ? 'Sin conexión' : `${pending} sin enviar`
   const waiting = offline || pending > 0
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSearching(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  function saveBar(next: ViewId[]) {
+    setBar(next)
+    try {
+      localStorage.setItem(BAR_KEY, JSON.stringify(next))
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     try {
@@ -82,7 +126,7 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
   }, [collapsed])
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex min-h-full flex-col" style={{ '--module': MODULE_COLORS[view] } as CSSProperties}>
       {demo && (
         <div className="sticky top-0 z-40 flex items-center justify-center gap-3 border-b border-amber-500/25 bg-amber-50 px-4 py-1.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
           <FlaskConical className="size-3.5 shrink-0" />
@@ -119,6 +163,20 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
             )}
           </div>
 
+          <div className={cx('flex gap-1.5 p-2 pb-0', collapsed && 'flex-col items-center')}>
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              aria-label="Añadir"
+              title="Añadir"
+              className={cx('flex h-9 items-center justify-center gap-2 rounded-lg bg-accent text-sm font-semibold text-accent-fg transition hover:brightness-110', collapsed ? 'w-9' : 'flex-1')}
+            >
+              <Plus className="size-4" /> {!collapsed && 'Añadir'}
+            </button>
+            <button type="button" onClick={() => setSearching(true)} aria-label="Buscar" title="Buscar (⌘K)" className="grid size-9 shrink-0 place-items-center rounded-lg border border-line text-muted transition hover:bg-surface-2 hover:text-fg">
+              <Search className="size-4" />
+            </button>
+          </div>
           <nav aria-label="Secciones" className="scrollbar-thin flex-1 space-y-0.5 overflow-y-auto p-2">
             {NAV.map(({ id, label, icon: Icon }) => (
               <button
@@ -133,7 +191,7 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
                   view === id ? 'bg-surface-2 font-semibold text-fg ring-1 ring-line' : 'text-muted hover:bg-surface-2 hover:text-fg',
                 )}
               >
-                <Icon className={cx('size-4 shrink-0', view === id && 'text-accent')} />
+                <Icon className="size-4 shrink-0" style={view === id ? { color: MODULE_COLORS[id] } : undefined} />
                 {!collapsed && label}
               </button>
             ))}
@@ -182,21 +240,29 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
               <Logo className="size-6" />
               <span className="text-sm font-semibold">{current.label}</span>
             </div>
-            {waiting && (
-              <button type="button" onClick={() => setShowData(true)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-amber-500/10 px-2.5 text-xs text-amber-800 dark:text-amber-200">
-                <CloudOff className="size-3.5" /> {syncLabel}
+            <div className="flex items-center gap-1">
+              {waiting && (
+                <button type="button" onClick={() => setShowData(true)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-amber-500/10 px-2.5 text-xs text-amber-800 dark:text-amber-200">
+                  <CloudOff className="size-3.5" /> {syncLabel}
+                </button>
+              )}
+              <button type="button" onClick={() => setSearching(true)} aria-label="Buscar" className="grid size-10 place-items-center rounded-lg text-muted">
+                <Search className="size-5" />
               </button>
-            )}
+              <button type="button" onClick={() => setAdding(true)} aria-label="Añadir" className="grid size-9 place-items-center rounded-lg bg-accent text-accent-fg">
+                <Plus className="size-5" />
+              </button>
+            </div>
           </header>
 
-          <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 pt-5 pb-28 sm:px-6 md:pb-10 lg:px-8">{children}</main>
+          <main key={view} className="view-in mx-auto w-full max-w-[1400px] flex-1 px-4 pt-5 pb-28 sm:px-6 md:pb-10 lg:px-8">{children}</main>
         </div>
       </div>
 
       {/* ---------------------------------------------- mobile bottom nav */}
       <nav aria-label="Secciones" className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/90 backdrop-blur-md md:hidden">
         <div className="grid grid-cols-5">
-          {NAV.filter((n) => MOBILE.includes(n.id)).map(({ id, label, icon: Icon }) => (
+          {bar.map((id) => NAV.find((n) => n.id === id)!).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => onNavigate(id)}
@@ -221,7 +287,7 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
 
       <Modal open={more} onClose={() => setMore(false)} title="Más">
         <div className="grid grid-cols-3 gap-2">
-          {NAV.filter((n) => !MOBILE.includes(n.id)).map(({ id, label, icon: Icon }) => (
+          {NAV.filter((n) => !bar.includes(n.id)).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
@@ -238,6 +304,7 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
         <ul className="mt-4 divide-y divide-line border-t border-line pb-[env(safe-area-inset-bottom)]">
           {(
             [
+              [SlidersHorizontal, 'Elegir los accesos de la barra', () => setEditBar(true)],
               [Database, 'Exportar e importar datos', () => setShowData(true)],
               [theme === 'dark' ? Sun : Moon, theme === 'dark' ? 'Tema claro' : 'Tema oscuro', toggleTheme],
               [LogOut, demo ? 'Salir de la demo' : 'Cerrar sesión', onSignOut],
@@ -258,16 +325,74 @@ export function Shell({ view, onNavigate, demo, userLabel, theme, toggleTheme, o
           ))}
         </ul>
       </Modal>
+      {editBar && <BarEditor value={bar} onSave={saveBar} onClose={() => setEditBar(false)} />}
+      {adding && <QuickAdd onClose={() => setAdding(false)} />}
+      {searching && <SearchPalette onClose={() => setSearching(false)} />}
       {showData && <DataModal onClose={() => setShowData(false)} />}
     </div>
   )
 }
 
-export function PageHeader({ eyebrow, title, actions }: { eyebrow?: ReactNode; title: ReactNode; actions?: ReactNode }) {
+function BarEditor({ value, onSave, onClose }: { value: ViewId[]; onSave: (v: ViewId[]) => void; onClose: () => void }) {
+  const [list, setList] = useState<ViewId[]>(value)
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <Modal
+      open
+      onClose={onClose}
+      title="Accesos de la barra"
+      footer={
+        <>
+          <span className="mr-auto text-sm text-muted">{list.length} de 4</span>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            variant="primary"
+            disabled={list.length !== 4}
+            onClick={() => {
+              onSave(list)
+              onClose()
+            }}
+          >
+            Guardar
+          </Button>
+        </>
+      }
+    >
+      <p className="mb-3 text-sm text-muted">Elige cuatro, en el orden en que quieres verlos. El resto queda en «Más».</p>
+      <div className="grid grid-cols-3 gap-2">
+        {NAV.map(({ id, label, icon: Icon }) => {
+          const at = list.indexOf(id)
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={at >= 0}
+              disabled={at < 0 && list.length >= 4}
+              onClick={() => setList((l) => (at >= 0 ? l.filter((x) => x !== id) : [...l, id]))}
+              className={cx('relative flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border text-sm font-medium disabled:opacity-40', at >= 0 ? 'border-accent bg-accent/10' : 'border-line bg-surface-2')}
+            >
+              {at >= 0 && <span className="num absolute top-1.5 right-2 text-xs text-accent">{at + 1}</span>}
+              <Icon className="size-5 text-muted" /> {label}
+            </button>
+          )
+        })}
+      </div>
+    </Modal>
+  )
+}
+
+/** On phones the eyebrow is hidden (the top bar already names the section) unless `keep` is set. */
+export function PageHeader({ eyebrow, title, actions, keep }: { eyebrow?: ReactNode; title: ReactNode; actions?: ReactNode; keep?: boolean }) {
+  return (
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-3 sm:mb-5">
       <div className="min-w-0">
-        {eyebrow && <div className="eyebrow mb-1">{eyebrow}</div>}
+        {eyebrow && (
+          <div className={cx('eyebrow mb-1 flex items-center gap-2', !keep && 'max-sm:hidden')}>
+            <span className="size-1.5 shrink-0 rounded-full bg-[var(--module)]" aria-hidden />
+            {eyebrow}
+          </div>
+        )}
         <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

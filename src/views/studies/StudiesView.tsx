@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { ArrowLeft, BookOpen, GraduationCap, Pencil, Plus, Trash2 } from 'lucide-react'
 import { PageHeader } from '../../components/Shell'
-import { Badge, Button, Empty, Field, Modal, ProgressBar, cx } from '../../components/ui'
+import { Badge, Button, Check, Empty, Field, Modal, ProgressBar, cx } from '../../components/ui'
 import { COLOR_BG } from '../../lib/categories'
 import { fmtGrade, gradeLabel, gradeTone, programStats, subjectGrade } from '../../lib/studies'
 import { CATEGORY_COLORS, type CategoryColor, type StudyProgram, type StudySubject, type SubjectStatus } from '../../lib/types'
 import { useData } from '../../state/data'
-import { useToast } from '../../state/toast'
+import { useFocusTarget } from '../../state/nav'
 import { SubjectDetail } from './SubjectDetail'
 
 type Route = { kind: 'list' } | { kind: 'program'; id: string } | { kind: 'subject'; programId: string; id: string }
@@ -32,6 +32,55 @@ export function useSubjectGrades() {
   }, [data.study_subjects, data.study_assessments])
 }
 
+/** What is coming, the first thing you see when opening Estudios. */
+function Upcoming({ onOpen }: { onOpen: (subjectId: string) => void }) {
+  const { data, update } = useData()
+  const now = Date.now()
+  const subjects = new Map(data.study_subjects.map((s) => [s.id, s]))
+  const pending = data.study_assessments
+    .filter((a) => a.due_at && !a.is_done && a.grade === null)
+    .map((a) => ({ a, at: new Date(a.due_at!).getTime(), subject: subjects.get(a.subject_id) }))
+    .filter((x) => x.subject)
+    .sort((x, y) => x.at - y.at)
+  const late = pending.filter((x) => x.at < now)
+  const next = pending.filter((x) => x.at >= now).slice(0, 8)
+  if (!late.length && !next.length) return null
+  const left = (at: number) => {
+    const h = Math.round((at - now) / 3_600_000)
+    return h < 0 ? 'pasada' : h < 24 ? `en ${Math.max(1, h)} h` : `en ${Math.round(h / 24)} días`
+  }
+  return (
+    <section className="card mb-5 overflow-hidden">
+      <h2 className="border-b border-line px-4 py-3 text-sm font-semibold">Próximas entregas y exámenes</h2>
+      <ul className="divide-y divide-line">
+        {[...late, ...next].map(({ a, at, subject }) => {
+          const soon = at >= now && at - now < 3 * 86_400_000
+          return (
+            <li key={a.id} className="flex items-center gap-3 px-4">
+              <Check checked={false} onChange={() => void update('study_assessments', a.id, { is_done: true })} label={`Marcar como hecho: ${a.name}`} />
+              <button type="button" onClick={() => onOpen(a.subject_id)} className="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-2 text-left">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{a.name}</span>
+                  <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
+                    <span className={cx('size-2 shrink-0 rounded-full', COLOR_BG[subject!.color])} />
+                    <span className="truncate">
+                      {a.kind === 'exam' ? 'Examen' : 'Entrega'} · {a.weight} % · {subject!.name}
+                    </span>
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className={cx('num block text-sm font-semibold', at < now ? 'text-rose-700 dark:text-rose-400' : soon && 'text-amber-700 dark:text-amber-400')}>{left(at)}</span>
+                  <span className="num block text-[11px] text-muted">{new Date(at).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
 export function StudiesView() {
   const { data } = useData()
   const [route, setRoute] = useState<Route>({ kind: 'list' })
@@ -39,6 +88,11 @@ export function StudiesView() {
     setRoute(r)
     window.scrollTo({ top: 0 })
   }
+
+  useFocusTarget(['subject'], (t) => {
+    const s = data.study_subjects.find((x) => x.id === t.id)
+    if (s) go({ kind: 'subject', programId: s.program_id, id: s.id })
+  })
 
   if (route.kind === 'subject') {
     const subject = data.study_subjects.find((s) => s.id === route.id)
@@ -49,11 +103,14 @@ export function StudiesView() {
     if (program)
       return <ProgramDetail program={program} onBack={() => go({ kind: 'list' })} onOpenSubject={(id) => go({ kind: 'subject', programId: program.id, id })} />
   }
-  return <ProgramList onOpen={(id) => go({ kind: 'program', id })} />
+  return <ProgramList onOpen={(id) => go({ kind: 'program', id })} onOpenSubject={(id) => {
+    const s = data.study_subjects.find((x) => x.id === id)
+    if (s) go({ kind: 'subject', programId: s.program_id, id })
+  }} />
 }
 
 // ---------------------------------------------------------------- programs
-function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
+function ProgramList({ onOpen, onOpenSubject }: { onOpen: (id: string) => void; onOpenSubject: (id: string) => void }) {
   const { data } = useData()
   const grades = useSubjectGrades()
   const [editing, setEditing] = useState<Partial<StudyProgram> | null>(null)
@@ -69,6 +126,7 @@ function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
           </Button>
         }
       />
+      <Upcoming onOpen={onOpenSubject} />
       {data.study_programs.length === 0 ? (
         <Empty icon={<GraduationCap className="size-5" />}>
           Crea tu primer programa (p. ej. «Máster») y dentro añade las asignaturas.
@@ -184,7 +242,6 @@ function ProgramModal({ program, onClose, onCreated }: { program: Partial<StudyP
 // ---------------------------------------------------------------- program detail
 function ProgramDetail({ program, onBack, onOpenSubject }: { program: StudyProgram; onBack: () => void; onOpenSubject: (id: string) => void }) {
   const { data, remove, deleteStudyFiles } = useData()
-  const toast = useToast()
   const grades = useSubjectGrades()
   const [editingProgram, setEditingProgram] = useState(false)
   const [newSubject, setNewSubject] = useState(false)
@@ -200,7 +257,6 @@ function ProgramDetail({ program, onBack, onOpenSubject }: { program: StudyProgr
     await deleteStudyFiles(data.study_files.filter((f) => ids.has(f.subject_id)))
     onBack()
     await remove('study_programs', program.id)
-    toast('success', 'Programa eliminado')
   }
 
   return (

@@ -202,7 +202,7 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
     const toData = (r: Row, w: string) => ({ goal_id: goal.id, date: shiftDay(w, r.day), type: r.type, distance_km: Math.round(parseKm(r.km)! * 100) / 100, pace_s: r.pace.trim() ? parsePace(r.pace) : null, description: r.description.trim(), blocks: r.blocks! })
     onClose()
     const keep = new Set(rows.map((r) => r.id).filter(Boolean))
-    await removeMany('run_plan', current.filter((p) => !keep.has(p.id)).map((p) => p.id))
+    await removeMany('run_plan', current.filter((p) => !keep.has(p.id)).map((p) => p.id), { silent: true })
     for (const r of rows) {
       const old = r.id && current.find((p) => p.id === r.id)
       if (!old) continue

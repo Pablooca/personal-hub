@@ -7,7 +7,7 @@ import { ACCOUNT_KINDS, CATEGORY_COLORS, TX_TYPES, type AccountKind, type Catego
 import { useData } from '../../state/data'
 import { useToast } from '../../state/toast'
 
-export type ManageTab = 'accounts' | 'categories'
+export type ManageTab = 'accounts' | 'categories' | 'rules'
 
 export function ManageModal({ tab, onTab, onClose }: { tab: ManageTab | null; onTab: (t: ManageTab) => void; onClose: () => void }) {
   return (

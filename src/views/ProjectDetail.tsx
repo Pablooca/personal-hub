@@ -9,6 +9,7 @@ import { LogHoursModal, type LogDraft } from '../components/LogHoursModal'
 import { PRIORITIES, PROJECT_AREAS, PROJECT_STATUSES, TASK_STATUSES, type Project, type ProjectArea, type ProjectStatus, type ProjectTask, type TaskStatus } from '../lib/types'
 import { newTask as buildTask, taskStatusPatch } from '../lib/tasks'
 import { useData } from '../state/data'
+import { useTaskActions } from '../state/useTasks'
 import { useToast } from '../state/toast'
 
 type Form = Omit<Project, 'id' | 'user_id' | 'created_at' | 'updated_at'>
@@ -74,6 +75,7 @@ export function ProjectDetail({
   onCreated: (id: string) => void
 }) {
   const { create, createMany, update, remove } = useData()
+  const { setStatus: applyStatus } = useTaskActions()
   const toast = useToast()
   const isNew = project === null
   const [form, setForm] = useState<Form>(() => (project ? { ...project } : blank(initialStatus, initialArea)))
@@ -140,7 +142,7 @@ export function ProjectDetail({
   const setTaskStatus = (id: string, status: TaskStatus) =>
     isNew
       ? setDraftTasks((ts) => ts.map((t) => (t.id === id ? { ...t, ...taskStatusPatch(status) } : t)))
-      : update('project_tasks', id, taskStatusPatch(status))
+      : applyStatus(tasks.find((t) => t.id === id)!, status)
   const toggleTask = (id: string, v: boolean) => setTaskStatus(id, v ? 'done' : 'todo')
   const deleteTask = (id: string) => (isNew ? setDraftTasks((ts) => ts.filter((t) => t.id !== id)) : remove('project_tasks', id))
   const renameTask = (id: string, title: string) => {
@@ -200,7 +202,6 @@ export function ProjectDetail({
                 onClick={async () => {
                   onBack()
                   await remove('projects', project.id)
-                  toast('success', 'Proyecto eliminado')
                 }}
               >
                 Confirmar

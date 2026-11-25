@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Clock, ExternalLink, Trash2 } from 'lucide-react'
-import { TASK_CATEGORY_LABELS, normaliseJiraKey, taskStatusPatch } from '../lib/tasks'
+import { RECURRENCE_LABELS, TASK_CATEGORY_LABELS, normaliseJiraKey } from '../lib/tasks'
 import { PRIORITY_LABELS, TASK_STATUS_STYLES } from '../lib/theme'
-import { PRIORITIES, TASK_STATUSES, type Priority, type ProjectTask, type TaskCategory, type TaskStatus } from '../lib/types'
+import { PRIORITIES, RECURRENCES, TASK_STATUSES, type Priority, type ProjectTask, type Recurrence, type TaskCategory, type TaskStatus } from '../lib/types'
 import { fmtHours } from '../lib/worklog'
 import { useData } from '../state/data'
-import { useToast } from '../state/toast'
+import { useTaskActions } from '../state/useTasks'
 import { Button, Field, Modal, cx } from './ui'
 
 /** Grows a textarea to fit its content. */
@@ -31,8 +31,8 @@ export function TaskModal({
   /** Omitted (e.g. already on the project page) → no "Abrir proyecto" link. */
   onOpenProject?: (projectId: string) => void
 }) {
-  const { data, update, remove } = useData()
-  const toast = useToast()
+  const { data, remove } = useData()
+  const { setStatus: applyStatus } = useTaskActions()
   const [title, setTitle] = useState(task.title)
   const [owner, setOwner] = useState(ownerValue(task))
   const [status, setStatus] = useState<TaskStatus>(task.status)
@@ -41,6 +41,7 @@ export function TaskModal({
   const [priority, setPriority] = useState<Priority>(task.priority ?? 'medium')
   const [startDate, setStartDate] = useState(task.start_date ?? '')
   const [dueDate, setDueDate] = useState(task.due_date ?? '')
+  const [recurrence, setRecurrence] = useState<Recurrence | ''>(task.recurrence ?? '')
   const datesValid = !startDate || !dueDate || dueDate >= startDate
   const logged = data.work_logs.filter((l) => l.task_id === task.id).reduce((a, l) => a + l.hours, 0)
 
@@ -48,7 +49,7 @@ export function TaskModal({
     if (!title.trim() || !datesValid) return
     const isCat = owner.startsWith('cat:')
     onClose()
-    await update('project_tasks', task.id, {
+    await applyStatus(task, status, {
       title: title.trim(),
       project_id: isCat ? null : owner,
       category: isCat ? (owner.slice(4) as TaskCategory) : null,
@@ -57,7 +58,7 @@ export function TaskModal({
       priority,
       start_date: startDate || null,
       due_date: dueDate || null,
-      ...taskStatusPatch(status),
+      recurrence: recurrence || null,
     })
   }
 
@@ -75,7 +76,6 @@ export function TaskModal({
             onClick={async () => {
               onClose()
               await remove('project_tasks', task.id)
-              toast('success', 'Tarea eliminada')
             }}
           >
             <Trash2 className="size-4" /> <span className="max-sm:sr-only">Eliminar</span>
@@ -175,6 +175,16 @@ export function TaskModal({
                 min={startDate || undefined}
                 onChange={(e) => setDueDate(e.target.value)}
               />
+            </Field>
+            <Field label="Se repite" className="col-span-2 lg:col-span-1">
+              <select className="field" value={recurrence} onChange={(e) => setRecurrence(e.target.value as Recurrence | '')}>
+                <option value="">No se repite</option>
+                {RECURRENCES.map((r) => (
+                  <option key={r} value={r}>
+                    {RECURRENCE_LABELS[r]}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Clave de Jira" className="col-span-2 lg:col-span-1">
               <input className="field num uppercase" placeholder="PROJ-123 (opcional)" value={jira} onChange={(e) => setJira(e.target.value)} maxLength={40} />

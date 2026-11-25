@@ -104,7 +104,7 @@ export function HoursView() {
           hint={offCount ? `laborables hasta hoy · ${offCount} festivo${offCount === 1 ? '' : 's'}/vacaciones excluidos` : 'días laborables hasta hoy'}
           icon={<CalendarCheck className="size-4" />}
         />
-        <button className="text-left" onClick={() => setOnlyMissing((v) => !v)} aria-pressed={onlyMissing}>
+        <button className="flex items-stretch text-left [&>*]:w-full" onClick={() => setOnlyMissing((v) => !v)} aria-pressed={onlyMissing}>
           <Stat
             label="Sin registrar"
             value={missing.length}

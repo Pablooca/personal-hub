@@ -7,6 +7,7 @@ import { fmtDate } from '../lib/format'
 import { AREA_LABELS, AREA_STYLES, PRIORITY_LABELS, PRIORITY_STYLES, STATUS_STYLES, TASK_STATUS_STYLES } from '../lib/theme'
 import { PROJECT_AREAS, PROJECT_STATUSES, TASK_STATUSES, type Project, type ProjectArea, type ProjectStatus, type ProjectTask } from '../lib/types'
 import { useData } from '../state/data'
+import { useFocusTarget } from '../state/nav'
 import { ProjectDetail } from './ProjectDetail'
 
 type Layout = 'grid' | 'list'
@@ -35,6 +36,11 @@ export function ProjectsView({ openProjectId, onOpenHandled }: { openProjectId?:
     window.scrollTo({ top: 0 })
     onOpenHandled?.()
   }, [openProjectId, onOpenHandled])
+
+  useFocusTarget(['project'], (t) => {
+    setDetail({ mode: 'edit', id: t.id })
+    window.scrollTo({ top: 0 })
+  })
 
   // If the open project disappears (deleted here or on another device), go back to the list.
   const missing = detail?.mode === 'edit' && !data.projects.some((p) => p.id === detail.id)
