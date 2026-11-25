@@ -13,7 +13,7 @@ export interface RunSeed {
   session: RunPlanSession
 }
 
-export const TYPE_DOT: Record<RunType, string> = { easy: 'bg-emerald-500', interval: 'bg-rose-500', tempo: 'bg-amber-500', long: 'bg-sky-500', race: 'bg-violet-500' }
+export const DoneBadge = () => <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">Hecha</Badge>
 
 export function RunsPanel({ goal, onOpen }: { goal: RaceGoal | null; onOpen: (r: Run) => void }) {
   const { data } = useData()
@@ -36,11 +36,11 @@ export function RunsPanel({ goal, onOpen }: { goal: RaceGoal | null; onOpen: (r:
           return (
             <li key={r.id}>
               <button type="button" onClick={() => onOpen(r)} className="flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left hover:bg-surface-2">
-                <span className={cx('size-2.5 shrink-0 rounded-full', TYPE_DOT[r.type])} aria-hidden />
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-x-2 text-sm">
                     <span className="font-semibold">{RUN_TYPE_SHORT[r.type]}</span>
                     <span className="text-muted">{fmtDate(fromDateKey(r.date), { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+                    {s && <DoneBadge />}
                     {r.is_test && <Badge className="border-violet-500/30 bg-violet-500/10 text-violet-800 dark:text-violet-300">Test</Badge>}
                   </span>
                   <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 text-xs text-muted">
@@ -56,7 +56,7 @@ export function RunsPanel({ goal, onOpen }: { goal: RaceGoal | null; onOpen: (r:
                       </span>
                     )}
                     {r.blocks.length > 0 && (r.type === 'interval' || r.type === 'tempo') && <span>{highlight(r.blocks).filter((b) => b.done).map((b) => formatBlock({ ...b, reps_max: null, reps: repsDone(b) })).join(' + ')}</span>}
-                    {s && <span className="text-emerald-800 dark:text-emerald-300">✓ Plan: {fmtKm(s.distance_km)} km{s.pace_s ? ` a ${fmtPace(s.pace_s)}` : ''}</span>}
+                    {s && <span>Plan: {fmtKm(s.distance_km)} km{s.pace_s ? ` a ${fmtPace(s.pace_s)}` : ''}</span>}
                   </span>
                 </span>
                 <span className="text-right">

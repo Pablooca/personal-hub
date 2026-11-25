@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { CheckCircle2, ChevronDown, Circle, CopyPlus, Download, FileUp, Pencil, Plus, Trash2, XCircle } from 'lucide-react'
+import { ChevronDown, CopyPlus, Download, FileUp, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Badge, Button, Card, Empty, Field, Modal, cx } from '../../components/ui'
 import { fromDateKey, toDateKey } from '../../lib/dates'
 import { downloadText } from '../../lib/download'
@@ -10,7 +10,7 @@ import { RUN_TYPES, type RaceGoal, type Run, type RunPlanSession, type RunType, 
 import { useData } from '../../state/data'
 import { useToast } from '../../state/toast'
 import { BlocksEditor, StructureSummary, Templates } from './Blocks'
-import { TYPE_DOT } from './Runs'
+import { DoneBadge } from './Runs'
 
 export function PlanPanel({ goal, onComplete }: { goal: RaceGoal; onComplete: (s: RunPlanSession, run: Run | null) => void }) {
   const { data } = useData()
@@ -87,12 +87,12 @@ export function PlanPanel({ goal, onComplete }: { goal: RaceGoal; onComplete: (s
                     return (
                       <li key={p.id}>
                         <button type="button" onClick={() => onComplete(p, run)} className="flex min-h-13 w-full items-center gap-3 px-4 py-2 text-left hover:bg-surface-2" title={run ? 'Ver el entrenamiento' : 'Marcar como completada'}>
-                          {run ? <CheckCircle2 className="size-5 shrink-0 text-emerald-500" aria-label="Completada" /> : missed ? <XCircle className="size-5 shrink-0 text-rose-500" aria-label="No hecha" /> : <Circle className="size-5 shrink-0 text-line-strong" aria-label="Pendiente" />}
                           <span className="num w-14 shrink-0 text-xs text-muted">{capitalize(fmtDate(fromDateKey(p.date), { weekday: 'short', day: 'numeric' }))}</span>
-                          <span className={cx('size-2 shrink-0 rounded-full', TYPE_DOT[p.type])} aria-hidden />
                           <span className="min-w-0 flex-1">
-                            <span className="text-sm font-medium">{RUN_TYPE_SHORT[p.type]}</span>
-                            {run ? <DoneBadge /> : missed && <span className="ml-2 text-xs text-rose-700 dark:text-rose-400">No hecha</span>}
+                            <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                              {RUN_TYPE_SHORT[p.type]}
+                              {run ? <DoneBadge /> : missed && <Badge className="border-line-strong text-muted">No hecha</Badge>}
+                            </span>
                             {p.description && <span className="block truncate text-xs text-muted">{p.description}</span>}
                             <StructureSummary blocks={p.blocks} className="mt-1" />
                           </span>
@@ -126,8 +126,6 @@ export function PlanPanel({ goal, onComplete }: { goal: RaceGoal; onComplete: (s
     </>
   )
 }
-
-const DoneBadge = () => <Badge className="ml-2 border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">Hecha</Badge>
 
 // --------------------------------------------------------- quick week editor
 interface Row {
@@ -282,8 +280,8 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
             </button>
           </div>
           {done[i] && (
-            <p className="mt-2 flex items-center gap-1.5 text-sm text-emerald-800 dark:text-emerald-300">
-              <CheckCircle2 className="size-4 shrink-0 text-emerald-500" /> Hecha: {RUN_TYPE_SHORT[done[i].type].toLowerCase()} de {fmtKm(done[i].distance_km)} km en {fmtDuration(done[i].duration_s)}
+            <p className="mt-2 flex items-center gap-2 text-sm text-muted">
+              <DoneBadge /> {RUN_TYPE_SHORT[done[i].type]} de {fmtKm(done[i].distance_km)} km en {fmtDuration(done[i].duration_s)}
             </p>
           )}
           <button type="button" aria-expanded={open === i} onClick={() => setOpen(open === i ? null : i)} className="mt-2 flex min-h-9 w-full items-center gap-2 text-left text-xs font-medium text-accent">
