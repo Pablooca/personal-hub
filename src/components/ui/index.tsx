@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ')
@@ -9,7 +9,7 @@ const VARIANTS: Record<Variant, string> = {
   primary: 'bg-accent text-accent-fg hover:brightness-110 shadow-sm',
   secondary: 'border border-line bg-surface hover:bg-surface-2 text-fg',
   ghost: 'text-muted hover:text-fg hover:bg-surface-2',
-  danger: 'text-rose-600 dark:text-rose-400 hover:bg-rose-500/10',
+  danger: 'text-rose-700 dark:text-rose-400 hover:bg-rose-500/10',
 }
 
 export function Button({
@@ -22,7 +22,7 @@ export function Button({
     <button
       {...props}
       className={cx(
-        'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-medium transition disabled:cursor-not-allowed disabled:opacity-50',
+        'relative inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-medium transition disabled:cursor-not-allowed disabled:opacity-50',
         size === 'sm' && 'h-8 px-2.5 text-xs',
         size === 'md' && 'h-9 px-3.5 text-sm',
         size === 'icon' && 'size-8',
@@ -55,16 +55,16 @@ export function Card({
           {action}
         </header>
       )}
-      <div className={cx('flex-1 p-4', bodyClass)}>{children}</div>
+      <div className={cx('flex-1', bodyClass ?? 'p-4')}>{children}</div>
     </section>
   )
 }
 
 // ---------------------------------------------------------------- ProgressBar
-export function ProgressBar({ value, className, tone = 'accent' }: { value: number; className?: string; tone?: 'accent' | 'emerald' }) {
+export function ProgressBar({ value, className, tone = 'accent', label = 'Progreso' }: { value: number; className?: string; tone?: 'accent' | 'emerald'; label?: string }) {
   const v = Math.max(0, Math.min(100, value))
   return (
-    <div className={cx('h-1.5 w-full overflow-hidden rounded-full bg-line', className)} role="progressbar" aria-valuenow={v} aria-valuemin={0} aria-valuemax={100}>
+    <div className={cx('h-1.5 w-full overflow-hidden rounded-full bg-line', className)} role="progressbar" aria-label={label} aria-valuenow={Math.round(v)} aria-valuemin={0} aria-valuemax={100}>
       <div
         className={cx('h-full rounded-full transition-[width] duration-500', tone === 'emerald' || v === 100 ? 'bg-emerald-500' : 'bg-accent')}
         style={{ width: `${v}%` }}
@@ -86,7 +86,7 @@ export function Segmented<T extends string>({
   className?: string
 }) {
   return (
-    <div className={cx('inline-flex rounded-lg border border-line bg-surface-2 p-0.5', className)} role="tablist">
+    <div className={cx('scrollbar-none inline-flex max-w-full overflow-x-auto rounded-lg border border-line bg-surface-2 p-0.5', className)} role="tablist">
       {options.map((o) => (
         <button
           key={o.value}
@@ -95,7 +95,7 @@ export function Segmented<T extends string>({
           aria-selected={o.value === value}
           onClick={() => onChange(o.value)}
           className={cx(
-            'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition',
+            'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium whitespace-nowrap transition pointer-coarse:h-9',
             o.value === value ? 'bg-surface text-fg shadow-sm ring-1 ring-line' : 'text-muted hover:text-fg',
           )}
         >
@@ -135,19 +135,47 @@ export function Modal({
   full?: boolean
 }) {
   const panel = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  // Parents usually pass an inline function: keep the latest without re-running
+  // the effect (which would steal the focus on every parent render).
+  const close = useRef(onClose)
+  close.current = onClose
 
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const before = document.activeElement as HTMLElement | null
+    const focusable = () =>
+      [...(panel.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]') ?? [])].filter((el) => el.offsetParent !== null)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return close.current()
+      if (e.key !== 'Tab') return
+      // Keep the keyboard inside the dialog.
+      const els = focusable()
+      if (!els.length) return
+      const first = els[0]
+      const last = els[els.length - 1]
+      const inside = panel.current?.contains(document.activeElement)
+      if (e.shiftKey && (document.activeElement === first || !inside)) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (document.activeElement === last || !inside)) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
     window.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    panel.current?.querySelector<HTMLElement>('input, textarea, select')?.focus()
+    // On touch screens focusing a field would pop the keyboard up straight away.
+    const field = panel.current?.querySelector<HTMLElement>('input:not([type=file]):not([role=combobox]), textarea, select')
+    if (field && window.matchMedia('(pointer: fine)').matches) field.focus()
+    else panel.current?.focus()
     return () => {
       window.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
+      before?.focus?.({ preventScroll: true })
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
   return (
@@ -159,22 +187,26 @@ export function Modal({
         ref={panel}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
         className={cx(
-          'flex w-full flex-col border-line bg-surface shadow-2xl',
+          'flex w-full flex-col border-line bg-surface shadow-2xl outline-none',
           full
             ? 'h-dvh sm:h-[94dvh] sm:max-w-[min(1600px,96vw)] sm:rounded-2xl sm:border'
             : cx('max-h-[92dvh] rounded-t-2xl border sm:rounded-2xl', wide ? 'sm:max-w-2xl' : 'sm:max-w-md'),
         )}
       >
-        <header className={cx('flex items-center justify-between border-b border-line px-5 py-3.5', full && 'pt-[max(0.875rem,env(safe-area-inset-top))]')}>
-          <h2 className="text-sm font-semibold">{title}</h2>
+        <header className={cx('flex items-center justify-between gap-3 border-b border-line px-5 py-3.5', full && 'pt-[max(0.875rem,env(safe-area-inset-top))]')}>
+          <h2 id={titleId} className="min-w-0 text-sm font-semibold">
+            {title}
+          </h2>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Cerrar">
             <X className="size-4" />
           </Button>
         </header>
         <div className="scrollbar-thin flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <footer className="pb-safe flex items-center justify-end gap-2 border-t border-line px-5 py-3">{footer}</footer>}
+        {footer && <footer className="flex items-center justify-end gap-2 border-t border-line px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">{footer}</footer>}
       </div>
     </div>
   )

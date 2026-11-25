@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test:webhook": "npm test",
-    "test": "node --test --experimental-strip-types --no-warnings supabase/functions/tests/*.test.ts src/lib/*.test.ts"
+    "test": "node --test --experimental-strip-types --no-warnings supabase/functions/tests/*.test.ts src/lib/*.test.ts src/lib/pokemon/*.test.ts src/data/*.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",

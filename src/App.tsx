@@ -1,21 +1,36 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { Loader2 } from 'lucide-react'
 import { supabase } from './lib/supabase'
+import { clearLocalCopy, createHybridRepository } from './data/hybrid'
 import { createLocalRepository, createSupabaseRepository, resetDemoData, type Repository } from './data/repository'
 import { DataProvider, useData } from './state/data'
 import { useTheme } from './state/theme'
 import { Login } from './components/Login'
-import { Shell, type ViewId } from './components/Shell'
+import { NAV, Shell, type ViewId } from './components/Shell'
 import { Button } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Overview } from './views/Overview'
-import { CalendarView } from './views/Calendar'
-import { ProjectsView } from './views/Projects'
-import { FinanceView } from './views/finance/FinanceView'
-import { TasksView } from './views/Tasks'
-import { HoursView } from './views/Hours'
-import { StudiesView } from './views/studies/StudiesView'
+
+// Each section is downloaded the first time it is opened.
+const load = {
+  calendar: () => import('./views/Calendar'),
+  projects: () => import('./views/Projects'),
+  finance: () => import('./views/finance/FinanceView'),
+  tasks: () => import('./views/Tasks'),
+  hours: () => import('./views/Hours'),
+  studies: () => import('./views/studies/StudiesView'),
+  running: () => import('./views/running/RunningView'),
+  pokemon: () => import('./views/pokemon/PokemonView'),
+}
+const CalendarView = lazy(() => load.calendar().then((m) => ({ default: m.CalendarView })))
+const ProjectsView = lazy(() => load.projects().then((m) => ({ default: m.ProjectsView })))
+const FinanceView = lazy(() => load.finance().then((m) => ({ default: m.FinanceView })))
+const TasksView = lazy(() => load.tasks().then((m) => ({ default: m.TasksView })))
+const HoursView = lazy(() => load.hours().then((m) => ({ default: m.HoursView })))
+const StudiesView = lazy(() => load.studies().then((m) => ({ default: m.StudiesView })))
+const RunningView = lazy(() => load.running().then((m) => ({ default: m.RunningView })))
+const PokemonView = lazy(() => load.pokemon().then((m) => ({ default: m.PokemonView })))
 
 type Mode = { kind: 'loading' } | { kind: 'login' } | { kind: 'demo' } | { kind: 'supabase'; session: Session }
 
@@ -73,9 +88,13 @@ export default function App() {
     } catch {
       /* ignore */
     }
-    if (mode.kind === 'supabase' && supabase) await supabase.auth.signOut()
+    if (mode.kind === 'supabase' && supabase) {
+      clearLocalCopy(mode.session.user.id)
+      await supabase.auth.signOut()
+      clearLocalCopy(mode.session.user.id)
+    }
     setMode({ kind: 'login' })
-  }, [mode.kind])
+  }, [mode])
 
   const resetDemo = useCallback(() => {
     resetDemoData()
@@ -86,7 +105,7 @@ export default function App() {
   const userId = mode.kind === 'supabase' ? mode.session.user.id : null
   const repo = useMemo<Repository | null>(() => {
     if (mode.kind === 'demo') return createLocalRepository()
-    if (userId && supabase) return createSupabaseRepository(supabase, userId)
+    if (userId && supabase) return createHybridRepository(createSupabaseRepository(supabase, userId), userId)
     return null
     // demoEpoch forces a fresh local repository after a reset.
   }, [mode.kind, userId, demoEpoch])
@@ -110,6 +129,12 @@ export default function App() {
   )
 }
 
+const Spinner = () => (
+  <div className="grid h-64 place-items-center text-muted" role="status" aria-label="Cargando">
+    <Loader2 className="size-5 animate-spin" />
+  </div>
+)
+
 function Workspace(props: {
   demo: boolean
   userLabel: string
@@ -121,7 +146,7 @@ function Workspace(props: {
   const [view, setView] = useState<ViewId>(() => {
     try {
       const v = localStorage.getItem(VIEW_KEY) as ViewId | null
-      return v && ['overview', 'calendar', 'projects', 'tasks', 'studies', 'hours', 'finance'].includes(v) ? v : 'overview'
+      return v && NAV.some((n) => n.id === v) ? v : 'overview'
     } catch {
       return 'overview'
     }
@@ -146,6 +171,16 @@ function Workspace(props: {
     },
     [navigate],
   )
+  useEffect(() => {
+    document.title = `${NAV.find((n) => n.id === view)?.label ?? 'Personal Hub'} · Personal Hub`
+  }, [view])
+
+  // Once idle, fetch the rest so switching is instant (and works if the connection drops).
+  useEffect(() => {
+    const t = setTimeout(() => Object.values(load).forEach((get) => get().catch(() => {})), 3000)
+    return () => clearTimeout(t)
+  }, [])
+
   const clearOpenProject = useCallback(() => setOpenProjectId(null), [])
 
   return (
@@ -153,7 +188,7 @@ function Workspace(props: {
       {error ? (
         <div className="card mx-auto mt-10 max-w-lg p-6 text-sm">
           <h2 className="font-semibold">No se han podido cargar tus datos</h2>
-          <p className="mt-2 font-mono text-xs text-rose-600 dark:text-rose-400">{error}</p>
+          <p className="mt-2 font-mono text-xs text-rose-700 dark:text-rose-400">{error}</p>
           <p className="mt-3 text-muted">
             Comprueba que has ejecutado <code className="num">supabase/schema.sql</code> en el SQL Editor de Supabase.
           </p>
@@ -162,9 +197,7 @@ function Workspace(props: {
           </Button>
         </div>
       ) : loading ? (
-        <div className="grid h-64 place-items-center text-muted">
-          <Loader2 className="size-5 animate-spin" />
-        </div>
+        <Spinner />
       ) : (
         <>
           {missingTables.length > 0 && (
@@ -179,6 +212,7 @@ function Workspace(props: {
             </div>
           )}
           <ErrorBoundary resetKey={view}>
+            <Suspense fallback={<Spinner />}>
             {view === 'overview' && <Overview onNavigate={navigate} onOpenProject={openProject} />}
             {view === 'calendar' && <CalendarView />}
             {view === 'projects' && <ProjectsView openProjectId={openProjectId} onOpenHandled={clearOpenProject} />}
@@ -186,6 +220,9 @@ function Workspace(props: {
             {view === 'studies' && <StudiesView />}
             {view === 'hours' && <HoursView />}
             {view === 'finance' && <FinanceView />}
+            {view === 'running' && <RunningView />}
+            {view === 'pokemon' && <PokemonView />}
+            </Suspense>
           </ErrorBoundary>
         </>
       )}

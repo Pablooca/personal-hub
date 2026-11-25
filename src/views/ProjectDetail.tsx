@@ -281,7 +281,7 @@ export function ProjectDetail({
                         <span className={cx('font-mono font-semibold uppercase', PRIORITY_STYLES[full.priority])}>{PRIORITY_LABELS[full.priority]}</span>
                       )}
                       {(full.start_date || full.due_date) && (
-                        <span className={cx('num', overdue ? 'text-rose-600 dark:text-rose-400' : '')}>
+                        <span className={cx('num', overdue ? 'text-rose-700 dark:text-rose-400' : '')}>
                           {full.start_date ? fmtDate(fromDateKey(full.start_date)) : '…'} → {full.due_date ? fmtDate(fromDateKey(full.due_date)) : '…'}
                           {overdue && ' · vencida'}
                         </span>
@@ -392,7 +392,7 @@ export function ProjectDetail({
                   <span className="inline-flex items-center gap-1.5">
                     <CalendarRange className="size-3.5" /> Cronograma
                   </span>
-                  <span className={cx('num', timeline.left < 0 ? 'text-rose-500' : timeline.left <= 7 ? 'text-amber-600 dark:text-amber-400' : '')}>
+                  <span className={cx('num', timeline.left < 0 ? 'text-rose-500' : timeline.left <= 7 ? 'text-amber-700 dark:text-amber-400' : '')}>
                     {timeline.elapsed < 0 ? `empieza en ${-timeline.elapsed} d` : timeline.left < 0 ? `${-timeline.left} d de retraso` : `quedan ${timeline.left} d`}
                   </span>
                 </div>

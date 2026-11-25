@@ -18,13 +18,13 @@ export const CATEGORY_STYLES: Record<EventCategory, { dot: string; chip: string;
     label: 'Investigación',
     dot: 'bg-emerald-500',
     bar: 'border-l-emerald-500',
-    chip: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 border-emerald-500/25',
+    chip: 'bg-emerald-500/12 text-emerald-800 dark:text-emerald-300 border-emerald-500/25',
   },
   training: {
     label: 'Entrenamiento',
     dot: 'bg-amber-500',
     bar: 'border-l-amber-500',
-    chip: 'bg-amber-500/14 text-amber-700 dark:text-amber-300 border-amber-500/30',
+    chip: 'bg-amber-500/14 text-amber-800 dark:text-amber-300 border-amber-500/30',
   },
   personal: {
     label: 'Personal',
@@ -36,18 +36,18 @@ export const CATEGORY_STYLES: Record<EventCategory, { dot: string; chip: string;
     label: 'Vacaciones',
     dot: 'bg-teal-500',
     bar: 'border-l-teal-500',
-    chip: 'bg-teal-500/14 text-teal-700 dark:text-teal-300 border-teal-500/30',
+    chip: 'bg-teal-500/14 text-teal-800 dark:text-teal-300 border-teal-500/30',
   },
   holiday: {
     label: 'Festivo',
     dot: 'bg-orange-500',
     bar: 'border-l-orange-500',
-    chip: 'bg-orange-500/14 text-orange-700 dark:text-orange-300 border-orange-500/30',
+    chip: 'bg-orange-500/14 text-orange-800 dark:text-orange-300 border-orange-500/30',
   },
 }
 
 export const AREA_STYLES: Record<ProjectArea, string> = {
-  research: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/25',
+  research: 'text-emerald-800 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/25',
   engineering: 'text-sky-700 dark:text-sky-300 bg-sky-500/10 border-sky-500/25',
   academic: 'text-violet-700 dark:text-violet-300 bg-violet-500/10 border-violet-500/25',
   personal: 'text-rose-700 dark:text-rose-300 bg-rose-500/10 border-rose-500/25',
@@ -77,14 +77,14 @@ export const AREA_DOT: Record<ProjectArea, string> = {
 
 export const PRIORITY_STYLES: Record<Priority, string> = {
   low: 'text-muted',
-  medium: 'text-amber-600 dark:text-amber-400',
-  high: 'text-rose-600 dark:text-rose-400',
+  medium: 'text-amber-700 dark:text-amber-400',
+  high: 'text-rose-700 dark:text-rose-400',
 }
 
 export const TX_STYLES: Record<TxType, { label: string; text: string; bg: string; sign: string }> = {
-  income: { label: 'Ingreso', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500', sign: '+' },
-  expense: { label: 'Gasto', text: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500', sign: '−' },
-  investment: { label: 'Ahorro', text: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500', sign: '→' },
+  income: { label: 'Ingreso', text: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-500', sign: '+' },
+  expense: { label: 'Gasto', text: 'text-rose-700 dark:text-rose-400', bg: 'bg-rose-500', sign: '−' },
+  investment: { label: 'Ahorro', text: 'text-sky-700 dark:text-sky-400', bg: 'bg-sky-500', sign: '→' },
 }
 
 export const TX_CATEGORY_SUGGESTIONS: Record<TxType, string[]> = {

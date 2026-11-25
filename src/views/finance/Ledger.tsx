@@ -76,9 +76,9 @@ export function Ledger({
           className={cx(
             'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition',
             reviewOnly
-              ? 'border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300'
+              ? 'border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-300'
               : reviewCount
-                ? 'border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300'
+                ? 'border-amber-500/30 text-amber-800 hover:bg-amber-500/10 dark:text-amber-300'
                 : 'border-line text-muted',
           )}
           aria-pressed={reviewOnly}
@@ -164,7 +164,7 @@ export function Ledger({
                   const review = needsReview(t)
                   const quickCategory = review && (
                     <select
-                      className="h-7 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 text-xs font-medium text-amber-700 outline-none focus:ring-2 focus:ring-[var(--ring)] dark:text-amber-300"
+                      className="h-7 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 text-xs font-medium text-amber-800 outline-none focus:ring-2 focus:ring-[var(--ring)] dark:text-amber-300"
                       value=""
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => e.target.value && update('transactions', t.id, { category: e.target.value })}

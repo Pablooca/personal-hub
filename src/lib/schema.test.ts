@@ -5,6 +5,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { TABLE_FIELDS } from './backup.ts'
 
 const schema = readFileSync(new URL('../../supabase/schema.sql', import.meta.url), 'utf8')
 const types = readFileSync(new URL('./types.ts', import.meta.url), 'utf8')
@@ -15,7 +16,7 @@ function columns(table: string): Set<string> {
   assert.ok(create, `create table for ${table} not found`)
   const cols = new Set<string>()
   for (const line of create[1].split('\n')) {
-    const m = line.match(/^\s+([a-z_]+)\s+(uuid|text|numeric|integer|boolean|timestamptz|date|bigint)\b/)
+    const m = line.match(/^\s+([a-z_]+)\s+(uuid|text|numeric|integer|boolean|timestamptz|date|bigint|jsonb)\b/)
     if (m) cols.add(m[1])
   }
   for (const m of schema.matchAll(new RegExp(`alter table public\\.${table} add column if not exists ([a-z_]+)`, 'g'))) cols.add(m[1])
@@ -40,6 +41,13 @@ const TABLES: Record<string, string> = {
   study_subjects: 'StudySubject',
   study_assessments: 'StudyAssessment',
   study_files: 'StudyFile',
+  tcg_decks: 'TcgDeck',
+  vgc_teams: 'VgcTeam',
+  tournaments: 'Tournament',
+  tournament_rounds: 'TournamentRound',
+  race_goals: 'RaceGoal',
+  run_plan: 'RunPlanSession',
+  runs: 'Run',
 }
 
 for (const [table, iface] of Object.entries(TABLES)) {
@@ -51,3 +59,14 @@ for (const [table, iface] of Object.entries(TABLES)) {
     assert.deepEqual(missing, [], `${table} is missing columns: ${missing.join(', ')}`)
   })
 }
+
+for (const [table, iface] of Object.entries(TABLES)) {
+  test(`${table}: the JSON backup covers every field`, () => {
+    const expected = [...fields(iface)].filter((f) => f !== 'user_id').sort()
+    assert.deepEqual([...TABLE_FIELDS[table as keyof typeof TABLE_FIELDS]].sort(), expected)
+  })
+}
+
+test('every table of the app has row level security enabled', () => {
+  for (const table of Object.keys(TABLES)) assert.match(schema, new RegExp(`alter table public\\.${table}\\s+enable row level security`), table)
+})

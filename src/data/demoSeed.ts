@@ -2,6 +2,8 @@ import { addDays, combineDateTime, startOfWeek, toDateKey } from '../lib/dates'
 import { holidayMap } from '../lib/holidays'
 import { uid } from '../lib/format'
 import type { Account, CalendarEvent, Category, Dataset, Project, ProjectTask, StudyAssessment, StudyFile, StudyProgram, StudySubject, Transaction, WorkLog } from '../lib/types'
+import { buildDemoPokemon } from './demoPokemon'
+import { buildDemoRunning } from './demoRunning'
 import { defaultCategories } from '../lib/categories'
 
 /**
@@ -384,5 +386,7 @@ export function buildDemoDataset(today = new Date()): Dataset {
     study_subjects,
     study_assessments,
     study_files,
+    ...buildDemoPokemon(today),
+    ...buildDemoRunning(today),
   }
 }

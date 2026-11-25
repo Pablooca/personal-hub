@@ -79,7 +79,7 @@ function AccountsManager() {
                 <div className="flex items-center gap-2 text-sm font-medium">
                   {a.name}
                   {a.is_primary && (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-amber-300">
                       <Star className="size-2.5 fill-current" /> Principal
                     </span>
                   )}
@@ -95,7 +95,7 @@ function AccountsManager() {
               </select>
               {!a.is_primary && (
                 <Button size="sm" variant="ghost" onClick={() => setPrimaryAccount(a.id)} title="Marcar como principal">
-                  <Star className="size-3.5" /> <span className="hidden sm:inline">Hacer principal</span>
+                  <Star className="size-3.5" /> <span className="max-sm:sr-only">Hacer principal</span>
                 </Button>
               )}
               {confirmId === a.id ? (
@@ -124,7 +124,7 @@ function AccountsManager() {
         </ul>
       )}
       {confirmId && usage(data.accounts.find((a) => a.id === confirmId)?.name ?? '') > 0 && (
-        <p className="text-xs text-amber-600 dark:text-amber-400">Los movimientos existentes conservan el nombre de la cuenta y aparecerán como cuenta no registrada.</p>
+        <p className="text-xs text-amber-700 dark:text-amber-400">Los movimientos existentes conservan el nombre de la cuenta y aparecerán como cuenta no registrada.</p>
       )}
 
       <form onSubmit={add} className="space-y-3 rounded-lg border border-dashed border-line p-3">

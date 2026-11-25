@@ -79,7 +79,7 @@ export function FinanceView() {
         actions={
           <>
             <Button onClick={() => setManage('accounts')}>
-              <Settings2 className="size-4" /> <span className="hidden sm:inline">Cuentas y categorías</span>
+              <Settings2 className="size-4" /> <span className="max-sm:sr-only">Cuentas y categorías</span>
             </Button>
             <div className="flex items-center rounded-lg border border-line bg-surface">
               <Button variant="ghost" size="icon" onClick={() => setMonth((m) => addMonths(m, -1))} aria-label="Mes anterior">
@@ -129,7 +129,7 @@ export function FinanceView() {
         <Stat
           label="Balance neto"
           value={fmtMoney(s.net)}
-          tone={s.net >= 0 ? 'text-fg' : 'text-rose-600 dark:text-rose-400'}
+          tone={s.net >= 0 ? 'text-fg' : 'text-rose-700 dark:text-rose-400'}
           hint="ingresos − gastos (lo ahorrado sigue contando)"
           icon={<Scale className="size-4" />}
         />
@@ -137,7 +137,7 @@ export function FinanceView() {
           <Stat
             label={`Tasa de ahorro · ${year}`}
             value={fmtPct(ytd.savingsRate)}
-            tone={ytd.savingsRate >= 20 ? 'text-emerald-600 dark:text-emerald-400' : ytd.savingsRate >= 0 ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'}
+            tone={ytd.savingsRate >= 20 ? 'text-emerald-700 dark:text-emerald-400' : ytd.savingsRate >= 0 ? 'text-amber-700 dark:text-amber-400' : 'text-rose-700 dark:text-rose-400'}
             hint={`Acumulado ${ytdLabel} · este mes ${fmtPct(s.savingsRate)}`}
             icon={<PiggyBank className="size-4" />}
           />
@@ -176,7 +176,7 @@ export function FinanceView() {
                       </div>
                       <div className="text-[11px] text-faint">{b.account ? ACCOUNT_KIND_LABELS[b.account.kind] : 'No registrada'}</div>
                     </div>
-                    <span className={cx('num text-sm font-medium', b.balance < 0 && 'text-rose-600 dark:text-rose-400')}>{fmtMoney(b.balance)}</span>
+                    <span className={cx('num text-sm font-medium', b.balance < 0 && 'text-rose-700 dark:text-rose-400')}>{fmtMoney(b.balance)}</span>
                   </li>
                 ))}
               </ul>
@@ -243,7 +243,7 @@ export function FinanceView() {
               )
             })}
           </div>
-          <dl className="space-y-2.5 text-sm md:border-l md:border-line md:pl-6">
+          <div className="space-y-2.5 text-sm md:border-l md:border-line md:pl-6">
             <div className="eyebrow">Acumulado {ytdLabel}</div>
             <Row label="Ingresos" value={fmtMoney(ytd.income)} tone={TX_STYLES.income.text} />
             <Row label="Gastos" value={fmtMoney(ytd.expense)} tone={TX_STYLES.expense.text} />
@@ -251,7 +251,7 @@ export function FinanceView() {
             <Row
               label={ytd.withdrawn > 0 ? 'Ahorrado (neto)' : 'Ahorrado'}
               value={fmtMoney(ytd.investment - ytd.withdrawn)}
-              tone={ytd.investment - ytd.withdrawn >= 0 ? TX_STYLES.investment.text : 'text-rose-600 dark:text-rose-400'}
+              tone={ytd.investment - ytd.withdrawn >= 0 ? TX_STYLES.investment.text : 'text-rose-700 dark:text-rose-400'}
             />
             {ytd.withdrawn > 0 && (
               <div className="-mt-1.5 text-right font-mono text-[11px] text-muted">
@@ -261,7 +261,7 @@ export function FinanceView() {
             <div className="border-t border-line pt-2.5">
               <Row label="Tasa de ahorro" value={fmtPct(ytd.savingsRate)} />
             </div>
-          </dl>
+          </div>
         </div>
       </Card>
 
@@ -275,8 +275,8 @@ export function FinanceView() {
 function Row({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div className="flex items-center justify-between">
-      <dt className="text-muted">{label}</dt>
-      <dd className={cx('num font-medium', tone)}>{value}</dd>
+      <span className="text-muted">{label}</span>
+      <span className={cx('num font-medium', tone)}>{value}</span>
     </div>
   )
 }

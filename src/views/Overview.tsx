@@ -66,7 +66,7 @@ export function Overview({ onNavigate, onOpenProject }: { onNavigate: (v: ViewId
         <Stat
           label="Balance · mes"
           value={fmtMoney(month.net)}
-          tone={month.net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}
+          tone={month.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}
           hint={capitalize(fmtMonth(now))}
           icon={<Receipt className="size-4" />}
         />
@@ -161,7 +161,7 @@ export function Overview({ onNavigate, onOpenProject }: { onNavigate: (v: ViewId
                           {tasks.filter((t) => t.is_done).length}/{tasks.length} tareas
                         </span>
                         {due !== null && (
-                          <span className={cx('num', due < 0 ? 'text-rose-500' : due <= 7 ? 'text-amber-600 dark:text-amber-400' : '')}>
+                          <span className={cx('num', due < 0 ? 'text-rose-500' : due <= 7 ? 'text-amber-700 dark:text-amber-400' : '')}>
                             {due < 0 ? `${-due} d de retraso` : due === 0 ? 'vence hoy' : `quedan ${due} d`}
                           </span>
                         )}
@@ -312,7 +312,7 @@ function QuickCapture() {
         {mode === 'task' ? (
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted">Hoy a las</span>
-            <input type="time" className="field num w-36" value={time} onChange={(e) => setTime(e.target.value)} />
+            <input type="time" aria-label="Hora" className="field num w-36" value={time} onChange={(e) => setTime(e.target.value)} />
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
@@ -364,7 +364,7 @@ function HoursNudge({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
         </span>
       )}
       {missing > 0 && (
-        <button onClick={() => onNavigate('hours')} className="text-amber-700 hover:underline dark:text-amber-300">
+        <button onClick={() => onNavigate('hours')} className="text-amber-800 hover:underline dark:text-amber-300">
           {missing} {missing === 1 ? 'día' : 'días'} sin registrar este mes
         </button>
       )}

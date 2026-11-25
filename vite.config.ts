@@ -19,6 +19,7 @@ export default defineConfig({
       output: {
         codeSplitting: {
           groups: [
+            { name: 'icons', test: /node_modules[\\/]lucide-react/ },
             { name: 'supabase', test: /node_modules[\\/]@supabase/ },
             { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
           ],

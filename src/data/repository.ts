@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Dataset, TableName, Tables } from '../lib/types'
+import { TABLES, cascadeRemove, completeDataset, emptyDataset } from './dataset.ts'
 import { buildDemoDataset } from './demoSeed'
 
 export type ChangeEvent =
@@ -14,6 +15,8 @@ export type ChangeEvent =
 export interface LoadResult {
   data: Dataset
   missing: TableName[]
+  /** True when the data comes from the local cache because the network is down. */
+  offline?: boolean
 }
 
 export interface Repository {
@@ -26,6 +29,8 @@ export interface Repository {
   removeMany(table: TableName, ids: string[]): Promise<void>
   /** Same patch to every row where `column = value` (e.g. a whole event series). */
   updateWhere<K extends TableName>(table: K, column: keyof Tables[K] & string, value: string, patch: Partial<Tables[K]>): Promise<void>
+  /** Insert, or overwrite rows that already have the same id (JSON import). */
+  upsertMany<K extends TableName>(table: K, rows: Tables[K][]): Promise<void>
   /** Make one account the primary one (and un-flag the previous). */
   setPrimaryAccount(id: string): Promise<void>
   /** Study PDFs (private storage). Returns the storage path. Unsupported in Demo Mode. */
@@ -35,37 +40,14 @@ export interface Repository {
   removeStudyFiles(paths: string[]): Promise<void>
   /** Live changes from other devices/tabs. Returns an unsubscribe function. */
   subscribe?(onChange: (e: ChangeEvent) => void): () => void
-}
-
-const TABLES: TableName[] = [
-  'events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs',
-  'study_programs', 'study_subjects', 'study_assessments', 'study_files',
-]
-
-/** A dataset with every table present (empty). Always merge loaded data over this. */
-export const emptyDataset = (): Dataset => ({
-  events: [],
-  projects: [],
-  project_tasks: [],
-  transactions: [],
-  categories: [],
-  accounts: [],
-  work_logs: [],
-  study_programs: [],
-  study_subjects: [],
-  study_assessments: [],
-  study_files: [],
-})
-
-/** Fill in any table missing from an older/partial dataset (e.g. demo data saved by a previous version). */
-export function completeDataset(partial: Partial<Dataset> | null | undefined): Dataset {
-  const out = emptyDataset()
-  if (!partial) return out
-  for (const t of TABLES) {
-    const rows = (partial as Record<string, unknown>)[t]
-    if (Array.isArray(rows)) (out as Record<TableName, unknown[]>)[t] = rows
-  }
-  return out
+  /** Last known data kept in this device (instant start / offline). */
+  cached?(): Dataset | null
+  /** Called with every state change so the local copy stays fresh. */
+  remember?(data: Dataset): void
+  /** Send writes made while offline. */
+  flush?(): Promise<void>
+  /** Fires with the number of writes waiting for a connection (and the reason when the server refuses one). */
+  watchPending?(cb: (n: number, refused?: string) => void): () => void
 }
 
 /** PostgREST "relation not found" — the table hasn't been created (schema.sql not re-run). */
@@ -84,25 +66,13 @@ const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   study_subjects: { column: 'created_at', ascending: true },
   study_assessments: { column: 'created_at', ascending: true },
   study_files: { column: 'created_at', ascending: false },
-}
-
-/**
- * Child rows that disappear with their parent (mirrors the ON DELETE CASCADE
- * foreign keys), so local state and Demo Mode behave like Postgres.
- */
-export function cascadeRemove(d: Dataset, table: TableName, ids: Set<string>): Dataset {
-  const next = { ...d, [table]: (d[table] as { id: string }[]).filter((r) => !ids.has(r.id)) } as Dataset
-  if (table === 'projects') next.project_tasks = next.project_tasks.filter((t) => !t.project_id || !ids.has(t.project_id))
-  if (table === 'project_tasks') next.work_logs = next.work_logs.map((w) => (w.task_id && ids.has(w.task_id) ? { ...w, task_id: null } : w))
-  if (table === 'study_programs') {
-    const subjects = new Set(next.study_subjects.filter((s) => ids.has(s.program_id)).map((s) => s.id))
-    return subjects.size ? cascadeRemove(next, 'study_subjects', subjects) : next
-  }
-  if (table === 'study_subjects') {
-    next.study_assessments = next.study_assessments.filter((a) => !ids.has(a.subject_id))
-    next.study_files = next.study_files.filter((f) => !ids.has(f.subject_id))
-  }
-  return next
+  tcg_decks: { column: 'created_at', ascending: true },
+  vgc_teams: { column: 'created_at', ascending: true },
+  tournaments: { column: 'date', ascending: false },
+  tournament_rounds: { column: 'number', ascending: true },
+  race_goals: { column: 'date', ascending: true },
+  run_plan: { column: 'date', ascending: true },
+  runs: { column: 'date', ascending: false },
 }
 
 /** Postgres `numeric` arrives as a string — normalise it. */
@@ -131,6 +101,10 @@ function normalise<K extends TableName>(table: K, row: Tables[K]): Tables[K] {
   if (table === 'study_files') {
     const f = row as Tables['study_files']
     return { ...f, size_bytes: Number(f.size_bytes) } as Tables[K]
+  }
+  if (table === 'race_goals' || table === 'run_plan' || table === 'runs') {
+    const r = row as Tables['runs']
+    return { ...r, distance_km: Number(r.distance_km) } as unknown as Tables[K]
   }
   return row
 }
@@ -225,6 +199,14 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
       if (error) throw error
     },
 
+    async upsertMany(table, rows) {
+      for (let i = 0; i < rows.length; i += 500) {
+        const chunk = rows.slice(i, i + 500).map((r) => ({ ...strip(r), user_id: userId }))
+        const { error } = await client.from(table).upsert(chunk, { onConflict: 'id' })
+        if (error) throw error
+      }
+    },
+
     async setPrimaryAccount(id) {
       const { error } = await client.rpc('set_primary_account', { account_id: id })
       if (error) throw error
@@ -272,7 +254,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v10'
+const DEMO_KEY = 'ph-demo-dataset-v11'
 export const STUDY_BUCKET = 'study-files'
 
 function readDemo(): Dataset {
@@ -352,6 +334,13 @@ export function createLocalRepository(): Repository {
       ;(db as unknown as Record<TableName, Record<string, unknown>[]>)[table] = (db[table] as unknown as Record<string, unknown>[]).map((r) =>
         r[column] === value ? { ...r, ...patch } : r,
       )
+      commit()
+    },
+
+    async upsertMany(table, rows) {
+      const byId = new Map((db[table] as { id: string }[]).map((r) => [r.id, r]))
+      for (const r of rows) byId.set(r.id, r)
+      ;(db as unknown as Record<TableName, unknown[]>)[table] = [...byId.values()]
       commit()
     },
 

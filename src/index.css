@@ -13,8 +13,8 @@
   --line-strong: #cfd6de;
   --fg: #0e1621;
   --muted: #5f6b7a;
-  --faint: #8d97a5;
-  --accent: #0284c7;
+  --faint: #667180;
+  --accent: #0274ae;
   --accent-fg: #ffffff;
   --ring: rgb(2 132 199 / 0.35);
   color-scheme: light;
@@ -28,7 +28,7 @@
   --line-strong: #2c3642;
   --fg: #e5ebf1;
   --muted: #8794a4;
-  --faint: #5d6977;
+  --faint: #7d8a9a;
   --accent: #38bdf8;
   --accent-fg: #06131c;
   --ring: rgb(56 189 248 / 0.35);
@@ -109,6 +109,13 @@
   scrollbar-color: var(--line-strong) transparent;
 }
 
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 input[type='range'] {
   accent-color: var(--accent);
 }
@@ -117,5 +124,15 @@ input[type='range'] {
 @media (max-width: 640px) {
   .field {
     font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

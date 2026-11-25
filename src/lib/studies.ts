@@ -84,7 +84,7 @@ export const fmtGrade = (n: number | null | undefined) =>
   n === null || n === undefined ? '—' : n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export const gradeTone = (n: number | null | undefined) =>
-  n === null || n === undefined ? 'text-muted' : n >= 9 ? 'text-violet-600 dark:text-violet-400' : n >= 7 ? 'text-emerald-600 dark:text-emerald-400' : n >= PASS_GRADE ? 'text-sky-600 dark:text-sky-400' : 'text-rose-600 dark:text-rose-400'
+  n === null || n === undefined ? 'text-muted' : n >= 9 ? 'text-violet-600 dark:text-violet-400' : n >= 7 ? 'text-emerald-700 dark:text-emerald-400' : n >= PASS_GRADE ? 'text-sky-700 dark:text-sky-400' : 'text-rose-700 dark:text-rose-400'
 
 /** Spanish qualitative grade. */
 export const gradeLabel = (n: number | null | undefined) =>

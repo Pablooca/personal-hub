@@ -118,7 +118,7 @@ export function SubjectDetail({ subject, onBack }: { subject: StudySubject; onBa
         )}
         </div>
       </div>
-      {confirmDelete && <p className="-mt-3 mb-4 text-xs text-rose-600 dark:text-rose-400">Se borrarán sus notas y {files.length} PDF.</p>}
+      {confirmDelete && <p className="-mt-3 mb-4 text-xs text-rose-700 dark:text-rose-400">Se borrarán sus notas y {files.length} PDF.</p>}
 
       {/* ---------------------------------------------------- grade summary */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -150,7 +150,7 @@ export function SubjectDetail({ subject, onBack }: { subject: StudySubject; onBa
           <div
             className={cx(
               'num mt-2 text-2xl font-semibold',
-              g.neededStatus === 'reached' ? 'text-emerald-600 dark:text-emerald-400' : g.neededStatus === 'impossible' ? 'text-rose-600 dark:text-rose-400' : 'text-fg',
+              g.neededStatus === 'reached' ? 'text-emerald-700 dark:text-emerald-400' : g.neededStatus === 'impossible' ? 'text-rose-700 dark:text-rose-400' : 'text-fg',
             )}
           >
             {g.neededStatus === 'reached' ? '✓' : g.neededStatus === 'nothing-left' ? '—' : fmtGrade(g.needed)}
@@ -281,7 +281,7 @@ function Assessments({ subject, assessments, totalWeight, weightsOk }: { subject
     <Card
       title="Evaluación"
       action={
-        <span className={cx('num text-xs', weightsOk ? 'text-muted' : 'text-amber-600 dark:text-amber-400')}>
+        <span className={cx('num text-xs', weightsOk ? 'text-muted' : 'text-amber-700 dark:text-amber-400')}>
           {!weightsOk && totalWeight > 0 && <AlertTriangle className="mr-1 inline size-3.5" />}
           pesos {totalWeight}%{!weightsOk && totalWeight > 0 ? ' (deberían sumar 100)' : ''}
         </span>
@@ -352,7 +352,7 @@ function Assessments({ subject, assessments, totalWeight, weightsOk }: { subject
                   <span className="label">{a.kind === 'exam' ? 'Fecha del examen' : 'Fecha límite de entrega'}</span>
                   <input
                     type="datetime-local"
-                    className={cx('field num', !a.is_done && a.due_at && new Date(a.due_at) < new Date() && 'text-rose-600 dark:text-rose-400')}
+                    className={cx('field num', !a.is_done && a.due_at && new Date(a.due_at) < new Date() && 'text-rose-700 dark:text-rose-400')}
                     defaultValue={toLocalInput(a.due_at)}
                     onBlur={(e) => patch(a, 'due_at', e.target.value)}
                   />
@@ -421,7 +421,7 @@ function Assessments({ subject, assessments, totalWeight, weightsOk }: { subject
                       type="datetime-local"
                       className={cx(
                         'num h-8 w-full rounded bg-transparent px-1 text-xs outline-none focus:bg-surface-2 focus:ring-1 focus:ring-line',
-                        !a.is_done && a.due_at && new Date(a.due_at) < new Date() && 'text-rose-600 dark:text-rose-400',
+                        !a.is_done && a.due_at && new Date(a.due_at) < new Date() && 'text-rose-700 dark:text-rose-400',
                       )}
                       defaultValue={toLocalInput(a.due_at)}
                       onBlur={(e) => patch(a, 'due_at', e.target.value)}
@@ -578,7 +578,7 @@ function Files({ subject, files }: { subject: StudySubject; files: StudyFile[] }
         <p className="mt-2 text-center text-[11px] text-faint">
           {busy ? `Subiendo «${busy}»…` : 'o arrastra aquí los PDF · máx. 50 MB cada uno'}
         </p>
-        {source === 'local' && <p className="mt-1 text-center text-[11px] text-amber-600 dark:text-amber-400">En el modo demo no se pueden subir ni abrir archivos.</p>}
+        {source === 'local' && <p className="mt-1 text-center text-[11px] text-amber-700 dark:text-amber-400">En el modo demo no se pueden subir ni abrir archivos.</p>}
       </div>
 
       {files.length === 0 ? (

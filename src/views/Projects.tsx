@@ -117,7 +117,7 @@ export function ProjectsView({ openProjectId, onOpenHandled }: { openProjectId?:
                 window.scrollTo({ top: 0 })
               }}
             >
-              <Plus className="size-4" /> <span className="hidden sm:inline">Nuevo proyecto</span>
+              <Plus className="size-4" /> <span className="max-sm:sr-only">Nuevo proyecto</span>
             </Button>
           </>
         }
@@ -183,7 +183,7 @@ function Dates({ p }: { p: Project }) {
   const late = d !== null && d < 0 && p.status !== 'completed'
   const soon = d !== null && d >= 0 && d <= 7 && p.status !== 'completed'
   return (
-    <span className={cx('num inline-flex items-center gap-1', late ? 'text-rose-500' : soon ? 'text-amber-600 dark:text-amber-400' : 'text-muted')}>
+    <span className={cx('num inline-flex items-center gap-1', late ? 'text-rose-500' : soon ? 'text-amber-700 dark:text-amber-400' : 'text-muted')}>
       <CalendarDays className="size-3" />
       {p.start_date && <>{fmtDate(fromDateKey(p.start_date))} → </>}
       {p.deadline ? fmtDate(fromDateKey(p.deadline)) : '…'}

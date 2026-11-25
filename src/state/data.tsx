@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { cascadeRemove, completeDataset, emptyDataset, type Repository } from '../data/repository'
+import { TABLES, cascadeRemove, completeDataset, emptyDataset } from '../data/dataset.ts'
+import type { Repository } from '../data/repository'
+import { planImport, type ImportMode, type ParsedBackup } from '../lib/backup'
 import { uid } from '../lib/format'
 import type { Dataset, NewRow, TableName, Tables } from '../lib/types'
 import { useToast } from './toast'
@@ -24,6 +26,12 @@ interface DataApi {
   /** Delete the given study files (storage objects + rows). */
   deleteStudyFiles(files: { id: string; storage_path: string }[]): Promise<void>
   reload(): Promise<void>
+  /** Merge a JSON backup. Never deletes anything. */
+  importBackup(backup: ParsedBackup['data'], mode: ImportMode): Promise<boolean>
+  /** Showing the local copy because the server can't be reached. */
+  offline: boolean
+  /** Writes waiting for a connection. */
+  pending: number
 }
 
 const Ctx = createContext<DataApi | null>(null)
@@ -31,12 +39,37 @@ const Ctx = createContext<DataApi | null>(null)
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : 'Error inesperado')
 
 /**
- * Single source of truth for the four tables. Writes are optimistic: the UI
+ * Single source of truth for every table. Writes are optimistic: the UI
  * updates instantly and rolls back if the repository (Supabase / local) fails.
  */
-export function DataProvider({ repo, children }: { repo: Repository; children: ReactNode }) {
-  const [data, setDataRaw] = useState<Dataset>(emptyDataset)
-  const [loading, setLoading] = useState(true)
+const WRITES = ['insert', 'insertMany', 'update', 'remove', 'removeMany', 'updateWhere', 'upsertMany', 'setPrimaryAccount'] as const
+
+export function DataProvider({ repo: source, children }: { repo: Repository; children: ReactNode }) {
+  // Start from the copy kept in this device (if any) and refresh in the background.
+  const [cached] = useState(() => source.cached?.() ?? null)
+  const [data, setDataRaw] = useState<Dataset>(() => cached ?? emptyDataset())
+  const [loading, setLoading] = useState(!cached)
+  const [offline, setOffline] = useState(false)
+  const [pending, setPending] = useState(0)
+  const ready = useRef(Boolean(cached))
+  // Local edits are counted, so a slow background refresh never overwrites them.
+  const writes = useRef({ count: 0, inFlight: 0 })
+  const repo = useMemo<Repository>(() => {
+    const tracked = { ...source } as Record<string, unknown>
+    for (const name of WRITES) {
+      tracked[name] = async (...args: unknown[]) => {
+        writes.current.count++
+        writes.current.inFlight++
+        try {
+          return await (source[name] as (...a: unknown[]) => Promise<unknown>)(...args)
+        } finally {
+          writes.current.inFlight--
+          writes.current.count++
+        }
+      }
+    }
+    return tracked as unknown as Repository
+  }, [source])
   const [error, setError] = useState<string | null>(null)
   const [missingTables, setMissingTables] = useState<TableName[]>([])
   // Every state update goes through completeDataset so no table can ever be undefined.
@@ -50,22 +83,62 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
   dataRef.current = safeData
 
   const reload = useCallback(async () => {
-    setLoading(true)
+    if (!ready.current) setLoading(true)
+    const started = writes.current.count
     try {
-      const res = await repo.loadAll()
+      let res = await repo.loadAll()
+      let seen = started
+      // Something was edited while loading: what we fetched is already old, ask again.
+      for (let i = 0; i < 8 && (writes.current.count !== seen || writes.current.inFlight > 0); i++) {
+        await new Promise((r) => setTimeout(r, 300))
+        seen = writes.current.count
+        res = await repo.loadAll()
+      }
+      ready.current = true
       setData(res.data)
       setMissingTables(res.missing)
+      setOffline(Boolean(res.offline))
       setError(null)
     } catch (e) {
-      setError(errMsg(e))
+      if (ready.current) toast('error', `No se han podido actualizar los datos: ${errMsg(e)}`)
+      else setError(errMsg(e))
     } finally {
       setLoading(false)
     }
-  }, [repo, setData])
+  }, [repo, setData, toast])
 
   useEffect(() => {
     void reload()
   }, [reload])
+
+  // Keep the local copy fresh and send anything written while offline.
+  useEffect(() => {
+    if (ready.current && !loading) repo.remember?.(safeData)
+  }, [repo, safeData, loading])
+
+  useEffect(() => {
+    if (!repo.watchPending) return
+    const stop = repo.watchPending((n, refused) => {
+      setPending(n)
+      if (refused) toast('error', `Un cambio hecho sin conexión no se ha podido guardar: ${refused}`)
+    })
+    const onOnline = () => void reload() // flushes the queue first
+    const onOffline = () => setOffline(true)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => {
+      stop()
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
+  }, [repo, reload, toast])
+
+  // A failed connection doesn't always fire "online" again: retry while something waits.
+  useEffect(() => {
+    if (!pending && !offline) return
+    const t = setInterval(() => navigator.onLine && void reload(), 30_000)
+    return () => clearInterval(t)
+  }, [pending, offline, reload])
 
   // Realtime merge (other tabs / devices).
   useEffect(() => {
@@ -200,6 +273,25 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
     [repo, toast],
   )
 
+  const importBackup = useCallback<DataApi['importBackup']>(
+    async (backup, mode) => {
+      try {
+        const plan = planImport(dataRef.current, backup, mode)
+        for (const table of TABLES) {
+          const rows = plan.rows[table]
+          if (rows?.length) await repo.upsertMany(table, rows as unknown as Tables[typeof table][])
+        }
+        await reload()
+        return true
+      } catch (e) {
+        toast('error', `No se ha podido importar: ${errMsg(e)}`)
+        await reload()
+        return false
+      }
+    },
+    [repo, reload, toast],
+  )
+
   const uploadStudyFile = useCallback<DataApi['uploadStudyFile']>(
     async (subjectId, file, topic) => {
       const id = uid()
@@ -251,8 +343,8 @@ export function DataProvider({ repo, children }: { repo: Repository; children: R
   )
 
   const value = useMemo<DataApi>(
-    () => ({ data: safeData, loading, error, missingTables, source: repo.kind, create, createMany, update, remove, removeMany, updateWhere, setPrimaryAccount, uploadStudyFile, openStudyFile, deleteStudyFiles, reload }),
-    [safeData, loading, error, missingTables, repo.kind, create, createMany, update, remove, removeMany, updateWhere, setPrimaryAccount, uploadStudyFile, openStudyFile, deleteStudyFiles, reload],
+    () => ({ data: safeData, loading, error, missingTables, source: repo.kind, create, createMany, update, remove, removeMany, updateWhere, setPrimaryAccount, uploadStudyFile, openStudyFile, deleteStudyFiles, reload, importBackup, offline, pending }),
+    [safeData, loading, error, missingTables, repo.kind, create, createMany, update, remove, removeMany, updateWhere, setPrimaryAccount, uploadStudyFile, openStudyFile, deleteStudyFiles, reload, importBackup, offline, pending],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

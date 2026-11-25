@@ -80,7 +80,7 @@ export function CalendarView() {
         actions={
           <>
             <Button onClick={() => setShowRules(true)} title="Qué festivos afectan a cada categoría">
-              <CalendarOff className="size-4 text-orange-500" /> <span className="hidden sm:inline">Festivos</span>
+              <CalendarOff className="size-4 text-orange-500" /> <span className="max-sm:sr-only">Festivos</span>
             </Button>
             <Segmented value={mode} onChange={setMode} options={[{ value: 'month', label: 'Mes' }, { value: 'week', label: 'Semana' }]} />
             <div className="flex items-center rounded-lg border border-line bg-surface">
@@ -95,7 +95,7 @@ export function CalendarView() {
               </Button>
             </div>
             <Button variant="primary" onClick={() => setDraft({ dateKey: toDateKey(selected) })}>
-              <Plus className="size-4" /> <span className="hidden sm:inline">Nuevo evento</span>
+              <Plus className="size-4" /> <span className="max-sm:sr-only">Nuevo evento</span>
             </Button>
           </>
         }

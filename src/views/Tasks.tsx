@@ -90,7 +90,7 @@ export function TasksView({ onOpenProject }: { onOpenProject: (projectId: string
         title="Tareas"
         actions={
           <Button variant="primary" onClick={() => setAdding('todo')}>
-            <Plus className="size-4" /> <span className="hidden sm:inline">Nueva tarea</span>
+            <Plus className="size-4" /> <span className="max-sm:sr-only">Nueva tarea</span>
           </Button>
         }
       />
@@ -266,7 +266,7 @@ function TaskCard({
               <span
                 className={cx(
                   'num inline-flex items-center gap-1 text-[10px]',
-                  !t.is_done && daysUntil(t.due_date) < 0 ? 'text-rose-600 dark:text-rose-400' : !t.is_done && daysUntil(t.due_date) <= 2 ? 'text-amber-600 dark:text-amber-400' : 'text-muted',
+                  !t.is_done && daysUntil(t.due_date) < 0 ? 'text-rose-700 dark:text-rose-400' : !t.is_done && daysUntil(t.due_date) <= 2 ? 'text-amber-700 dark:text-amber-400' : 'text-muted',
                 )}
                 title="Fecha de fin"
               >

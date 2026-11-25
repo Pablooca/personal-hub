@@ -73,9 +73,9 @@ export function Login({ onDemo, theme, toggleTheme }: { onDemo: () => void; them
             />
           </div>
 
-          {error && <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-600 dark:text-rose-300">{error}</p>}
+          {error && <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">{error}</p>}
           {!isSupabaseConfigured && (
-            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
               Supabase no está configurado en esta versión. Usa la demo interactiva.
             </p>
           )}

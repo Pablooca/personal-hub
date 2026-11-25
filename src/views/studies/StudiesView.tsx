@@ -16,7 +16,7 @@ const fmtCredits = (n: number) => n.toLocaleString('es-ES', { maximumFractionDig
 export const STATUS_LABELS: Record<SubjectStatus, string> = { in_progress: 'En curso', passed: 'Aprobada', failed: 'Suspensa' }
 export const STATUS_STYLES: Record<SubjectStatus, string> = {
   in_progress: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300',
-  passed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  passed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300',
   failed: 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
 }
 
@@ -65,7 +65,7 @@ function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
         title="Programas"
         actions={
           <Button variant="primary" onClick={() => setEditing({})}>
-            <Plus className="size-4" /> <span className="hidden sm:inline">Nuevo programa</span>
+            <Plus className="size-4" /> <span className="max-sm:sr-only">Nuevo programa</span>
           </Button>
         }
       />
@@ -214,7 +214,7 @@ function ProgramDetail({ program, onBack, onOpenSubject }: { program: StudyProgr
         actions={
           <>
             <Button onClick={() => setEditingProgram(true)}>
-              <Pencil className="size-4" /> <span className="hidden sm:inline">Editar</span>
+              <Pencil className="size-4" /> <span className="max-sm:sr-only">Editar</span>
             </Button>
             {confirmDelete ? (
               <>
@@ -231,12 +231,12 @@ function ProgramDetail({ program, onBack, onOpenSubject }: { program: StudyProgr
               </Button>
             )}
             <Button variant="primary" onClick={() => setNewSubject(true)}>
-              <Plus className="size-4" /> <span className="hidden sm:inline">Nueva asignatura</span>
+              <Plus className="size-4" /> <span className="max-sm:sr-only">Nueva asignatura</span>
             </Button>
           </>
         }
       />
-      {confirmDelete && <p className="-mt-3 mb-4 text-xs text-rose-600 dark:text-rose-400">Se borrarán sus {subjects.length} asignaturas, notas y apuntes PDF.</p>}
+      {confirmDelete && <p className="-mt-3 mb-4 text-xs text-rose-700 dark:text-rose-400">Se borrarán sus {subjects.length} asignaturas, notas y apuntes PDF.</p>}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="card p-4">
@@ -321,9 +321,9 @@ function SubjectCard({ s, files, onOpen }: { s: StudySubject; files: number; onO
             necesitas <span className="num font-semibold text-fg">{fmtGrade(g.needed)}</span> para un {fmtGrade(s.target_grade)}
           </span>
         )}
-        {g && g.effective === null && g.neededStatus === 'impossible' && <span className="text-rose-600 dark:text-rose-400">el {fmtGrade(s.target_grade)} ya no es alcanzable</span>}
-        {g && g.effective === null && g.neededStatus === 'reached' && <span className="text-emerald-600 dark:text-emerald-400">{fmtGrade(s.target_grade)} asegurado</span>}
-        {!g?.weightsOk && (g?.totalWeight ?? 0) > 0 && <span className="text-amber-600 dark:text-amber-400">pesos: {g?.totalWeight}%</span>}
+        {g && g.effective === null && g.neededStatus === 'impossible' && <span className="text-rose-700 dark:text-rose-400">el {fmtGrade(s.target_grade)} ya no es alcanzable</span>}
+        {g && g.effective === null && g.neededStatus === 'reached' && <span className="text-emerald-700 dark:text-emerald-400">{fmtGrade(s.target_grade)} asegurado</span>}
+        {!g?.weightsOk && (g?.totalWeight ?? 0) > 0 && <span className="text-amber-700 dark:text-amber-400">pesos: {g?.totalWeight}%</span>}
         {files > 0 && <span className="ml-auto font-mono text-faint">{files} PDF</span>}
       </div>
     </article>

@@ -200,7 +200,7 @@ function EventForm({ draft, onClose }: { draft: EventDraft; onClose: () => void 
           <>
             {editing && (
               <Button variant="danger" className="mr-auto" onClick={() => setConfirmDelete('one')}>
-                <Trash2 className="size-4" /> <span className="hidden sm:inline">Eliminar</span>
+                <Trash2 className="size-4" /> <span className="max-sm:sr-only">Eliminar</span>
               </Button>
             )}
             <Button variant="ghost" onClick={onClose}>

@@ -174,6 +174,168 @@ export interface StudyFile {
   created_at: string
 }
 
+// ---------------------------------------------------------------------------
+// Pokémon Competitive (TCG & VGC)
+// ---------------------------------------------------------------------------
+export const POKEMON_GAMES = ['tcg', 'vgc'] as const
+export type PokemonGame = (typeof POKEMON_GAMES)[number]
+
+export const MATCH_FORMATS = ['bo1', 'bo3'] as const
+export type MatchFormat = (typeof MATCH_FORMATS)[number]
+
+export const TOURNAMENT_CATEGORIES = [
+  'league_challenge', 'league_cup', 'regional', 'special', 'international', 'worlds',
+  'global_challenge', 'grand_challenge', 'online', 'local', 'other',
+] as const
+export type TournamentCategory = (typeof TOURNAMENT_CATEGORIES)[number]
+
+export const TOURNAMENT_STATUSES = ['planned', 'in_progress', 'finished', 'dropped'] as const
+export type TournamentStatus = (typeof TOURNAMENT_STATUSES)[number]
+
+export const ROUND_RESULTS = ['win', 'loss', 'tie', 'bye'] as const
+export type RoundResult = (typeof ROUND_RESULTS)[number]
+
+export type RoundPhase = 'swiss' | 'top_cut'
+export type TopCutType = 'standard' | 'asymmetric'
+
+export interface TcgDeck {
+  id: string
+  user_id?: string
+  name: string
+  format: string
+  /** 1–2 sprite slugs that identify the deck. */
+  icons: string[]
+  list_text: string
+  notes: string
+  created_at: string
+}
+
+export interface VgcTeam {
+  id: string
+  user_id?: string
+  name: string
+  regulation: string
+  paste: string
+  notes: string
+  created_at: string
+}
+
+export interface Tournament {
+  id: string
+  user_id?: string
+  game: PokemonGame
+  name: string
+  date: string // YYYY-MM-DD
+  mode: 'in_person' | 'online'
+  location: string
+  category: TournamentCategory
+  format: string
+  players: number | null
+  swiss_rounds: number | null
+  swiss_format: MatchFormat
+  has_top_cut: boolean
+  top_cut_type: TopCutType
+  top_cut_size: number | null
+  /** Asked explicitly, never assumed: null until the player answers. */
+  top_cut_format: MatchFormat | null
+  made_top_cut: boolean
+  deck_id: string | null
+  team_id: string | null
+  status: TournamentStatus
+  placement: number | null
+  cp: number | null
+  notes: string
+  created_at: string
+}
+
+/** One game inside a match. `first` = did I go first (null = not recorded / VGC). */
+export interface RoundGame {
+  result: 'win' | 'loss' | 'tie'
+  first: boolean | null
+}
+
+export interface RivalPokemon {
+  species: string
+  item: string
+  nature: string
+  moves: string[]
+}
+
+export interface TournamentRound {
+  id: string
+  user_id?: string
+  tournament_id: string
+  phase: RoundPhase
+  number: number
+  result: RoundResult
+  games: RoundGame[]
+  won_dice: boolean | null
+  went_first: boolean | null
+  opponent_name: string
+  /** TCG: archetype id, 'other' for a custom one, '' when unknown. */
+  opponent_archetype: string
+  opponent_icons: string[]
+  opponent_deck_name: string
+  /** VGC: up to 4 Pokémon seen. */
+  opponent_pokemon: RivalPokemon[]
+  /** VGC: the species I brought from my own team. */
+  my_pokemon: string[]
+  notes: string
+  created_at: string
+}
+
+// ---------------------------------------------------------------------------
+// Running & Race Prep
+// ---------------------------------------------------------------------------
+export const RUN_TYPES = ['easy', 'interval', 'tempo', 'long', 'race'] as const
+export type RunType = (typeof RUN_TYPES)[number]
+
+export interface RaceGoal {
+  id: string
+  user_id?: string
+  name: string
+  date: string // YYYY-MM-DD
+  distance_km: number
+  /** Previous personal best over this distance (seconds). */
+  previous_best_s: number | null
+  target_s: number
+  notes: string
+  created_at: string
+}
+
+/** A planned session. */
+export interface RunPlanSession {
+  id: string
+  user_id?: string
+  goal_id: string
+  date: string // YYYY-MM-DD
+  type: RunType
+  distance_km: number
+  pace_s: number | null // target pace, s/km
+  description: string
+  created_at: string
+}
+
+/** A session actually run. */
+export interface Run {
+  id: string
+  user_id?: string
+  /** The planned session it fulfils, if any. */
+  plan_id: string | null
+  date: string // YYYY-MM-DD
+  type: RunType
+  distance_km: number
+  duration_s: number
+  /** Pace of the fast part (intervals / tempo blocks), s/km. */
+  work_pace_s: number | null
+  avg_hr: number | null
+  rpe: number | null // 1–10
+  /** All-out effort (test or race): the best basis for the projection. */
+  is_test: boolean
+  notes: string
+  created_at: string
+}
+
 export interface Tables {
   events: CalendarEvent
   projects: Project
@@ -186,6 +348,13 @@ export interface Tables {
   study_subjects: StudySubject
   study_assessments: StudyAssessment
   study_files: StudyFile
+  tcg_decks: TcgDeck
+  vgc_teams: VgcTeam
+  tournaments: Tournament
+  tournament_rounds: TournamentRound
+  race_goals: RaceGoal
+  run_plan: RunPlanSession
+  runs: Run
 }
 
 export type TableName = keyof Tables

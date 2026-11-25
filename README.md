@@ -1,6 +1,6 @@
 # Personal Hub — Life OS
 
-Centro de mando personal y privado: **agenda, proyectos y finanzas** en un solo sitio.
+Centro de mando personal y privado: **agenda, proyectos, estudios, finanzas, running y Pokémon competitivo** en un solo sitio.
 React + TypeScript en el frontend y **Supabase** (PostgreSQL + Auth + Row Level Security) como backend. Se puede desplegar gratis en Vercel o Cloudflare Pages.
 
 > **Pruébala sin cuenta:** en la pantalla de acceso pulsa **«Probar demo interactiva»**. El modo demo carga datos ficticios en `localStorage` y no hace ninguna petición a la base de datos.
@@ -18,6 +18,9 @@ React + TypeScript en el frontend y **Supabase** (PostgreSQL + Auth + Row Level 
 | **Estudios** | **Programas** (p. ej. Máster) → **asignaturas** con créditos ECTS. Cada asignatura tiene su **evaluación**: entregas y exámenes, cada uno con su % de la nota, su nota y su fecha y hora, con la nota actual, la media hasta ahora, **qué necesitas sacar en lo que queda** para tu objetivo y nota oficial opcional. Los programas muestran la **media ponderada por ECTS** y los créditos aprobados. **Apuntes en PDF** (hasta 50 MB) por tema, guardados en almacenamiento privado. Las entregas y los exámenes pueden añadirse a la Agenda y avisan por Telegram (ver más abajo). |
 | **Horas** | Diario de trabajo: qué hiciste cada día, cuántas horas y en qué issue de Jira. Resalta los días laborables sin registrar, calcula el total por issue y genera una **hoja de horas issue × día** que puedes copiar o exportar a CSV para imputar en Jira a final de mes. |
 | **Finanzas** | Registro rápido de ingresos, gastos y ahorro, **varias cuentas bancarias con una cuenta principal**, saldo por cuenta y patrimonio, **categorías propias**, KPIs del mes, tasa de ahorro anual, evolución de 12 meses, movimientos filtrables con exportación a CSV y bandeja **«Por revisar»** para los pagos de Apple Pay sin categoría. |
+| **Running & Race Prep** | **Carrera objetivo** (10K, media, maratón o personalizada) con ritmo objetivo automático. **Planning semanal** con editor rápido (copiar y repetir semanas) o importación CSV/JSON, y registro de entrenamientos (distancia, tiempo o ritmo, FC, RPE). El semáforo **«¿Voy bien preparado?»** combina adherencia y volumen, proyección de marca con Riegel (`T2 = T1 · (D2/D1)^1.06`) y cumplimiento de sesiones clave, con alertas de ritmo y fatiga. |
+| **Pokémon Competitive** | **Torneos** TCG y VGC ronda a ronda (suizo y Top Cut con su propio formato BO1/BO3, que siempre se pregunta), dado y turno de salida, rivales TCG por **iconos de arquetipo** (o «Otro» con 1–2 Pokémon) y constructor VGC de hasta 4 Pokémon. **Calculadora Play! Pokémon** (rondas oficiales, puntos de corte y simulador de abandonos en vivo), **biblioteca de mazos** (60 cartas, PTCGL/Limitless), **equipos VGC** (Showdown/Pokepaste, EVs o Stat Points) y **estadísticas** con matriz de emparejamientos. |
+| **Copia y sin conexión** | Exportar e importar JSON (todo, solo Pokémon o solo Running; importar nunca borra). Con sesión iniciada, una copia local abre la app al instante y los cambios hechos sin cobertura se envían en orden al recuperar la red. |
 | **Apple Pay** | Una Edge Function de Supabase recibe cada pago hecho con Apple Pay desde un Atajo de iPhone y lo registra como gasto, categorizado automáticamente. |
 
 Los festivos y los días de vacaciones tampoco cuentan como «sin registrar» en **Horas**.
@@ -39,12 +42,16 @@ src/
 ├── App.tsx                 # máquina de estados de sesión: loading → login | supabase | demo
 ├── data/
 │   ├── repository.ts       # interfaz Repository + implementaciones Supabase y Local (demo)
+│   ├── hybrid.ts           # copia local + cola de cambios sin conexión sobre Supabase
+│   ├── pokemon/            # especies, metajuego y datos de Champions (generados con scripts/)
 │   └── demoSeed.ts         # datos sintéticos generados en relación con «hoy»
 ├── state/                  # DataProvider (CRUD optimista + realtime), tema y toasts
 ├── lib/                    # tipos, fechas, finanzas, categorías, formato (es-ES)
 ├── components/             # Shell, Login, EventModal, primitivas de UI
 └── views/
     ├── Overview.tsx · Calendar.tsx · Projects.tsx · ProjectDetail.tsx · Tasks.tsx · Hours.tsx
+    ├── pokemon/            # torneos, calculadora, mazos, equipos, estadísticas
+    ├── running/            # preparación, planning, entrenamientos
     └── finance/            # FinanceView, Ledger, TxForms, Manage (cuentas y categorías)
 supabase/
 ├── schema.sql              # tablas, restricciones, índices, RLS, RPC y realtime (idempotente)
@@ -57,7 +64,7 @@ La interfaz solo habla con un `Repository`. El modo demo y la base de datos real
 
 ### Modelo de datos
 
-`events` · `projects` · `project_tasks` · `transactions` · `categories` · `accounts` · `work_logs` · `study_programs` · `study_subjects` · `study_assessments` · `study_files`
+`events` · `projects` · `project_tasks` · `transactions` · `categories` · `accounts` · `work_logs` · `study_programs` · `study_subjects` · `study_assessments` · `study_files` · `tcg_decks` · `vgc_teams` · `tournaments` · `tournament_rounds` · `race_goals` · `run_plan` · `runs`
 
 - `project_tasks` alimenta el Kanban de tareas: o pertenece a un proyecto (`project_id`) o es una tarea suelta con `category` (`work` / `personal`). `status` e `is_done` se mantienen sincronizados mediante un trigger.
 - `events.series_id` agrupa los eventos creados con «Repetir»; `events.all_day` marca los de todo el día.
@@ -243,6 +250,12 @@ Opcional: `EVENT_REMINDERS="15,5"` y `DELIVERY_REMINDERS="1440,180,60,30,5"` cam
 | `npm run preview` | Sirve el build de producción en local |
 | `npm run typecheck` | Solo comprobación de tipos |
 | `npm test` | Tests unitarios (notas de Estudios, webhook de Apple Pay y mensajes de Telegram) |
+
+## Datos de Pokémon
+
+`node scripts/build-pokemon-data.mjs [SET] [FORMATO]` (p. ej. `DLR TEF-DLR`) regenera `src/data/pokemon/` con el metajuego de Limitless y la legalidad de Pokémon Champions según Pokémon Showdown. Ejecútalo cuando salga una expansión o cambie la regulación. Los sprites y las cartas se cargan desde Limitless y Showdown; no se guardan en el repositorio.
+
+Rondas: *Play! Pokémon Tournament Rules Handbook* (mayo de 2026). CP: temporada 2027. Pokémon es una marca de Nintendo, Creatures y GAME FREAK; este proyecto no está afiliado.
 
 ## Licencia
 

@@ -78,7 +78,7 @@ export function TaskModal({
               toast('success', 'Tarea eliminada')
             }}
           >
-            <Trash2 className="size-4" /> <span className="hidden sm:inline">Eliminar</span>
+            <Trash2 className="size-4" /> <span className="max-sm:sr-only">Eliminar</span>
           </Button>
           <Button variant="ghost" onClick={onClose}>
             Cancelar

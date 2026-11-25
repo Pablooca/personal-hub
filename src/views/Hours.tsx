@@ -90,7 +90,7 @@ export function HoursView() {
               </Button>
             </div>
             <Button variant="primary" onClick={() => setDraft({})}>
-              <Plus className="size-4" /> <span className="hidden sm:inline">Registrar horas</span>
+              <Plus className="size-4" /> <span className="max-sm:sr-only">Registrar horas</span>
             </Button>
           </>
         }
@@ -108,7 +108,7 @@ export function HoursView() {
           <Stat
             label="Sin registrar"
             value={missing.length}
-            tone={missing.length ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}
+            tone={missing.length ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}
             hint={onlyMissing ? 'Mostrando solo pendientes · ver todo' : short.length ? `+ ${short.length} días incompletos · ver` : 'Pulsa para filtrar'}
             icon={<AlertCircle className="size-4" />}
           />
@@ -167,7 +167,7 @@ export function HoursView() {
                           style={{ width: `${Math.min(100, (h / target) * 100)}%` }}
                         />
                       </div>
-                      <span className={cx('num w-14 text-right text-sm', isMissing ? 'text-amber-600 dark:text-amber-400' : isShort ? 'text-amber-600 dark:text-amber-400' : '')}>
+                      <span className={cx('num w-14 text-right text-sm', isMissing ? 'text-amber-700 dark:text-amber-400' : isShort ? 'text-amber-700 dark:text-amber-400' : '')}>
                         {fmtHours(h)}
                       </span>
                       <Button size="icon" variant="ghost" onClick={() => setDraft({ date: d.key })} aria-label={`Registrar horas el ${d.key}`}>
@@ -177,7 +177,7 @@ export function HoursView() {
                     {d.off && h === 0 ? (
                       <div className="mt-1.5 text-xs text-orange-700 dark:text-orange-300">{d.off} · no laborable</div>
                     ) : isMissing ? (
-                      <button onClick={() => setDraft({ date: d.key })} className="mt-1.5 text-xs text-amber-700 hover:underline dark:text-amber-300">
+                      <button onClick={() => setDraft({ date: d.key })} className="mt-1.5 text-xs text-amber-800 hover:underline dark:text-amber-300">
                         Sin registrar · ¿qué hiciste este día?
                       </button>
                     ) : (
@@ -245,13 +245,13 @@ export function HoursView() {
           }
           bodyClass="p-0"
         >
-          <div className="scrollbar-thin overflow-x-auto">
+          <div className="scrollbar-thin relative overflow-x-auto" tabIndex={0} role="region" aria-label="Hoja de horas">
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="bg-surface-2">
                   <th className="sticky left-0 z-10 bg-surface-2 px-3 py-2 text-left font-semibold text-muted">Clave</th>
                   {days.map((d) => (
-                    <th key={d.key} className={cx('num min-w-9 px-1 py-2 text-center font-normal', d.rest ? 'text-faint/60' : 'text-muted', d.off && !d.weekend && 'bg-orange-500/10', !d.rest && !perDay.get(d.key) && d.date <= today && 'bg-amber-500/10')}
+                    <th key={d.key} className={cx('num min-w-9 px-1 py-2 text-center font-normal', d.rest ? 'text-faint' : 'text-muted', d.off && !d.weekend && 'bg-orange-500/10', !d.rest && !perDay.get(d.key) && d.date <= today && 'bg-amber-500/10')}
                       title={d.off ?? undefined}
                     >
                       <div className="text-[9px] uppercase">{fmtDate(d.date, { weekday: 'narrow' })}</div>
@@ -281,7 +281,7 @@ export function HoursView() {
                   {days.map((d) => {
                     const v = perDay.get(d.key)
                     return (
-                      <td key={d.key} className={cx('num px-1 py-2 text-center', !!v && v < target && !d.rest && 'text-amber-600 dark:text-amber-400')}>
+                      <td key={d.key} className={cx('num px-1 py-2 text-center', !!v && v < target && !d.rest && 'text-amber-700 dark:text-amber-400')}>
                         {v ? num(v) : ''}
                       </td>
                     )

@@ -5,7 +5,9 @@
 --  It is idempotent: safe to run more than once.
 --
 --  Tables:   events · projects · project_tasks · transactions · categories · accounts · work_logs ·
---            study_programs · study_subjects · study_assessments · study_files · notification_log
+--            study_programs · study_subjects · study_assessments · study_files ·
+--            tcg_decks · vgc_teams · tournaments · tournament_rounds ·
+--            race_goals · run_plan · runs · notification_log
 --  Security: Row Level Security on every table. Each row belongs to exactly
 --            one auth user (user_id) and is only visible/editable by them.
 -- =============================================================================
@@ -563,6 +565,173 @@ create policy "study_files_storage_delete" on storage.objects for delete to auth
   using (bucket_id = 'study-files' and (storage.foldername(name))[1] = (select auth.uid())::text);
 
 -- =============================================================================
+--  9. POKÉMON COMPETITIVE — TCG decks, VGC teams, tournaments and their rounds
+-- =============================================================================
+create table if not exists public.tcg_decks (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name        text not null check (char_length(name) between 1 and 120),
+  format      text not null default '',
+  icons       jsonb not null default '[]'::jsonb check (jsonb_typeof(icons) = 'array'),
+  list_text   text not null default '' check (char_length(list_text) <= 10000),
+  notes       text not null default '' check (char_length(notes) <= 5000),
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists public.vgc_teams (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name        text not null check (char_length(name) between 1 and 120),
+  regulation  text not null default '',
+  paste       text not null default '' check (char_length(paste) <= 10000),
+  notes       text not null default '' check (char_length(notes) <= 5000),
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists public.tournaments (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  game            text not null check (game in ('tcg', 'vgc')),
+  name            text not null check (char_length(name) between 1 and 160),
+  date            date not null default current_date,
+  mode            text not null default 'in_person' check (mode in ('in_person', 'online')),
+  location        text not null default '',
+  category        text not null default 'other',
+  format          text not null default '',
+  players         integer check (players is null or players between 2 and 100000),
+  swiss_rounds    integer check (swiss_rounds is null or swiss_rounds between 1 and 30),
+  swiss_format    text not null default 'bo3' check (swiss_format in ('bo1', 'bo3')),
+  has_top_cut     boolean not null default false,
+  top_cut_type    text not null default 'standard' check (top_cut_type in ('standard', 'asymmetric')),
+  top_cut_size    integer check (top_cut_size is null or top_cut_size between 2 and 512),
+  top_cut_format  text check (top_cut_format is null or top_cut_format in ('bo1', 'bo3')),  -- null until the player answers
+  made_top_cut    boolean not null default false,
+  deck_id         uuid references public.tcg_decks (id) on delete set null,
+  team_id         uuid references public.vgc_teams (id) on delete set null,
+  status          text not null default 'planned' check (status in ('planned', 'in_progress', 'finished', 'dropped')),
+  placement       integer check (placement is null or placement > 0),
+  cp              integer check (cp is null or cp >= 0),
+  notes           text not null default '' check (char_length(notes) <= 5000),
+  created_at      timestamptz not null default now()
+);
+
+create table if not exists public.tournament_rounds (
+  id                  uuid primary key default gen_random_uuid(),
+  user_id             uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  tournament_id       uuid not null references public.tournaments (id) on delete cascade,
+  phase               text not null default 'swiss' check (phase in ('swiss', 'top_cut')),
+  number              integer not null check (number between 1 and 40),
+  result              text not null check (result in ('win', 'loss', 'tie', 'bye')),
+  games               jsonb not null default '[]'::jsonb check (jsonb_typeof(games) = 'array'),
+  won_dice            boolean,
+  went_first          boolean,
+  opponent_name       text not null default '' check (char_length(opponent_name) <= 120),
+  opponent_archetype  text not null default '' check (char_length(opponent_archetype) <= 120),
+  opponent_icons      jsonb not null default '[]'::jsonb check (jsonb_typeof(opponent_icons) = 'array'),
+  opponent_deck_name  text not null default '' check (char_length(opponent_deck_name) <= 120),
+  opponent_pokemon    jsonb not null default '[]'::jsonb check (jsonb_typeof(opponent_pokemon) = 'array'),
+  my_pokemon          jsonb not null default '[]'::jsonb check (jsonb_typeof(my_pokemon) = 'array'),
+  notes               text not null default '' check (char_length(notes) <= 5000),
+  created_at          timestamptz not null default now()
+);
+
+create index if not exists tcg_decks_user_idx on public.tcg_decks (user_id);
+create index if not exists vgc_teams_user_idx on public.vgc_teams (user_id);
+create index if not exists tournaments_user_date_idx on public.tournaments (user_id, date desc);
+create index if not exists tournaments_deck_idx on public.tournaments (deck_id);
+create index if not exists tournaments_team_idx on public.tournaments (team_id);
+create index if not exists tournament_rounds_tournament_idx on public.tournament_rounds (tournament_id, phase, number);
+create index if not exists tournament_rounds_user_idx on public.tournament_rounds (user_id);
+
+-- =============================================================================
+--  10. RUNNING & RACE PREP — target races, training plan and completed runs
+-- =============================================================================
+create table if not exists public.race_goals (
+  id               uuid primary key default gen_random_uuid(),
+  user_id          uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name             text not null check (char_length(name) between 1 and 120),
+  date             date not null,
+  distance_km      numeric(7, 3) not null check (distance_km > 0 and distance_km <= 500),
+  previous_best_s  integer check (previous_best_s is null or previous_best_s > 0),
+  target_s         integer not null check (target_s > 0),
+  notes            text not null default '' check (char_length(notes) <= 5000),
+  created_at       timestamptz not null default now()
+);
+
+create table if not exists public.run_plan (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  goal_id      uuid not null references public.race_goals (id) on delete cascade,
+  date         date not null,
+  type         text not null check (type in ('easy', 'interval', 'tempo', 'long', 'race')),
+  distance_km  numeric(6, 2) not null check (distance_km > 0 and distance_km <= 200),
+  pace_s       integer check (pace_s is null or pace_s between 100 and 1200),  -- target pace, seconds per km
+  description  text not null default '' check (char_length(description) <= 1000),
+  created_at   timestamptz not null default now()
+);
+
+create table if not exists public.runs (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  plan_id      uuid references public.run_plan (id) on delete set null,
+  date         date not null,
+  type         text not null check (type in ('easy', 'interval', 'tempo', 'long', 'race')),
+  distance_km  numeric(6, 2) not null check (distance_km > 0 and distance_km <= 200),
+  duration_s   integer not null check (duration_s > 0),
+  work_pace_s  integer check (work_pace_s is null or work_pace_s between 100 and 1200),  -- pace of the fast part
+  avg_hr       integer check (avg_hr is null or avg_hr between 40 and 240),
+  rpe          integer check (rpe is null or rpe between 1 and 10),
+  is_test      boolean not null default false,
+  notes        text not null default '' check (char_length(notes) <= 5000),
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists race_goals_user_idx on public.race_goals (user_id, date);
+create index if not exists run_plan_goal_idx on public.run_plan (goal_id, date);
+create index if not exists run_plan_user_idx on public.run_plan (user_id);
+create index if not exists runs_user_date_idx on public.runs (user_id, date desc);
+create index if not exists runs_plan_idx on public.runs (plan_id);
+
+alter table public.tcg_decks         enable row level security;
+alter table public.vgc_teams         enable row level security;
+alter table public.tournaments       enable row level security;
+alter table public.tournament_rounds enable row level security;
+alter table public.race_goals        enable row level security;
+alter table public.run_plan          enable row level security;
+alter table public.runs              enable row level security;
+
+-- Own rows only; anything referenced (deck, team, tournament, race, session) must be yours too.
+do $$
+declare
+  spec record;
+  guard text;
+begin
+  for spec in
+    select * from (values
+      ('tcg_decks',         'true'),
+      ('vgc_teams',         'true'),
+      ('tournaments',       '(deck_id is null or exists (select 1 from public.tcg_decks d where d.id = deck_id and d.user_id = (select auth.uid())))'
+                            ' and (team_id is null or exists (select 1 from public.vgc_teams v where v.id = team_id and v.user_id = (select auth.uid())))'),
+      ('tournament_rounds', 'exists (select 1 from public.tournaments p where p.id = tournament_id and p.user_id = (select auth.uid()))'),
+      ('race_goals',        'true'),
+      ('run_plan',          'exists (select 1 from public.race_goals g where g.id = goal_id and g.user_id = (select auth.uid()))'),
+      ('runs',              '(plan_id is null or exists (select 1 from public.run_plan s where s.id = plan_id and s.user_id = (select auth.uid())))')
+    ) as v(tbl, extra)
+  loop
+    guard := '(select auth.uid()) = user_id and ' || spec.extra;
+    execute format('drop policy if exists %I on public.%I', spec.tbl || '_select_own', spec.tbl);
+    execute format('drop policy if exists %I on public.%I', spec.tbl || '_insert_own', spec.tbl);
+    execute format('drop policy if exists %I on public.%I', spec.tbl || '_update_own', spec.tbl);
+    execute format('drop policy if exists %I on public.%I', spec.tbl || '_delete_own', spec.tbl);
+    execute format('create policy %I on public.%I for select to authenticated using ((select auth.uid()) = user_id)', spec.tbl || '_select_own', spec.tbl);
+    execute format('create policy %I on public.%I for delete to authenticated using ((select auth.uid()) = user_id)', spec.tbl || '_delete_own', spec.tbl);
+    execute format('create policy %I on public.%I for insert to authenticated with check (%s)', spec.tbl || '_insert_own', spec.tbl, guard);
+    execute format('create policy %I on public.%I for update to authenticated using ((select auth.uid()) = user_id) with check (%s)', spec.tbl || '_update_own', spec.tbl, guard);
+  end loop;
+end;
+$$;
+
+-- =============================================================================
 --  REALTIME (optional but recommended)
 --  Lets the app receive live changes across devices (MacBook ⇄ iPhone).
 --  RLS still applies to realtime: you only receive your own rows.
@@ -571,7 +740,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files'] loop
+  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'race_goals', 'run_plan', 'runs'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode; resetKey?: s
         <h2 className="flex items-center gap-2 font-semibold">
           <AlertTriangle className="size-4 text-rose-500" /> Algo ha fallado en esta sección
         </h2>
-        <p className="mt-2 font-mono text-xs break-words text-rose-600 dark:text-rose-400">{this.state.error.message}</p>
+        <p className="mt-2 font-mono text-xs break-words text-rose-700 dark:text-rose-400">{this.state.error.message}</p>
         <p className="mt-3 text-muted">El resto de la app sigue funcionando. Prueba a reintentar o a recargar la página.</p>
         <div className="mt-4 flex gap-2">
           <Button onClick={() => this.setState({ error: null })}>
