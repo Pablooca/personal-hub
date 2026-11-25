@@ -2,7 +2,8 @@
  * Telegram event reminders
  * -----------------------------------------------------------------------------
  * Called every minute by pg_cron from inside the database ({ kind: 'tick' }),
- * or manually ({ kind: 'test' }). New Apple Pay expenses are announced by the
+ * or manually: { kind: 'test' }, { kind: 'message', text } and { kind: 'setup' }
+ * (registers the telegram-bot webhook). New Apple Pay expenses are announced by the
  * apple-pay-webhook function itself.
  *
  * For each timed event: one message per reminder slot before it starts
@@ -10,15 +11,18 @@
  * For each study assessment not yet done/graded, one message per slot:
  *   deliveries: 1 day, 3 h, 1 h, 30 min, 5 min   (DELIVERY_REMINDERS)
  *   exams:      1 month, 2 weeks, 1 week, 2 days, 1 day, 3 h, 1 h   (EXAM_REMINDERS)
- * notification_log / study_notification_log guarantee each message is sent once.
+ * Summaries and alerts (morning, hours, workout, week, charges, budgets): _shared/daily.ts.
+ * notification_log / study_notification_log / message_log guarantee each message is sent once.
  *
  * Auth: `Authorization: Bearer <NOTIFY_SECRET>` (the database reads the same
  * value from Supabase Vault). Deployed with --no-verify-jwt.
  * Env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, NOTIFY_SECRET, optional
- * EVENT_REMINDERS, TIMEZONE. SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected.
+ * EVENT_REMINDERS, TIMEZONE, OWNER_USER_ID, TELEGRAM_WEBHOOK_SECRET and the times
+ * in _shared/daily.ts. SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected.
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { DELIVERY_SLOTS, EXAM_SLOTS, deadlineMessage, eventEndMessage, eventStartMessage, examMessage, parseSlots, reminderSlot, sendTelegram } from '../_shared/telegram.ts'
+import { runDaily } from '../_shared/daily.ts'
+import { DELIVERY_SLOTS, EXAM_SLOTS, deadlineMessage, eventEndMessage, eventStartMessage, escapeHtml, examMessage, parseSlots, reminderSlot, sendTelegram } from '../_shared/telegram.ts'
 
 const json = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -53,7 +57,7 @@ Deno.serve(async (req) => {
   if (!auth.startsWith('Bearer ') || !(await safeEqual(auth.slice(7).trim(), secret))) return json(401, { ok: false })
   if (!token || !chatId) return json(200, { ok: true, skipped: 'telegram not configured' })
 
-  let body: { kind?: string }
+  let body: { kind?: string; text?: string }
   try {
     body = await req.json()
   } catch {
@@ -63,6 +67,30 @@ Deno.serve(async (req) => {
   if (body.kind === 'test') {
     const ok = await sendTelegram(token, chatId, '🔔 <b>Personal Hub</b>\nLas notificaciones están funcionando.')
     return json(ok ? 200 : 502, { ok })
+  }
+  if (body.kind === 'message') {
+    const text = typeof body.text === 'string' ? body.text.trim().slice(0, 3500) : ''
+    if (!text) return json(400, { ok: false })
+    const ok = await sendTelegram(token, chatId, escapeHtml(text))
+    return json(ok ? 200 : 502, { ok })
+  }
+  if (body.kind === 'setup') {
+    const hook = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
+    if (!hook || hook.length < 24) return json(500, { ok: false, message: 'missing TELEGRAM_WEBHOOK_SECRET' })
+    const call = async (method: string, payload: unknown) =>
+      (await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })).ok
+    const webhook = await call('setWebhook', { url: `${url}/functions/v1/telegram-bot`, secret_token: hook, allowed_updates: ['message'], drop_pending_updates: true, max_connections: 2 })
+    const commands = await call('setMyCommands', {
+      commands: [
+        { command: 'hoy', description: 'Tu día' },
+        { command: 'manana', description: 'Tu día de mañana' },
+        { command: 'semana', description: 'Resumen de la semana' },
+        { command: 'mes', description: 'Gastos y presupuestos del mes' },
+        { command: 'deshacer', description: 'Quitar lo último que has dictado' },
+        { command: 'ayuda', description: 'Qué puedo hacer' },
+      ],
+    })
+    return json(webhook && commands ? 200 : 502, { ok: webhook && commands, webhook, commands })
   }
   if (body.kind !== 'tick') return json(400, { ok: false, message: 'unknown kind' })
 
@@ -122,6 +150,9 @@ Deno.serve(async (req) => {
       const text = (isExam ? examMessage : deadlineMessage)(row, subjectName, minutesLeft, timeZone)
       if (claimed && claimed.length && (await sendTelegram(token, chatId, text))) sent++
     }
+
+    const owner = Deno.env.get('OWNER_USER_ID')
+    if (owner) sent += await runDaily(db, owner, timeZone, (k) => Deno.env.get(k), (text) => sendTelegram(token, chatId, text), now)
     return json(200, { ok: true, sent })
   } catch (err) {
     console.error('telegram-notify: error', err)

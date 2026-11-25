@@ -941,6 +941,25 @@ create table if not exists public.notification_log (
   primary key (event_id, kind)
 );
 alter table public.notification_log enable row level security;  -- no policies: server-only
+-- Anything sent or received once: summaries, reminders, alerts, bot updates.
+create table if not exists public.message_log (
+  key      text primary key check (char_length(key) between 1 and 200),
+  sent_at  timestamptz not null default now()
+);
+alter table public.message_log enable row level security;  -- no policies: server-only
+
+-- What the bot created, so "deshacer" can remove it.
+create table if not exists public.bot_actions (
+  id          bigint generated always as identity primary key,
+  user_id     uuid not null references auth.users (id) on delete cascade,
+  table_name  text not null check (table_name in ('transactions', 'project_tasks', 'events', 'work_logs')),
+  row_id      uuid not null,
+  label       text not null default '',
+  created_at  timestamptz not null default now()
+);
+alter table public.bot_actions enable row level security;  -- no policies: server-only
+create index if not exists bot_actions_user_idx on public.bot_actions (user_id, id desc);
+
 create index if not exists notification_log_sent_idx on public.notification_log (sent_at);
 
 -- Fire-and-forget POST to the notifier. SECURITY DEFINER so cron jobs can read Vault.
@@ -986,6 +1005,8 @@ begin
   perform cron.schedule('telegram-log-cleanup', '17 4 * * *', $job$
     delete from public.notification_log where sent_at < now() - interval '30 days';
     delete from public.study_notification_log where sent_at < now() - interval '60 days';
+    delete from public.message_log where sent_at < now() - interval '90 days';
+    delete from public.bot_actions where created_at < now() - interval '30 days';
   $job$);
 end;
 $$;

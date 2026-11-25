@@ -210,6 +210,18 @@ curl -X POST "https://<project-ref>.supabase.co/functions/v1/apple-pay-webhook" 
 - **Eventos con hora** → avisos **10 y 5 minutos antes** y **al terminar**.
 - **Entregas de Estudios** (no marcadas como hechas ni calificadas) → avisos **1 día, 3 h, 1 h, 30 min y 5 min antes** (`DELIVERY_REMINDERS="1440,180,60,30,5"`).
 - **Exámenes de Estudios** → avisos **1 mes, 2 semanas, 1 semana, 2 días, 1 día, 3 h y 1 h antes** (`EXAM_REMINDERS="43200,20160,10080,2880,1440,180,60"`). Si añades un examen con menos margen, el aviso que corresponda salta en ese momento con el tiempo real que queda. `pg_cron` llama cada minuto a la función `telegram-notify` y `notification_log` garantiza que cada aviso se envía una sola vez. Los eventos de todo el día no avisan.
+- **Resúmenes y alertas** (hora local; cada una se cambia con un secreto, `off` la desactiva):
+
+  | Aviso | Por defecto | Secreto |
+  | --- | --- | --- |
+  | Buenos días: agenda, entreno, tareas, entregas y cobros | 7:30 | `MORNING_AT` |
+  | Horas sin registrar (no avisa en festivos ni vacaciones) | 17:45, lunes a jueves | `HOURS_AT`, `HOURS_DAYS`, `HOLIDAY_REGION` |
+  | Entreno de mañana con su estructura | 21:00 | `WORKOUT_AT` |
+  | Resumen semanal | domingo 20:00 | `WEEKLY_AT` |
+  | Cobro de un recibo (según sus días de aviso) | 10:00 | `BILLS_AT` |
+  | Presupuesto al 80 % y al 100 % | al momento | `BUDGET_ALERTS` |
+
+- **Escribir al bot** (función `telegram-bot`, solo responde a tu chat): `gasto 12,50 café`, `ingreso 30 bizum`, `tarea llamar al banco mañana`, `evento viernes 18:00 dentista`, `horas 8 PLAT-142 revisión`, `hoy`, `mañana`, `semana`, `mes`, `deshacer`, `ayuda`.
 
 Configuración (una vez):
 
@@ -229,6 +241,7 @@ Configuración (una vez):
    #   select vault.create_secret('<notify-secret>', 'telegram_notify_secret');
    ```
 5. Ejecuta `supabase/schema.sql` (crea `notification_log` y la tarea de `pg_cron`). Prueba: `select public.notify_telegram('{"kind":"test"}');`
+6. Para escribir al bot: guarda un secreto `TELEGRAM_WEBHOOK_SECRET` (`openssl rand -hex 32`), despliega `supabase functions deploy telegram-bot --no-verify-jwt` y registra el webhook con `select public.notify_telegram('{"kind":"setup"}');`
 
 Opcional: `EVENT_REMINDERS="15,5"` y `DELIVERY_REMINDERS="1440,180,60,30,5"` cambian los minutos de aviso; `TIMEZONE` (por defecto `Europe/Madrid`).
 
