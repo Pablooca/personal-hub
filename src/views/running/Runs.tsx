@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react'
-import { Footprints, Heart, Pencil, Trash2, Zap } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { FileUp, Footprints, Heart, Pencil, Trash2, Zap } from 'lucide-react'
 import { Badge, Button, Card, Empty, Field, Modal, cx } from '../../components/ui'
 import { fromDateKey, toDateKey } from '../../lib/dates'
 import { fmtDate } from '../../lib/format'
 import { RUN_TYPE_LABELS, RUN_TYPE_SHORT, daysBetween, fmtDuration, fmtKm, fmtPace, goalPace, matchRuns, parseDuration, parseKm, parsePace, runPace } from '../../lib/running'
 import { defaultBlocks, easyPace, estimate, formatBlock, highlight, missingSections, padRunBlocks, repsDone, toRunBlocks, workPace } from '../../lib/workout'
 import { RUN_TYPES, type RaceGoal, type Run, type RunBlock, type RunPlanSession, type RunType, type WorkoutBlock } from '../../lib/types'
+import { lapsForReps, parseTrack, type Track } from '../../lib/track'
 import { useData } from '../../state/data'
+import { useToast } from '../../state/toast'
 import { BlocksEditor, Recorder, Templates } from './Blocks'
 
 export interface RunSeed {
@@ -81,6 +83,7 @@ export function RunsPanel({ goal, onOpen }: { goal: RaceGoal | null; onOpen: (r:
 
 export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?: RunSeed; goal: RaceGoal | null; onClose: () => void }) {
   const { data, create, update, remove } = useData()
+  const toast = useToast()
   const s = seed?.session
   const today = toDateKey(new Date())
   const easy = useMemo(() => easyPace(data.runs, goal ? goalPace(goal) : null), [data.runs, goal])
@@ -106,6 +109,9 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
   const [isTest, setIsTest] = useState(run?.is_test ?? s?.type === 'race')
   const [planId, setPlanId] = useState(run?.plan_id ?? s?.id ?? '')
   const [notes, setNotes] = useState(run?.notes ?? '')
+  const [shoe, setShoe] = useState(run ? (run.shoe_id ?? '') : (data.shoes.find((x) => x.is_default && !x.retired)?.id ?? ''))
+  const [track, setTrack] = useState<Track | null>(null)
+  const file = useRef<HTMLInputElement>(null)
 
   const taken = useMemo(() => new Set(data.runs.filter((r) => r.id !== run?.id && r.plan_id).map((r) => r.plan_id)), [data.runs, run?.id])
   const candidates = useMemo(
@@ -118,7 +124,7 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
 
   // Without a choice the run counts for the session of its day: say which one.
   const auto = useMemo(() => {
-    const own: Run = { ...(run ?? { id: 'new', created_at: '', notes: '', is_test: false, avg_hr: null, rpe: null, work_pace_s: null, blocks: [], duration_s: 1, distance_km: 1 }), plan_id: null, date, type }
+    const own: Run = { ...(run ?? { id: 'new', created_at: '', notes: '', is_test: false, avg_hr: null, rpe: null, work_pace_s: null, blocks: [], shoe_id: null, duration_s: 1, distance_km: 1 }), plan_id: null, date, type }
     const plan = data.run_plan.filter((p) => !goal || p.goal_id === goal.id)
     for (const [id, r] of matchRuns(plan, [...data.runs.filter((x) => x.id !== own.id), own])) if (r.id === own.id) return plan.find((p) => p.id === id) ?? null
     return null
@@ -129,6 +135,32 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
     setVersion((v) => v + 1)
     setEdited(null)
     setEditing(false)
+  }
+  async function importFile(f: File | undefined) {
+    if (!f) return
+    try {
+      const t = parseTrack(await f.text())
+      setTrack(t)
+      if (t.date && t.date <= today) setDate(t.date)
+      setKm(String(t.km).replace('.', ','))
+      setMode('time')
+      setTime(fmtDuration(t.seconds))
+      if (t.hr) setHr(String(t.hr))
+      // The watch's laps become the times of the main reps.
+      setBlocks((list) =>
+        list.map((b) => {
+          if (b.kind !== 'main' || b.unit !== 'm' || !t.ownLaps) return b
+          const times = lapsForReps(t.laps, b.amount, b.splits.length)
+          return times.length ? { ...b, splits: b.splits.map((s, i) => times[i] ?? s) } : b
+        }),
+      )
+      setVersion((v) => v + 1)
+      toast('success', `${fmtKm(t.km)} km en ${fmtDuration(t.seconds)}`)
+    } catch (e) {
+      toast('error', e instanceof Error ? e.message : 'No se ha podido leer el archivo.')
+    } finally {
+      if (file.current) file.current.value = ''
+    }
   }
   function changeType(t: RunType) {
     setType(t)
@@ -170,7 +202,7 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
 
   async function save() {
     if (!ok) return
-    const row = { plan_id: planId || null, date, type, distance_km: Math.round(kmN! * 100) / 100, duration_s: secs!, work_pace_s: work, avg_hr: hrN, rpe, is_test: isTest, notes, blocks: blocks.map((b) => ({ ...b, splits: trim(b.splits) })) }
+    const row = { plan_id: planId || null, date, type, distance_km: Math.round(kmN! * 100) / 100, duration_s: secs!, work_pace_s: work, avg_hr: hrN, rpe, is_test: isTest, notes, shoe_id: shoe || null, blocks: blocks.map((b) => ({ ...b, splits: trim(b.splits) })) }
     onClose()
     if (run) await update('runs', run.id, row)
     else await create('runs', row)
@@ -288,6 +320,32 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
 
         {/* ------------------------------------------------------- totals */}
         <div className="min-w-0 space-y-4 lg:border-l lg:border-line lg:pl-6">
+          <div>
+            <input ref={file} type="file" accept=".gpx,.tcx,application/gpx+xml,text/xml" className="hidden" aria-label="Archivo del reloj" onChange={(e) => void importFile(e.target.files?.[0])} />
+            <Button type="button" className="w-full" onClick={() => file.current?.click()}>
+              <FileUp className="size-4" /> Importar del reloj (GPX / TCX)
+            </Button>
+            {track && (
+              <details className="mt-2 rounded-lg border border-line px-3 py-2 text-sm">
+                <summary className="cursor-pointer text-muted">
+                  {track.laps.length} {track.ownLaps ? 'vueltas del reloj' : 'parciales por km'}
+                </summary>
+                <ol className="mt-2 max-h-44 space-y-0.5 overflow-y-auto">
+                  {track.laps.map((l, i) => (
+                    <li key={i} className="num flex justify-between gap-2 text-xs">
+                      <span className="text-muted">
+                        {i + 1}. {fmtKm(Math.round(l.km * 100) / 100)} km
+                      </span>
+                      <span>
+                        {fmtDuration(l.seconds)} · {l.km > 0 ? `${fmtPace(l.seconds / l.km)}/km` : '—'}
+                        {l.hr ? ` · ${l.hr}` : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Distancia total (km)">
               <input className={cx('field num', km.trim() && !kmTyped && 'border-rose-500')} inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value)} placeholder={`≈ ${fmtKm(est.km)}`} />
@@ -330,9 +388,25 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
               {mode === 'time' ? 'Usar ritmo' : 'Usar tiempo'}
             </button>
           </div>
-          <Field label="FC media (opcional)">
-            <input className={cx('field num', !hrOk && 'border-rose-500')} inputMode="numeric" value={hr} onChange={(e) => setHr(e.target.value)} placeholder="150" />
-          </Field>
+          <div className={cx('grid gap-3', data.shoes.length > 0 && 'grid-cols-2')}>
+            <Field label="FC media (opcional)">
+              <input className={cx('field num', !hrOk && 'border-rose-500')} inputMode="numeric" value={hr} onChange={(e) => setHr(e.target.value)} placeholder="150" />
+            </Field>
+            {data.shoes.length > 0 && (
+              <Field label="Zapatillas">
+                <select className="field" value={shoe} onChange={(e) => setShoe(e.target.value)}>
+                  <option value="">Sin indicar</option>
+                  {data.shoes
+                    .filter((x) => !x.retired || x.id === shoe)
+                    .map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+            )}
+          </div>
           <div>
             <span className="label">Sensaciones · RPE {rpe ?? '—'}</span>
             <div role="radiogroup" aria-label="Esfuerzo percibido (RPE)" className="grid grid-cols-5 gap-1">

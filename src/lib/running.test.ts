@@ -6,7 +6,7 @@ import type { RaceGoal, Run, RunPlanSession, RunType } from './types.ts'
 const goal: RaceGoal = { id: 'g', name: 'Media', date: '2027-01-31', distance_km: 21.097, previous_best_s: null, target_s: 5700, notes: '', created_at: '2026-11-01T00:00:00Z' }
 let n = 0
 const P = (date: string, type: RunType, km: number, pace: number | null = null): RunPlanSession => ({ id: `p${++n}`, goal_id: 'g', date, type, distance_km: km, pace_s: pace, description: '', blocks: [], created_at: '' })
-const R = (date: string, type: RunType, km: number, s: number, o: Partial<Run> = {}): Run => ({ id: `r${++n}`, plan_id: null, date, type, distance_km: km, duration_s: s, work_pace_s: null, avg_hr: null, rpe: null, is_test: false, notes: '', blocks: [], created_at: '', ...o })
+const R = (date: string, type: RunType, km: number, s: number, o: Partial<Run> = {}): Run => ({ id: `r${++n}`, plan_id: null, date, type, distance_km: km, duration_s: s, work_pace_s: null, avg_hr: null, rpe: null, is_test: false, notes: '', blocks: [], shoe_id: null, created_at: '', ...o })
 
 test('durations and paces', () => {
   assert.equal(parseDuration('1:35:00'), 5700)

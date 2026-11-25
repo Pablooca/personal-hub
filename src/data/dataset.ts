@@ -4,7 +4,7 @@ export const TABLES: TableName[] = [
   'events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs',
   'study_programs', 'study_subjects', 'study_assessments', 'study_files',
   'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds',
-  'race_goals', 'run_plan', 'runs', 'run_workouts',
+  'shoes', 'race_goals', 'run_plan', 'runs', 'run_workouts',
   'category_rules', 'bills',
 ]
 
@@ -25,6 +25,7 @@ export const emptyDataset = (): Dataset => ({
   vgc_teams: [],
   tournaments: [],
   tournament_rounds: [],
+  shoes: [],
   race_goals: [],
   run_plan: [],
   runs: [],
@@ -67,6 +68,7 @@ export function cascadeRemove(d: Dataset, table: TableName, ids: Set<string>): D
     const sessions = new Set(next.run_plan.filter((p) => ids.has(p.goal_id)).map((p) => p.id))
     return sessions.size ? cascadeRemove(next, 'run_plan', sessions) : next
   }
+  if (table === 'shoes') next.runs = next.runs.map((r) => (r.shoe_id && ids.has(r.shoe_id) ? { ...r, shoe_id: null } : r))
   if (table === 'run_plan') next.runs = next.runs.map((r) => (r.plan_id && ids.has(r.plan_id) ? { ...r, plan_id: null } : r))
   if (table === 'tournaments') next.tournament_rounds = next.tournament_rounds.filter((r) => !ids.has(r.tournament_id))
   if (table === 'tcg_decks') next.tournaments = next.tournaments.map((t) => (t.deck_id && ids.has(t.deck_id) ? { ...t, deck_id: null } : t))

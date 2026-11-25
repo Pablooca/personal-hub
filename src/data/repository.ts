@@ -73,6 +73,7 @@ const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   vgc_teams: { column: 'created_at', ascending: true },
   tournaments: { column: 'date', ascending: false },
   tournament_rounds: { column: 'number', ascending: true },
+  shoes: { column: 'created_at', ascending: true },
   race_goals: { column: 'date', ascending: true },
   run_plan: { column: 'date', ascending: true },
   runs: { column: 'date', ascending: false },
@@ -90,6 +91,10 @@ function normalise<K extends TableName>(table: K, row: Tables[K]): Tables[K] {
   if (table === 'categories') {
     const c = row as Tables['categories']
     return { ...c, budget: c.budget === null || c.budget === undefined ? null : Number(c.budget) } as Tables[K]
+  }
+  if (table === 'shoes') {
+    const x = row as Tables['shoes']
+    return { ...x, start_km: Number(x.start_km), limit_km: Number(x.limit_km) } as Tables[K]
   }
   if (table === 'bills') {
     const b = row as Tables['bills']
@@ -277,7 +282,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v18'
+const DEMO_KEY = 'ph-demo-dataset-v19'
 export const STUDY_BUCKET = 'study-files'
 
 function readDemo(): Dataset {

@@ -30,9 +30,10 @@ export const TABLE_FIELDS: { [K in TableName]: readonly string[] } = {
     'id', 'tournament_id', 'phase', 'number', 'result', 'games', 'won_dice', 'went_first', 'opponent_name', 'opponent_archetype',
     'opponent_icons', 'opponent_deck_name', 'opponent_pokemon', 'opponent_record', 'my_pokemon', 'notes', 'created_at',
   ],
+  shoes: ['id', 'name', 'start_km', 'limit_km', 'retired', 'is_default', 'created_at'],
   race_goals: ['id', 'name', 'date', 'distance_km', 'previous_best_s', 'target_s', 'notes', 'created_at'],
   run_plan: ['id', 'goal_id', 'date', 'type', 'distance_km', 'pace_s', 'description', 'blocks', 'created_at'],
-  runs: ['id', 'plan_id', 'date', 'type', 'distance_km', 'duration_s', 'work_pace_s', 'avg_hr', 'rpe', 'is_test', 'notes', 'blocks', 'created_at'],
+  runs: ['id', 'plan_id', 'date', 'type', 'distance_km', 'duration_s', 'work_pace_s', 'avg_hr', 'rpe', 'is_test', 'notes', 'blocks', 'shoe_id', 'created_at'],
   run_workouts: ['id', 'name', 'type', 'blocks', 'created_at'],
   category_rules: ['id', 'pattern', 'type', 'category', 'created_at'],
   bills: ['id', 'name', 'amount', 'category', 'account', 'period', 'anchor_date', 'notify_days', 'active', 'created_at'],
@@ -44,7 +45,7 @@ export const BACKUP_TABLES = Object.keys(TABLE_FIELDS) as TableName[]
 export const BACKUP_SCOPES: { id: string; label: string; tables: TableName[] }[] = [
   { id: 'all', label: 'Todo', tables: BACKUP_TABLES },
   { id: 'pokemon', label: 'Solo Pokémon', tables: ['tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds'] },
-  { id: 'running', label: 'Solo Running', tables: ['race_goals', 'run_plan', 'runs', 'run_workouts'] },
+  { id: 'running', label: 'Solo Running', tables: ['shoes', 'race_goals', 'run_plan', 'runs', 'run_workouts'] },
 ]
 
 export const TABLE_LABELS: Record<TableName, string> = {
@@ -63,6 +64,7 @@ export const TABLE_LABELS: Record<TableName, string> = {
   vgc_teams: 'Equipos VGC',
   tournaments: 'Torneos',
   tournament_rounds: 'Rondas',
+  shoes: 'Zapatillas',
   race_goals: 'Carreras objetivo',
   run_plan: 'Sesiones planificadas',
   runs: 'Entrenamientos',

@@ -3,14 +3,15 @@ import { uid } from '../lib/format'
 import { shiftDay, weekOf } from '../lib/running'
 import { SERIES_800 } from '../lib/workout.samples'
 import { defaultBlocks, toRunBlocks, workPace } from '../lib/workout'
-import type { Dataset, RaceGoal, Run, RunPlanSession } from '../lib/types'
+import type { Dataset, RaceGoal, Run, RunPlanSession, Shoe } from '../lib/types'
 
 /** Fictional half-marathon block for Demo Mode: 6 weeks behind, 5 to go. */
-export function buildDemoRunning(today: Date): Pick<Dataset, 'race_goals' | 'run_plan' | 'runs' | 'run_workouts'> {
+export function buildDemoRunning(today: Date): Pick<Dataset, 'race_goals' | 'run_plan' | 'runs' | 'run_workouts' | 'shoes'> {
   const now = new Date().toISOString()
   const key = toDateKey(today)
   const goal: RaceGoal = { id: uid(), name: 'Media maratón de ejemplo', date: toDateKey(addDays(today, 35)), distance_km: 21.097, previous_best_s: 5940, target_s: 5700, notes: '', created_at: now }
   const monday = weekOf(key)
+  const shoe: Shoe = { id: uid(), name: 'Zapatillas de ejemplo', start_km: 420, limit_km: 700, retired: false, is_default: true, created_at: now }
   const run_plan: RunPlanSession[] = []
   const runs: Run[] = []
   for (let w = -6; w < 5; w++) {
@@ -35,10 +36,10 @@ export function buildDemoRunning(today: Date): Pick<Dataset, 'race_goals' | 'run
       runs.push({
         id: uid(), plan_id: s.id, date: s.date, type, distance_km: km, duration_s: Math.round(km * (type === 'interval' ? 300 : type === 'tempo' ? 288 : pace + wobble)),
         work_pace_s: workPace(blocks), avg_hr: type === 'easy' ? 141 : type === 'long' ? 149 : 164,
-        rpe: type === 'easy' ? 4 : type === 'long' ? 6 : 7, is_test: false, notes: '', blocks, created_at: now,
+        rpe: type === 'easy' ? 4 : type === 'long' ? 6 : 7, is_test: false, notes: '', blocks, shoe_id: shoe.id, created_at: now,
       })
     })
   }
-  runs.push({ id: uid(), plan_id: null, date: shiftDay(key, -10), type: 'race', distance_km: 10, duration_s: 2592, work_pace_s: null, avg_hr: 174, rpe: 9, is_test: true, notes: 'Test de 10K', blocks: [], created_at: now })
-  return { race_goals: [goal], run_plan, runs, run_workouts: [] }
+  runs.push({ id: uid(), plan_id: null, date: shiftDay(key, -10), type: 'race', distance_km: 10, duration_s: 2592, work_pace_s: null, avg_hr: 174, rpe: 9, is_test: true, notes: 'Test de 10K', blocks: [], shoe_id: shoe.id, created_at: now })
+  return { shoes: [shoe], race_goals: [goal], run_plan, runs, run_workouts: [] }
 }

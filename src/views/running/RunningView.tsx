@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CalendarRange, Flag, Footprints, Gauge, Pencil, Plus } from 'lucide-react'
+import { CalendarRange, Flag, Footprints, Gauge, Pencil, Plus, TrendingUp } from 'lucide-react'
 import { PageHeader } from '../../components/Shell'
 import { Button, Empty, cx } from '../../components/ui'
 import { fromDateKey, toDateKey } from '../../lib/dates'
@@ -7,16 +7,18 @@ import { fmtDate } from '../../lib/format'
 import { evaluate, fmtDuration, fmtKm, fmtPace, goalPace } from '../../lib/running'
 import type { RaceGoal, Run } from '../../lib/types'
 import { useData } from '../../state/data'
+import { EvolutionPanel } from './Evolution'
 import { GoalModal } from './GoalModal'
 import { PlanPanel } from './PlanPanel'
 import { Readiness } from './Readiness'
 import { RunModal, RunsPanel, type RunSeed } from './Runs'
 
-type Tab = 'ready' | 'plan' | 'runs'
+type Tab = 'ready' | 'plan' | 'runs' | 'evolution'
 const TABS: { id: Tab; label: string; icon: typeof Gauge }[] = [
   { id: 'ready', label: '¿Voy bien?', icon: Gauge },
   { id: 'plan', label: 'Planning', icon: CalendarRange },
   { id: 'runs', label: 'Entrenamientos', icon: Footprints },
+  { id: 'evolution', label: 'Evolución', icon: TrendingUp },
 ]
 
 export function RunningView() {
@@ -113,6 +115,7 @@ export function RunningView() {
 
           {tab === 'ready' && <Readiness goal={goal} r={ready} />}
           {tab === 'plan' && <PlanPanel goal={goal} onComplete={(session, run) => setRunModal(run ? { run } : { run: null, seed: { session } })} />}
+          {tab === 'evolution' && <EvolutionPanel goal={goal} />}
           {tab === 'runs' && <RunsPanel goal={goal} onOpen={(run) => setRunModal({ run })} />}
         </>
       )}

@@ -368,6 +368,19 @@ export interface RunBlock extends WorkoutBlock {
   reps_done?: number
 }
 
+export interface Shoe {
+  id: string
+  user_id?: string
+  name: string
+  /** Kilometres before using the app. */
+  start_km: number
+  limit_km: number
+  retired: boolean
+  /** Preselected in new runs. */
+  is_default: boolean
+  created_at: string
+}
+
 /** Reusable structured session. */
 export interface RunWorkout {
   id: string
@@ -423,6 +436,7 @@ export interface Run {
   is_test: boolean
   notes: string
   blocks: RunBlock[]
+  shoe_id: string | null
   created_at: string
 }
 
@@ -448,6 +462,7 @@ export interface Tables {
   run_workouts: RunWorkout
   category_rules: CategoryRule
   bills: Bill
+  shoes: Shoe
 }
 
 export type TableName = keyof Tables

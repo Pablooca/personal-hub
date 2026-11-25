@@ -93,7 +93,7 @@ const goal: RaceGoal = { id: 'g', name: 'M', date: '2027-04-07', distance_km: 21
 const plan = (id: string, date: string): RunPlanSession => ({ id, goal_id: 'g', date, type: 'interval', distance_km: 7, pace_s: 338, description: '', blocks: SERIES_800.blocks, created_at: '' })
 const run = (id: string, plan_id: string, date: string, splits: (number | null)[]): Run => {
   const blocks = toRunBlocks(SERIES_800.blocks).map((b) => (b.kind === 'main' ? { ...b, splits } : b))
-  return { id, plan_id, date, type: 'interval', distance_km: 4, duration_s: 3000, work_pace_s: workPace(blocks), avg_hr: null, rpe: 7, is_test: false, notes: '', blocks, created_at: '' }
+  return { id, plan_id, date, type: 'interval', distance_km: 4, duration_s: 3000, work_pace_s: workPace(blocks), avg_hr: null, rpe: 7, is_test: false, notes: '', blocks, shoe_id: null, created_at: '' }
 }
 
 test('readiness: five good reps of 5–6 fulfil the session even if the total distance is short', () => {

@@ -740,6 +740,20 @@ create index if not exists run_workouts_user_idx on public.run_workouts (user_id
 alter table public.run_plan add column if not exists blocks jsonb not null default '[]'::jsonb check (jsonb_typeof(blocks) = 'array');
 alter table public.runs add column if not exists blocks jsonb not null default '[]'::jsonb check (jsonb_typeof(blocks) = 'array');
 
+-- Shoes and their mileage.
+create table if not exists public.shoes (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name        text not null check (char_length(name) between 1 and 120),
+  start_km    numeric(7, 1) not null default 0 check (start_km >= 0),
+  limit_km    numeric(7, 1) not null default 700 check (limit_km >= 0),
+  retired     boolean not null default false,
+  is_default  boolean not null default false,
+  created_at  timestamptz not null default now()
+);
+create index if not exists shoes_user_idx on public.shoes (user_id);
+alter table public.runs add column if not exists shoe_id uuid references public.shoes (id) on delete set null;
+
 create index if not exists race_goals_user_idx on public.race_goals (user_id, date);
 create index if not exists run_plan_goal_idx on public.run_plan (goal_id, date);
 create index if not exists run_plan_user_idx on public.run_plan (user_id);
@@ -754,6 +768,7 @@ alter table public.race_goals        enable row level security;
 alter table public.run_plan          enable row level security;
 alter table public.runs              enable row level security;
 alter table public.run_workouts      enable row level security;
+alter table public.shoes             enable row level security;
 alter table public.category_rules    enable row level security;
 alter table public.bills             enable row level security;
 
@@ -772,10 +787,12 @@ begin
       ('tournament_rounds', 'exists (select 1 from public.tournaments p where p.id = tournament_id and p.user_id = (select auth.uid()))'),
       ('race_goals',        'true'),
       ('run_workouts',      'true'),
+      ('shoes',             'true'),
       ('category_rules',    'true'),
       ('bills',             'true'),
       ('run_plan',          'exists (select 1 from public.race_goals g where g.id = goal_id and g.user_id = (select auth.uid()))'),
-      ('runs',              '(plan_id is null or exists (select 1 from public.run_plan s where s.id = plan_id and s.user_id = (select auth.uid())))')
+      ('runs',              '(plan_id is null or exists (select 1 from public.run_plan s where s.id = plan_id and s.user_id = (select auth.uid())))'
+                            ' and (shoe_id is null or exists (select 1 from public.shoes z where z.id = shoe_id and z.user_id = (select auth.uid())))')
     ) as v(tbl, extra)
   loop
     guard := '(select auth.uid()) = user_id and ' || spec.extra;
@@ -800,7 +817,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'race_goals', 'run_plan', 'runs', 'run_workouts', 'category_rules', 'bills'] loop
+  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'race_goals', 'run_plan', 'runs', 'run_workouts', 'category_rules', 'bills', 'shoes'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
