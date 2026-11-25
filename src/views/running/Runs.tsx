@@ -4,7 +4,7 @@ import { Badge, Button, Card, Empty, Field, Modal, cx } from '../../components/u
 import { fromDateKey, toDateKey } from '../../lib/dates'
 import { fmtDate } from '../../lib/format'
 import { RUN_TYPE_LABELS, RUN_TYPE_SHORT, daysBetween, fmtDuration, fmtKm, fmtPace, goalPace, matchRuns, parseDuration, parseKm, parsePace, runPace } from '../../lib/running'
-import { defaultBlocks, easyPace, ensureSections, estimate, formatBlock, highlight, missingSections, padRunBlocks, repsDone, toRunBlocks, workPace } from '../../lib/workout'
+import { defaultBlocks, easyPace, estimate, formatBlock, highlight, missingSections, padRunBlocks, repsDone, toRunBlocks, workPace } from '../../lib/workout'
 import { RUN_TYPES, type RaceGoal, type Run, type RunBlock, type RunPlanSession, type RunType, type WorkoutBlock } from '../../lib/types'
 import { useData } from '../../state/data'
 import { BlocksEditor, Recorder, Templates } from './Blocks'
@@ -84,11 +84,10 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
   const s = seed?.session
   const today = toDateKey(new Date())
   const easy = useMemo(() => easyPace(data.runs, goal ? goalPace(goal) : null), [data.runs, goal])
-  /** Structure a new run starts with: planned one, last template of its type, or the default. */
+  /** Structure a new run starts with: the planned one, or the default. Templates are only applied by hand. */
   const structureFor = (t: RunType): WorkoutBlock[] => {
     if (s && s.type === t && s.blocks.length) return s.blocks
-    const template = data.run_workouts.find((w) => w.type === t)
-    return template ? ensureSections(template.blocks) : defaultBlocks(t, s?.distance_km ?? run?.distance_km ?? 6, s?.type === t ? s.pace_s : null, easy)
+    return defaultBlocks(t, s?.distance_km ?? run?.distance_km ?? 6, s?.type === t ? s.pace_s : null, easy)
   }
 
   const [date, setDate] = useState(run?.date ?? (s && s.date <= today ? s.date : today))

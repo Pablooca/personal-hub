@@ -168,11 +168,6 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
       list.map((x, j) => {
         if (j !== i) return x
         const r = { ...x, ...patch }
-        if (patch.type && patch.type !== x.type && !x.custom) {
-          const template = data.run_workouts.find((w) => w.type === patch.type)
-          if (template) return { ...r, ...fromBlocks(ensureSections(template.blocks)), custom: false }
-        }
-        if (r.custom && !patch.type) return r
         const km = parseKm(r.km)
         return r.custom ? r : { ...r, blocks: defaultBlocks(r.type, km ?? 6, r.pace.trim() ? parsePace(r.pace) : null, easy) }
       }),

@@ -1,7 +1,8 @@
 import { addDays, toDateKey } from '../lib/dates'
 import { uid } from '../lib/format'
 import { shiftDay, weekOf } from '../lib/running'
-import { HILLS, SERIES_800, defaultBlocks, toRunBlocks, workPace } from '../lib/workout'
+import { SERIES_800 } from '../lib/workout.samples'
+import { defaultBlocks, toRunBlocks, workPace } from '../lib/workout'
 import type { Dataset, RaceGoal, Run, RunPlanSession } from '../lib/types'
 
 /** Fictional half-marathon block for Demo Mode: 6 weeks behind, 5 to go. */
@@ -39,8 +40,5 @@ export function buildDemoRunning(today: Date): Pick<Dataset, 'race_goals' | 'run
     })
   }
   runs.push({ id: uid(), plan_id: null, date: shiftDay(key, -10), type: 'race', distance_km: 10, duration_s: 2592, work_pace_s: null, avg_hr: 174, rpe: 9, is_test: true, notes: 'Test de 10K', blocks: [], created_at: now })
-  return { race_goals: [goal], run_plan, runs, run_workouts: [
-    { id: uid(), ...SERIES_800, created_at: now },
-    { id: uid(), ...HILLS, created_at: now },
-  ] }
+  return { race_goals: [goal], run_plan, runs, run_workouts: [] }
 }

@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { HILLS, SERIES_800, highlight, blockPace, defaultBlocks, ensureSections, missingSections, padRunBlocks, sectionOf, blockTime, completion, easyPace, estimate, fmtSeconds, formatWorkout, newBlock, parseAmount, parseRecovery, parseWorkout, repDrift, repsDone, targetPace, toRunBlocks, workPace } from './workout.ts'
+import { HILLS, SERIES_800 } from './workout.samples.ts'
+import { highlight, blockPace, defaultBlocks, ensureSections, missingSections, padRunBlocks, sectionOf, blockTime, completion, easyPace, estimate, fmtSeconds, formatWorkout, newBlock, parseAmount, parseRecovery, parseWorkout, repDrift, repsDone, targetPace, toRunBlocks, workPace } from './workout.ts'
 import { evaluate, parsePlan, planToCsv } from './running.ts'
 import type { RaceGoal, Run, RunPlanSession } from './types.ts'
 

@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, BookmarkPlus, Plus, Trash2, Type, X } from 'lucide-
 import { Button, Check, cx } from '../../components/ui'
 import { fmtDuration, fmtKm, fmtPace } from '../../lib/running'
 import {
-  BLOCK_LABELS, HILLS, MAIN_KINDS, SECTIONS, SECTION_LABELS, SERIES_800, blockPace, blockTime, core, estimate, fmtAmount, fmtSeconds, formatBlock, formatWorkout, newBlock, parseAmount, parseRecovery,
+  BLOCK_LABELS, MAIN_KINDS, SECTIONS, SECTION_LABELS, blockPace, blockTime, core, estimate, fmtAmount, fmtSeconds, formatBlock, formatWorkout, newBlock, parseAmount, parseRecovery,
   parseTarget, parseWorkout, ensureSections, repsDone, sectionOf, splitPace, type Section,
 } from '../../lib/workout'
 import type { BlockKind, RunBlock, RunType, WorkoutBlock } from '../../lib/types'
@@ -268,7 +268,6 @@ export function Templates({ type, current, onApply }: { type: RunType; current: 
   const toast = useToast()
   const [naming, setNaming] = useState<string | null>(null)
   const list = data.run_workouts
-  const options = list.length ? list.map((w) => ({ id: w.id, name: w.name, type: w.type, blocks: w.blocks })) : [{ id: 'example', ...SERIES_800 }, { id: 'hills', ...HILLS }]
   const same = list.find((w) => current && formatWorkout(w.blocks) === formatWorkout(current))
 
   async function save() {
@@ -280,29 +279,31 @@ export function Templates({ type, current, onApply }: { type: RunType; current: 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
+        {list.length > 0 && (
         <select
           className="field min-w-0 flex-1 basis-44"
           aria-label="Aplicar plantilla"
           value={same?.id ?? ''}
           onChange={(e) => {
-            const w = options.find((o) => o.id === e.target.value)
+            const w = list.find((o) => o.id === e.target.value)
             if (w) onApply(ensureSections(w.blocks), w.type)
           }}
         >
           <option value="">Usar una plantilla…</option>
-          {options.map((o) => (
+          {list.map((o) => (
             <option key={o.id} value={o.id}>
               {o.name}
             </option>
           ))}
         </select>
+        )}
         {same ? (
           <Button key="del" type="button" variant="danger" onClick={() => void remove('run_workouts', same.id).then(() => toast('success', 'Plantilla eliminada'))} aria-label="Eliminar plantilla">
             <Trash2 className="size-4" />
           </Button>
         ) : (
           <Button key="save" type="button" title="Guardar como plantilla" disabled={!current} onClick={() => setNaming(naming === null ? '' : null)}>
-            <BookmarkPlus className="size-4" /> <span className="max-sm:sr-only">Guardar como plantilla</span>
+            <BookmarkPlus className="size-4" /> <span className={cx(list.length > 0 && 'max-sm:sr-only')}>Guardar como plantilla</span>
           </Button>
         )}
       </div>

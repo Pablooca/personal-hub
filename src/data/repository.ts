@@ -256,7 +256,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v13'
+const DEMO_KEY = 'ph-demo-dataset-v14'
 export const STUDY_BUCKET = 'study-files'
 
 function readDemo(): Dataset {
