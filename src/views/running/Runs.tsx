@@ -4,7 +4,7 @@ import { Badge, Button, Card, Empty, Field, Modal, cx } from '../../components/u
 import { fromDateKey, toDateKey } from '../../lib/dates'
 import { fmtDate } from '../../lib/format'
 import { RUN_TYPE_LABELS, RUN_TYPE_SHORT, daysBetween, fmtDuration, fmtKm, fmtPace, goalPace, matchRuns, parseDuration, parseKm, parsePace, runPace } from '../../lib/running'
-import { core, defaultBlocks, easyPace, ensureSections, estimate, formatBlock, missingSections, padRunBlocks, toRunBlocks, workPace } from '../../lib/workout'
+import { defaultBlocks, easyPace, ensureSections, estimate, formatBlock, highlight, missingSections, padRunBlocks, repsDone, toRunBlocks, workPace } from '../../lib/workout'
 import { RUN_TYPES, type RaceGoal, type Run, type RunBlock, type RunPlanSession, type RunType, type WorkoutBlock } from '../../lib/types'
 import { useData } from '../../state/data'
 import { BlocksEditor, Recorder, Templates } from './Blocks'
@@ -55,7 +55,7 @@ export function RunsPanel({ goal, onOpen }: { goal: RaceGoal | null; onOpen: (r:
                         <Zap className="size-3" /> {fmtPace(r.work_pace_s)}
                       </span>
                     )}
-                    {r.blocks.length > 0 && (r.type === 'interval' || r.type === 'tempo') && <span>{core(r.blocks).map((b) => formatBlock({ ...b, reps_max: null, reps: b.splits.filter(Boolean).length || b.reps })).join(' + ')}</span>}
+                    {r.blocks.length > 0 && (r.type === 'interval' || r.type === 'tempo') && <span>{highlight(r.blocks).filter((b) => b.done).map((b) => formatBlock({ ...b, reps_max: null, reps: repsDone(b) })).join(' + ')}</span>}
                     {s && <span>Plan: {fmtKm(s.distance_km)} km{s.pace_s ? ` a ${fmtPace(s.pace_s)}` : ''}</span>}
                   </span>
                 </span>
@@ -87,7 +87,7 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
   /** Structure a new run starts with: planned one, last template of its type, or the default. */
   const structureFor = (t: RunType): WorkoutBlock[] => {
     if (s && s.type === t && s.blocks.length) return s.blocks
-    const template = data.run_workouts.findLast((w) => w.type === t)
+    const template = data.run_workouts.find((w) => w.type === t)
     return template ? ensureSections(template.blocks) : defaultBlocks(t, s?.distance_km ?? run?.distance_km ?? 6, s?.type === t ? s.pace_s : null, easy)
   }
 
@@ -138,7 +138,7 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
     if (!edited) return
     // Keep the times already written for blocks that did not move.
     const fresh = toRunBlocks(edited)
-    setBlocks(fresh.map((b, i) => (b.splits.length && blocks[i]?.kind === b.kind && blocks[i].unit === b.unit ? { ...b, splits: b.splits.map((_, j) => blocks[i].splits[j] ?? null) } : b)))
+    setBlocks(fresh.map((b, i) => (b.kind === 'hills' && blocks[i]?.kind === 'hills' && blocks[i].reps === b.reps ? { ...b, reps_done: blocks[i].reps_done } : b.splits.length && blocks[i]?.kind === b.kind && blocks[i].unit === b.unit ? { ...b, splits: b.splits.map((_, j) => blocks[i].splits[j] ?? null) } : b)))
     setVersion((v) => v + 1)
     setTouched(true)
     setEdited(null)
@@ -148,7 +148,7 @@ export function RunModal({ run, seed, goal, onClose }: { run: Run | null; seed?:
   const est = estimate(blocks, easy)
   const work = workPace(blocks)
   // Totals of a rep session can be worked out from its blocks; the rest feed the projection and must be real.
-  const canEstimate = type === 'interval' && work !== null
+  const canEstimate = type === 'interval' && (work !== null || (blocks.some((b) => b.kind === 'hills' && b.done) && !blocks.some((b) => b.kind === 'main' && b.done)))
   const kmTyped = parseKm(km)
   const kmN = kmTyped ?? (canEstimate && !km.trim() ? est.km : null)
   const paceN = parsePace(pace)

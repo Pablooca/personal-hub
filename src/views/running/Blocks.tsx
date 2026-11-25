@@ -3,8 +3,8 @@ import { ArrowDown, ArrowUp, BookmarkPlus, Plus, Trash2, Type, X } from 'lucide-
 import { Button, Check, cx } from '../../components/ui'
 import { fmtDuration, fmtKm, fmtPace } from '../../lib/running'
 import {
-  BLOCK_LABELS, MAIN_KINDS, SECTIONS, SECTION_LABELS, SERIES_800, blockPace, blockTime, core, estimate, fmtAmount, fmtSeconds, formatBlock, formatWorkout, newBlock, parseAmount, parseRecovery,
-  parseTarget, parseWorkout, ensureSections, sectionOf, splitPace, type Section,
+  BLOCK_LABELS, HILLS, MAIN_KINDS, SECTIONS, SECTION_LABELS, SERIES_800, blockPace, blockTime, core, estimate, fmtAmount, fmtSeconds, formatBlock, formatWorkout, newBlock, parseAmount, parseRecovery,
+  parseTarget, parseWorkout, ensureSections, repsDone, sectionOf, splitPace, type Section,
 } from '../../lib/workout'
 import type { BlockKind, RunBlock, RunType, WorkoutBlock } from '../../lib/types'
 import { useData } from '../../state/data'
@@ -19,6 +19,9 @@ interface Draft {
   recovery: string
   targetKind: 'time' | 'pace'
   target: string
+  /** Hills: recovery at the top and the way down. */
+  mid: string
+  down: string
 }
 
 const clock = (s: number) => fmtPace(s)
@@ -30,6 +33,8 @@ const toDraft = (b: WorkoutBlock, id: number): Draft => ({
   recovery: b.recovery_s ? fmtSeconds(b.recovery_s) : '',
   targetKind: b.target_kind ?? (b.unit === 'm' && b.reps > 1 ? 'time' : 'pace'),
   target: b.target_s ? clock(b.target_s) : '',
+  mid: b.hill?.recovery_s ? fmtSeconds(b.hill.recovery_s) : '',
+  down: b.hill ? fmtAmount({ unit: b.unit, amount: b.hill.down }) : '',
 })
 
 const repsOf = (t: string): [number, number | null] | null => {
@@ -46,6 +51,12 @@ function toBlock(d: Draft): WorkoutBlock | null {
   const rec = d.recovery.trim() ? parseRecovery(d.recovery) : null
   const target = d.target.trim() ? parseTarget(d.target) : null
   if (!amount || !reps || (d.recovery.trim() && !rec) || (d.target.trim() && !target)) return null
+  if (d.kind === 'hills') {
+    const down = parseAmount(d.down)
+    const mid = d.mid.trim() ? parseRecovery(d.mid) : null
+    if (!down || down.unit !== amount.unit || (d.mid.trim() && !mid)) return null
+    return { kind: 'hills', reps: reps[0], reps_max: reps[1], ...amount, recovery_s: (reps[1] ?? reps[0]) > 1 ? rec : null, target_kind: null, target_s: null, hill: { recovery_s: mid, down: down.amount } }
+  }
   // "Time per rep" makes no sense for a block measured in time.
   const kind = amount.unit === 's' ? 'pace' : d.targetKind
   return { kind: d.kind, reps: reps[0], reps_max: reps[1], ...amount, recovery_s: (reps[1] ?? reps[0]) > 1 ? rec : null, target_kind: target ? kind : null, target_s: target }
@@ -67,7 +78,15 @@ export function BlocksEditor({ initial, onChange, easy }: { initial: WorkoutBloc
     const ok = blocks.every((b) => b !== null) && SECTIONS.every((s) => list.some((d) => sectionOf(d) === s))
     onChange(ok ? (blocks as WorkoutBlock[]) : null)
   }
-  const set = (id: number, patch: Partial<Draft>) => commit(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+  const set = (id: number, patch: Partial<Draft>) =>
+    commit(
+      rows.map((r) => {
+        if (r.id !== id) return r
+        // Turning a block into (or out of) hill reps starts from sensible values.
+        if (patch.kind && patch.kind !== r.kind && (patch.kind === 'hills' || r.kind === 'hills')) return toDraft({ ...newBlock(patch.kind), reps: repsOf(r.reps)?.[0] ?? 1, reps_max: repsOf(r.reps)?.[1] ?? null }, id)
+        return { ...r, ...patch }
+      }),
+    )
   const add = (kind: BlockKind) => commit([...rows, toDraft(newBlock(kind), next.current++)])
   function move(id: number, dir: -1 | 1) {
     const s = sectionOf(rows.find((r) => r.id === id)!)
@@ -138,7 +157,7 @@ export function BlocksEditor({ initial, onChange, easy }: { initial: WorkoutBloc
       {asText !== null && (
         <div className="space-y-2">
           <textarea className="field min-h-20 text-sm" aria-label="Estructura como texto" value={asText} onChange={(e) => setAsText(e.target.value)} placeholder="5 min cal + 4x30s cortas rec 30s + 4x30s prog + 5-6x800 en 4:30 rec 3 + 5 min enf" />
-          <p className="text-xs text-muted">«en 4:30» es el tiempo de cada serie; «a 4:30» es ritmo por km.</p>
+          <p className="text-xs text-muted">«en 4:30» es el tiempo de cada serie; «a 4:30» es ritmo por km. Colina: «6x15s subida, rec 1 min, 15s bajada».</p>
           <Button type="button" size="sm" onClick={applyText}>
             Aplicar texto
           </Button>
@@ -151,12 +170,15 @@ export function BlocksEditor({ initial, onChange, easy }: { initial: WorkoutBloc
 function BlockRow({ d, section, first, last, removable, onChange, onMove, onRemove }: { d: Draft; section: Section; first: boolean; last: boolean; removable: boolean; onChange: (p: Partial<Draft>) => void; onMove: (dir: -1 | 1) => void; onRemove: () => void }) {
   const id = useId()
   const main = section === 'main'
+  const hills = d.kind === 'hills'
   const amount = parseAmount(d.amount)
   const bad = {
     reps: main && !repsOf(d.reps),
     amount: !amount,
     recovery: d.recovery.trim() !== '' && !parseRecovery(d.recovery),
     target: d.target.trim() !== '' && !parseTarget(d.target),
+    mid: d.mid.trim() !== '' && !parseRecovery(d.mid),
+    down: hills && (!parseAmount(d.down) || parseAmount(d.down)?.unit !== amount?.unit),
   }
   const block = toBlock(d)
   const several = main && (repsOf(d.reps)?.[1] ?? repsOf(d.reps)?.[0] ?? 1) > 1
@@ -188,10 +210,22 @@ function BlockRow({ d, section, first, last, removable, onChange, onMove, onRemo
           </label>
         )}
         <label className="min-w-0 flex-1">
-          <span className="label">{main ? 'Cada una' : 'Duración o distancia'}</span>
-          <input className={field('amount')} value={d.amount} onChange={(e) => onChange({ amount: e.target.value })} placeholder="800 m · 30 s · 5 min" />
+          <span className="label">{hills ? 'Subida' : main ? 'Cada una' : 'Duración o distancia'}</span>
+          <input className={field('amount')} value={d.amount} onChange={(e) => onChange({ amount: e.target.value })} placeholder={hills ? '15 s' : '800 m · 30 s · 5 min'} />
         </label>
-        {several && (
+        {hills && (
+          <>
+            <label className="min-w-0 flex-1">
+              <span className="label">Recup.</span>
+              <input className={field('mid')} aria-label="Recuperación entre subida y bajada" value={d.mid} onChange={(e) => onChange({ mid: e.target.value })} placeholder="1 min" />
+            </label>
+            <label className="min-w-0 flex-1">
+              <span className="label">Bajada</span>
+              <input className={field('down')} value={d.down} onChange={(e) => onChange({ down: e.target.value })} placeholder="15 s" />
+            </label>
+          </>
+        )}
+        {several && !hills && (
           <label className="min-w-0 flex-1">
             <span className="label">Recuperación</span>
             <input className={field('recovery')} value={d.recovery} onChange={(e) => onChange({ recovery: e.target.value })} placeholder="3 min" />
@@ -199,7 +233,13 @@ function BlockRow({ d, section, first, last, removable, onChange, onMove, onRemo
         )}
         {!main && removable && <IconBtn label="Quitar bloque" onClick={onRemove} icon={Trash2} />}
       </div>
-      {main && (
+      {hills && several && (
+        <label className="mt-2 block">
+          <span className="label">Descanso entre repeticiones (opcional)</span>
+          <input className={field('recovery')} value={d.recovery} onChange={(e) => onChange({ recovery: e.target.value })} placeholder="Sin descanso extra" />
+        </label>
+      )}
+      {main && !hills && (
         <div className="mt-2 flex items-end gap-2">
           <label className="min-w-0 flex-1" htmlFor={`${id}-t`}>
             <span className="label">Objetivo</span>
@@ -228,7 +268,7 @@ export function Templates({ type, current, onApply }: { type: RunType; current: 
   const toast = useToast()
   const [naming, setNaming] = useState<string | null>(null)
   const list = data.run_workouts
-  const options = list.length ? list.map((w) => ({ id: w.id, name: w.name, type: w.type, blocks: w.blocks })) : [{ id: 'example', ...SERIES_800 }]
+  const options = list.length ? list.map((w) => ({ id: w.id, name: w.name, type: w.type, blocks: w.blocks })) : [{ id: 'example', ...SERIES_800 }, { id: 'hills', ...HILLS }]
   const same = list.find((w) => current && formatWorkout(w.blocks) === formatWorkout(current))
 
   async function save() {
@@ -329,9 +369,10 @@ export function Recorder({ blocks, onChange }: { blocks: RunBlock[]; onChange: (
                     <Check checked={b.done} onChange={(done) => set(i, { done })} label={`Hecho: ${formatBlock(b)}`} />
                     <span className={cx('text-sm', !b.done && 'text-muted line-through')}>
                       {s === 'main' && <span className="font-medium">{BLOCK_LABELS[b.kind]}: </span>}
-                      {s === 'main' ? formatBlock({ ...b, kind: 'main' }).replace(/ series\b/, '') : fmtAmount(b)}
+                      {s !== 'main' ? fmtAmount(b) : b.kind === 'hills' ? formatBlock(b) : formatBlock({ ...b, kind: 'main' }).replace(/ series\b/, '')}
                     </span>
                   </div>
+                  {b.kind === 'hills' && b.done && <RepsDone block={b} onChange={(reps_done) => set(i, { reps_done })} />}
                   {timed.has(b) && b.done && <Splits key={b.splits.length} block={b} onChange={(splits) => set(i, { splits })} />}
                 </div>
               ),
@@ -339,6 +380,27 @@ export function Recorder({ blocks, onChange }: { blocks: RunBlock[]; onChange: (
           </div>
         </section>
       ))}
+    </div>
+  )
+}
+
+function RepsDone({ block: b, onChange }: { block: RunBlock; onChange: (n: number) => void }) {
+  const n = repsDone(b)
+  const goal = b.reps_max && b.reps_max > b.reps ? `${b.reps}–${b.reps_max}` : String(b.reps)
+  return (
+    <div className="mt-1 flex items-center gap-3 text-sm">
+      <div className="flex items-center rounded-lg border border-line bg-surface">
+        <button type="button" aria-label="Una repetición menos" disabled={n <= 1} onClick={() => onChange(n - 1)} className="grid size-10 place-items-center rounded-l-lg hover:bg-surface-2 disabled:opacity-30">
+          −
+        </button>
+        <span className="num w-10 text-center font-semibold" aria-live="polite">
+          {n}
+        </span>
+        <button type="button" aria-label="Una repetición más" disabled={n >= 99} onClick={() => onChange(n + 1)} className="grid size-10 place-items-center rounded-r-lg hover:bg-surface-2">
+          +
+        </button>
+      </div>
+      <span className={cx(n < b.reps ? 'text-amber-800 dark:text-amber-300' : 'text-muted')}>de {goal} repeticiones</span>
     </div>
   )
 }

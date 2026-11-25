@@ -6,6 +6,7 @@ export const BLOCK_LABELS: Record<BlockKind, string> = {
   strides: 'Cortas',
   progressive: 'Aceleración gradual',
   main: 'Series',
+  hills: 'Colina',
   easy: 'Rodaje',
   cooldown: 'Enfriamiento',
 }
@@ -15,6 +16,7 @@ export const newBlock = (kind: BlockKind): WorkoutBlock => {
   if (kind === 'strides') return { ...base, reps: 4, amount: 30, recovery_s: 30 }
   if (kind === 'progressive') return { ...base, reps: 4, amount: 30 }
   if (kind === 'main') return { ...base, reps: 6, unit: 'm', amount: 800, recovery_s: 180 }
+  if (kind === 'hills') return { ...base, reps: 6, amount: 15, hill: { recovery_s: 60, down: 15 } }
   return base
 }
 
@@ -31,6 +33,13 @@ export const SERIES_800: Pick<RunWorkout, 'name' | 'type' | 'blocks'> = {
   ],
 }
 
+/** Warm-up, hill reps (15 s up, 1 min recovery, 15 s down) and cool-down. */
+export const HILLS: Pick<RunWorkout, 'name' | 'type' | 'blocks'> = {
+  name: 'Repeticiones en colina',
+  type: 'interval',
+  blocks: [newBlock('warmup'), newBlock('hills'), newBlock('cooldown')],
+}
+
 // -------------------------------------------------------------------- format
 const clock = (s: number) => `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, '0')}`
 const dec = (n: number) => String(Math.round(n * 1000) / 1000).replace('.', ',')
@@ -41,10 +50,14 @@ export const fmtMeters = (m: number) => (m >= 1000 && m % 100 === 0 ? `${dec(m /
 export const fmtAmount = (b: Pick<WorkoutBlock, 'unit' | 'amount'>) => (b.unit === 'm' ? fmtMeters(b.amount) : fmtSeconds(b.amount))
 export const fmtReps = (b: Pick<WorkoutBlock, 'reps' | 'reps_max'>) => (b.reps_max && b.reps_max > b.reps ? `${b.reps}–${b.reps_max}` : String(b.reps))
 
-const SUFFIX: Record<BlockKind, string> = { warmup: 'cal', strides: 'cortas', progressive: 'prog', main: '', easy: 'suave', cooldown: 'enf' }
+const SUFFIX: Record<BlockKind, string> = { warmup: 'cal', strides: 'cortas', progressive: 'prog', main: '', hills: 'subida', easy: 'suave', cooldown: 'enf' }
 
 export function formatBlock(b: WorkoutBlock): string {
   const reps = b.reps > 1 || (b.reps_max ?? 0) > 1 ? `${fmtReps(b)} × ` : ''
+  if (b.kind === 'hills' && b.hill) {
+    const mid = b.hill.recovery_s ? ` rec ${fmtSeconds(b.hill.recovery_s)},` : ''
+    return `${reps}${fmtAmount(b)} subida,${mid} ${fmtAmount({ unit: b.unit, amount: b.hill.down })} bajada${b.recovery_s ? ` (rec ${fmtSeconds(b.recovery_s)})` : ''}`
+  }
   const target = b.target_s && b.target_kind ? (b.target_kind === 'time' ? ` en ${clock(b.target_s)}` : ` a ${clock(b.target_s)}/km`) : ''
   const rec = b.recovery_s ? ` (rec ${fmtSeconds(b.recovery_s)})` : ''
   // "main" needs no word, except where a bare amount would be read as something else.
@@ -92,6 +105,23 @@ export function parseTarget(text: string): number | null {
   return a && a.unit === 's' ? a.amount : null
 }
 
+const HILL_WORDS = /\b(subid\w*|subiend\w*|ascend\w*|bajad\w*|bajand\w*|descend\w*|colinas?|cuestas?)\b/
+/** "6 x 15 s subida, rec 1 min, 15 s bajada (rec 2 min)": up, recovery, down and rest, in that order. */
+function parseHills(t: string): WorkoutBlock | null {
+  const reps = t.match(/^\s*(\d{1,2})(?:\s*[-–a]\s*(\d{1,2}))?\s*(?:[x×]|rep\w*|veces)/)
+  const rest = reps ? t.slice(reps[0].length) : t
+  const found = [...rest.matchAll(/\d+:\d{2}(?:\s*min)?|\d+(?:[.,]\d+)?\s*(?:minutos?|min|segundos?|seg|metros|mts?|m|s|''|"|″|'|′)/g)].map((m) => parseAmount(m[0]))
+  if (!found.length || found.some((x) => !x)) return null
+  const all = found as { unit: 's' | 'm'; amount: number }[]
+  const up = all[0]
+  // Up and down share the unit; recoveries are always times.
+  const [mid, down, between] = all.length >= 3 ? [all[1], all[2], all[3]] : [undefined, all[1] ?? up, undefined]
+  const n = reps ? Number(reps[1]) : 1
+  const max = reps?.[2] ? Number(reps[2]) : null
+  if (down.unit !== up.unit || (mid && mid.unit !== 's') || (between && between.unit !== 's') || n < 1 || (max !== null && max < n)) return null
+  return { ...newBlock('hills'), reps: n, reps_max: max !== null && max > n ? max : null, ...up, recovery_s: between?.amount ?? null, hill: { recovery_s: mid?.amount ?? null, down: down.amount } }
+}
+
 const KIND_WORDS: [RegExp, BlockKind][] = [
   [/\b(cal|calent\w*|warm\s?-?up)\b/, 'warmup'],
   [/\b(enf|enfri\w*|vuelta a la calma|cool\s?-?down)\b/, 'cooldown'],
@@ -108,6 +138,12 @@ export function parseWorkout(text: string): { blocks: WorkoutBlock[]; errors: st
   const parts = text.split(/\s*[+·\n]\s*/).map((x) => x.trim()).filter(Boolean)
   parts.forEach((part, i) => {
     let t = part.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[()]/g, ' ')
+    if (HILL_WORDS.test(t)) {
+      const hills = parseHills(t)
+      if (hills) blocks.push(hills)
+      else errors.push(`no se entiende el bloque «${part.slice(0, 40)}».`)
+      return
+    }
     let kind: BlockKind | null = null
     for (const [re, k] of KIND_WORDS)
       if (re.test(t)) {
@@ -170,11 +206,19 @@ export const core = <T extends WorkoutBlock>(blocks: readonly T[]): T[] => {
   return reps.length ? reps : blocks.filter((b) => b.kind === 'easy')
 }
 
+/** Blocks whose repetitions decide whether a session was completed. */
+const counted = <T extends WorkoutBlock>(blocks: readonly T[]) => blocks.filter((b) => b.kind === 'main' || b.kind === 'hills')
+/** The part worth showing in a list: reps and hills, or the steady running. */
+export const highlight = <T extends WorkoutBlock>(blocks: readonly T[]): T[] => {
+  const list = counted(blocks)
+  return list.length ? list : core(blocks)
+}
+
 // ------------------------------------------------------------------ sections
 export type Section = 'warmup' | 'main' | 'cooldown'
 export const SECTIONS: Section[] = ['warmup', 'main', 'cooldown']
 export const SECTION_LABELS: Record<Section, string> = { warmup: 'Calentamiento', main: 'Bloque principal', cooldown: 'Enfriamiento' }
-export const MAIN_KINDS: BlockKind[] = ['strides', 'progressive', 'main', 'easy']
+export const MAIN_KINDS: BlockKind[] = ['strides', 'progressive', 'main', 'hills', 'easy']
 export const sectionOf = (b: Pick<WorkoutBlock, 'kind'>): Section => (b.kind === 'warmup' || b.kind === 'cooldown' ? b.kind : 'main')
 export const inSection = <T extends WorkoutBlock>(blocks: readonly T[], s: Section) => blocks.filter((b) => sectionOf(b) === s)
 /** Every session needs the three parts. */
@@ -227,12 +271,12 @@ export function workPace(blocks: readonly RunBlock[]): number | null {
 }
 
 /** Reps of a block that were run: timed ones, or the planned minimum when it is just ticked. */
-export const repsDone = (b: RunBlock) => (b.done ? b.splits.filter((s) => s).length || b.reps : 0)
+export const repsDone = (b: RunBlock) => (b.done ? (b.kind === 'hills' ? (b.reps_done ?? b.reps) : b.splits.filter((s) => s).length || b.reps) : 0)
 
-/** Main reps done against the plan; null when either side has no structure. */
+/** Main and hill reps done against the plan; null when either side has no structure. */
 export function completion(plan: readonly WorkoutBlock[], run: readonly RunBlock[]): { done: number; min: number; max: number } | null {
-  const planned = mains(plan)
-  const ran = mains(run)
+  const planned = counted(plan)
+  const ran = counted(run)
   // A single continuous block is judged by its distance, not by "1 of 1".
   if (!run.length || planned.reduce((a, b) => a + (b.reps_max ?? b.reps), 0) < 2) return null
   return {
@@ -280,7 +324,16 @@ export function estimate(blocks: readonly (WorkoutBlock | RunBlock)[], easy: num
     const run = 'done' in b ? b : null
     if (run && !run.done) continue
     const timed = run ? run.splits.filter((s): s is number => Boolean(s)) : []
-    const reps = timed.length || b.reps
+    const reps = run?.kind === 'hills' ? repsDone(run) : timed.length || b.reps
+    if (b.kind === 'hills' && b.hill) {
+      const [up, down] = [easy * 0.85, easy * 0.75]
+      const legS = (x: number, pace: number) => (b.unit === 'm' ? (x / 1000) * pace : x)
+      const legKm = (x: number, pace: number) => (b.unit === 'm' ? x / 1000 : x / pace)
+      const rest = (b.hill.recovery_s ?? 0) * reps + (b.recovery_s ?? 0) * Math.max(0, reps - 1)
+      seconds += (legS(b.amount, up) + legS(b.hill.down, down)) * reps + rest
+      km += (legKm(b.amount, up) + legKm(b.hill.down, down)) * reps + rest / WALK
+      continue
+    }
     const fallback = b.kind === 'strides' || b.kind === 'progressive' ? easy * 0.8 : b.kind === 'main' ? easy * 0.87 : easy
     const pace = timed.length ? timed.reduce((a, s) => a + splitPace(b, s), 0) / timed.length : (blockPace(b) ?? fallback)
     const workS = b.unit === 'm' ? (pace * b.amount) / 1000 : b.amount

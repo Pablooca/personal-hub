@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { SERIES_800, blockPace, defaultBlocks, ensureSections, missingSections, padRunBlocks, sectionOf, blockTime, completion, easyPace, estimate, fmtSeconds, formatWorkout, newBlock, parseAmount, parseRecovery, parseWorkout, repDrift, repsDone, targetPace, toRunBlocks, workPace } from './workout.ts'
+import { HILLS, SERIES_800, highlight, blockPace, defaultBlocks, ensureSections, missingSections, padRunBlocks, sectionOf, blockTime, completion, easyPace, estimate, fmtSeconds, formatWorkout, newBlock, parseAmount, parseRecovery, parseWorkout, repDrift, repsDone, targetPace, toRunBlocks, workPace } from './workout.ts'
 import { evaluate, parsePlan, planToCsv } from './running.ts'
 import type { RaceGoal, Run, RunPlanSession } from './types.ts'
 
@@ -137,4 +137,42 @@ test('a long run is judged by distance and its main-part pace', () => {
   assert.equal(padRunBlocks(toRunBlocks(SERIES_800.blocks).map((x) => ({ ...x, splits: [] })))[3].splits.length, 6)
   assert.equal(evaluate(goal, [p], [done(16)], '2026-11-25').key.list[0].ok, true)
   assert.equal(evaluate(goal, [p], [done(10)], '2026-11-25').key.list[0].ok, false)
+})
+
+test('hill reps: 15 s up, 1 min recovery, 15 s down', () => {
+  const want = HILLS.blocks[1]
+  assert.deepEqual([want.amount, want.hill], [15, { recovery_s: 60, down: 15 }])
+  assert.equal(formatWorkout(HILLS.blocks), '5 min cal + 6 × 15 s subida, rec 1 min, 15 s bajada + 5 min enf')
+  assert.deepEqual(parseWorkout(formatWorkout(HILLS.blocks)).blocks, HILLS.blocks)
+  // As it was described, word for word.
+  assert.deepEqual(parseWorkout('6 x 15 segundos ascendente, 1 minuto de recuperación y 15 segundos descendente').blocks, [want])
+  assert.deepEqual(parseWorkout(`8-10x15" subida rec 1' 15" bajada (rec 2')`).blocks[0], { ...want, reps: 8, reps_max: 10, recovery_s: 120 })
+  const metres = { ...want, unit: 'm' as const, amount: 60, hill: { recovery_s: null, down: 60 } }
+  assert.deepEqual(parseWorkout(formatWorkout([metres])).blocks, [metres])
+  assert.equal(parseWorkout('6x cuesta').errors.length, 1)
+})
+
+test('hill reps are counted, not timed', () => {
+  const blocks = toRunBlocks(HILLS.blocks)
+  assert.deepEqual(blocks[1].splits, [])
+  assert.equal(workPace(blocks), null)
+  assert.equal(targetPace(HILLS.blocks), null)
+  assert.deepEqual(completion(HILLS.blocks, blocks), { done: 6, min: 6, max: 6 })
+  blocks[1].reps_done = 4
+  assert.equal(completion(HILLS.blocks, blocks)!.done, 4)
+  assert.deepEqual(highlight(blocks).map((b) => b.kind), ['hills'])
+  assert.deepEqual(missingSections(HILLS.blocks), [])
+  // 5 min + 6 × (15 + 60 + 15) + 5 min
+  assert.equal(estimate(HILLS.blocks, 400).seconds, 300 + 540 + 300)
+  const p: RunPlanSession = { ...plan('h', '2026-11-22'), pace_s: null, blocks: HILLS.blocks }
+  const done = (n: number): Run => ({ ...run('r', 'h', '2026-11-22', []), work_pace_s: null, blocks: toRunBlocks(HILLS.blocks).map((b) => (b.kind === 'hills' ? { ...b, reps_done: n } : b)) })
+  assert.equal(evaluate(goal, [p], [done(6)], '2026-11-25').key.list[0].ok, true)
+  assert.equal(evaluate(goal, [p], [done(4)], '2026-11-25').key.list[0].ok, false)
+})
+
+test('a session can mix 800s and hills', () => {
+  const mix = parseWorkout("5' + 3x800 en 4:30 r3' + 4x15s subida, rec 1 min, 15s bajada + 5'").blocks
+  assert.deepEqual(mix.map((b) => b.kind), ['warmup', 'main', 'hills', 'cooldown'])
+  assert.equal(completion(mix, toRunBlocks(mix))!.done, 7)
+  assert.equal(targetPace(mix), 338)
 })

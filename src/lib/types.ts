@@ -293,7 +293,7 @@ export interface TournamentRound {
 export const RUN_TYPES = ['easy', 'interval', 'tempo', 'long', 'race'] as const
 export type RunType = (typeof RUN_TYPES)[number]
 
-export const BLOCK_KINDS = ['warmup', 'strides', 'progressive', 'main', 'easy', 'cooldown'] as const
+export const BLOCK_KINDS = ['warmup', 'strides', 'progressive', 'main', 'hills', 'easy', 'cooldown'] as const
 export type BlockKind = (typeof BLOCK_KINDS)[number]
 
 /** One part of a structured session, e.g. "5–6 × 800 m in 4:30, 3 min recovery". */
@@ -310,6 +310,8 @@ export interface WorkoutBlock {
   /** 'time' = seconds per rep · 'pace' = seconds per km. */
   target_kind: 'time' | 'pace' | null
   target_s: number | null
+  /** Hill reps only: `amount` goes up, then recovery, then `down` (same unit) back down. */
+  hill?: { recovery_s: number | null; down: number }
 }
 
 /** A block as it was actually run. */
@@ -317,6 +319,8 @@ export interface RunBlock extends WorkoutBlock {
   done: boolean
   /** Per rep: seconds (blocks in metres) or pace in s/km (blocks in time); null = not run or not timed. */
   splits: (number | null)[]
+  /** Hill reps: how many were run (they are counted, not timed). */
+  reps_done?: number
 }
 
 /** Reusable structured session. */

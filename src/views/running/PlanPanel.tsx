@@ -169,7 +169,7 @@ function WeekModal({ goal, week, plan, onWeek, onClose }: { goal: RaceGoal; week
         if (j !== i) return x
         const r = { ...x, ...patch }
         if (patch.type && patch.type !== x.type && !x.custom) {
-          const template = data.run_workouts.findLast((w) => w.type === patch.type)
+          const template = data.run_workouts.find((w) => w.type === patch.type)
           if (template) return { ...r, ...fromBlocks(ensureSections(template.blocks)), custom: false }
         }
         if (r.custom && !patch.type) return r
