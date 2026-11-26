@@ -4,13 +4,13 @@
  */
 import type { Dataset } from './types'
 
-export const AGENDA_SOURCES = ['run', 'study', 'tournament', 'task', 'project', 'bill'] as const
+export const AGENDA_SOURCES = ['run', 'study', 'plan', 'tournament', 'task', 'project', 'bill'] as const
 export type AgendaSource = (typeof AGENDA_SOURCES)[number]
 
-export const SOURCE_LABELS: Record<AgendaSource, string> = { run: 'Entrenos', study: 'Entregas y exámenes', tournament: 'Torneos', task: 'Tareas', project: 'Proyectos', bill: 'Cobros' }
+export const SOURCE_LABELS: Record<AgendaSource, string> = { run: 'Entrenos', study: 'Entregas y exámenes', plan: 'Plan de estudio', tournament: 'Torneos', task: 'Tareas', project: 'Proyectos', bill: 'Cobros' }
 
 export type Target =
-  | { kind: 'event' | 'task' | 'project' | 'subject' | 'run' | 'session' | 'goal' | 'tournament' | 'deck' | 'team' | 'tx' | 'worklog' | 'card' | 'match' | 'bill'; id: string }
+  | { kind: 'event' | 'task' | 'project' | 'subject' | 'run' | 'session' | 'goal' | 'tournament' | 'deck' | 'team' | 'tx' | 'worklog' | 'card' | 'match' | 'bill' | 'plan'; id: string }
 
 export interface AgendaItem {
   key: string
@@ -67,6 +67,13 @@ export function agendaItems(d: Dataset, { matched, bills = [] }: AgendaDeps): Ag
       detail: subject?.name ?? '', done: a.is_done || a.grade !== null, target: { kind: 'subject', id: a.subject_id },
     })
   }
+  // Dated blocks of a study plan (weekly goals span a week: they live in the plan).
+  for (const i of d.study_plan_items) {
+    if (i.kind === 'goal') continue
+    const subject = i.subject_id ? subjects.get(i.subject_id) : undefined
+    const kind = i.kind === 'review' ? 'Repaso' : i.kind === 'mock' ? 'Simulacro' : i.kind === 'buffer' ? 'Día colchón' : 'Hito'
+    out.push({ key: `plan-${i.id}`, source: 'plan', date: i.date, time: null, title: i.title, detail: [kind, subject?.code || subject?.name].filter(Boolean).join(' · '), done: i.is_done, target: { kind: 'plan', id: i.plan_id } })
+  }
   for (const t of d.tournaments) {
     out.push({ key: `tournament-${t.id}`, source: 'tournament', date: t.date, time: null, title: t.name, detail: `${t.game.toUpperCase()} · ${t.mode === 'online' ? 'Online' : t.location || 'Presencial'}`, done: t.status === 'finished' || t.status === 'dropped', target: { kind: 'tournament', id: t.id } })
   }
@@ -114,6 +121,9 @@ export function search(d: Dataset, query: string, limit = 40): SearchHit[] {
   for (const e of d.events) add('Eventos', { kind: 'event', id: e.id }, e.title, localDay(e.start_at), e.description, e.start_at)
   for (const s of d.study_subjects) add('Asignaturas', { kind: 'subject', id: s.id }, s.name, [s.code, s.professor].filter(Boolean).join(' · '))
   for (const a of d.study_assessments) add('Entregas y exámenes', { kind: 'subject', id: a.subject_id }, a.name, subjects.get(a.subject_id) ?? '')
+  for (const t of d.study_topics) add('Temas', { kind: 'subject', id: t.subject_id }, t.name, subjects.get(t.subject_id) ?? '', t.notes)
+  for (const p of d.study_plans) add('Planes de estudio', { kind: 'plan', id: p.id }, p.name, `${p.start_date} → ${p.end_date}`, p.notes)
+  for (const i of d.study_plan_items) add('Plan de estudio', { kind: 'plan', id: i.plan_id }, i.title, i.date, i.notes, i.date)
   for (const f of d.study_files) add('Apuntes', { kind: 'subject', id: f.subject_id }, f.name, [subjects.get(f.subject_id), f.topic].filter(Boolean).join(' · '))
   for (const t of d.transactions) add('Movimientos', { kind: 'tx', id: t.id }, t.concept || t.category, `${t.date} · ${t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}`, `${t.category} ${t.account}`, t.date)
   for (const b of d.bills) add('Cobros', { kind: 'bill', id: b.id }, b.name, b.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }))

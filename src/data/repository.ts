@@ -69,6 +69,9 @@ const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   study_subjects: { column: 'created_at', ascending: true },
   study_assessments: { column: 'created_at', ascending: true },
   study_files: { column: 'created_at', ascending: false },
+  study_topics: { column: 'position', ascending: true },
+  study_plans: { column: 'start_date', ascending: true },
+  study_plan_items: { column: 'date', ascending: true },
   tcg_decks: { column: 'created_at', ascending: true },
   vgc_teams: { column: 'created_at', ascending: true },
   deck_versions: { column: 'from_date', ascending: true },
@@ -130,6 +133,14 @@ function normalise<K extends TableName>(table: K, row: Tables[K]): Tables[K] {
   if (table === 'study_assessments') {
     const a = row as Tables['study_assessments']
     return { ...a, weight: Number(a.weight), grade: num(a.grade) } as Tables[K]
+  }
+  if (table === 'study_topics') {
+    const t = row as Tables['study_topics']
+    return { ...t, position: Number(t.position), reviews: Number(t.reviews), confidence: num(t.confidence) } as Tables[K]
+  }
+  if (table === 'study_plans') {
+    const p = row as Tables['study_plans']
+    return { ...p, phases: Array.isArray(p.phases) ? p.phases : [] } as Tables[K]
   }
   if (table === 'study_files') {
     const f = row as Tables['study_files']
@@ -296,7 +307,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v22'
+const DEMO_KEY = 'ph-demo-dataset-v23'
 export const STUDY_BUCKET = 'study-files'
 
 function readDemo(): Dataset {

@@ -115,6 +115,7 @@ export const ACCOUNT_KIND_LABELS: Record<AccountKind, string> = {
 export const SOURCE_STYLES: Record<AgendaSource, { dot: string; chip: string; bar: string }> = {
   run: { dot: 'bg-rose-500', bar: 'border-l-rose-500', chip: 'bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-500/30' },
   study: { dot: 'bg-violet-500', bar: 'border-l-violet-500', chip: 'bg-violet-500/10 text-violet-800 dark:text-violet-300 border-violet-500/30' },
+  plan: { dot: 'bg-indigo-500', bar: 'border-l-indigo-500', chip: 'bg-indigo-500/10 text-indigo-800 dark:text-indigo-300 border-indigo-500/30' },
   tournament: { dot: 'bg-yellow-500', bar: 'border-l-yellow-500', chip: 'bg-yellow-500/12 text-yellow-900 dark:text-yellow-200 border-yellow-500/40' },
   task: { dot: 'bg-sky-500', bar: 'border-l-sky-500', chip: 'bg-sky-500/10 text-sky-800 dark:text-sky-300 border-sky-500/30' },
   project: { dot: 'bg-teal-500', bar: 'border-l-teal-500', chip: 'bg-teal-500/10 text-teal-800 dark:text-teal-300 border-teal-500/30' },

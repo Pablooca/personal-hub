@@ -68,7 +68,7 @@ export function Overview({ onNavigate, onOpenProject }: { onNavigate: (v: ViewId
   const weekKey = toDateKey(addDays(startOfDay(now), 7))
   const todayItems = items.filter((i) => i.date === todayKey)
   // Late tasks and deliveries never get lost; past runs and tournaments don't nag.
-  const late = items.filter((i) => i.date < todayKey && !i.done && (i.source === 'task' || i.source === 'study'))
+  const late = items.filter((i) => i.date < todayKey && !i.done && (i.source === 'task' || i.source === 'study' || i.source === 'plan'))
   const soon = items.filter((i) => i.date > todayKey && i.date <= weekKey && !i.done)
   const total = today.length + todayItems.length
   const done = doneToday + todayItems.filter((i) => i.done).length
@@ -78,8 +78,9 @@ export function Overview({ onNavigate, onOpenProject }: { onNavigate: (v: ViewId
       const t = data.project_tasks.find((x) => x.id === i.target.id)
       if (t) void setStatus(t, v ? 'done' : 'todo')
     } else if (i.source === 'study') void update('study_assessments', i.key.slice('study-'.length), { is_done: v })
+    else if (i.source === 'plan') void update('study_plan_items', i.key.slice('plan-'.length), { is_done: v })
   }
-  const canToggle = (i: AgendaItem) => i.target.kind === 'task' || i.source === 'study'
+  const canToggle = (i: AgendaItem) => i.target.kind === 'task' || i.source === 'study' || i.source === 'plan'
 
   const nextRace = data.race_goals.filter((g) => g.date >= todayKey).sort((a, b) => a.date.localeCompare(b.date))[0]
   const nextTournament = data.tournaments.filter((t) => t.date >= todayKey && t.status !== 'finished' && t.status !== 'dropped').sort((a, b) => a.date.localeCompare(b.date))[0]

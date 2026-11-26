@@ -1,7 +1,7 @@
 import { addDays, combineDateTime, startOfWeek, toDateKey } from '../lib/dates'
 import { holidayMap } from '../lib/holidays'
 import { uid } from '../lib/format'
-import type { Account, CalendarEvent, Category, Dataset, Project, ProjectTask, StudyAssessment, StudyFile, StudyProgram, StudySubject, Transaction, WorkLog } from '../lib/types'
+import type { Account, CalendarEvent, Category, Dataset, Project, ProjectTask, StudyAssessment, StudyFile, StudyPlan, StudyPlanItem, StudyProgram, StudySubject, StudyTopic, Transaction, WorkLog } from '../lib/types'
 import { buildDemoPokemon } from './demoPokemon'
 import { buildDemoRunning } from './demoRunning'
 import { defaultCategories } from '../lib/categories'
@@ -375,6 +375,51 @@ export function buildDemoDataset(today = new Date()): Dataset {
     { id: uid(), subject_id: study_subjects[1].id, name: 'Apuntes completos', topic: '', storage_path: 'demo/3.pdf', size_bytes: 2_831_155, created_at: now },
   ]
 
+  // Exam-prep plan: weeks start on Monday; first pass, spaced reviews, mock exams.
+  const monday = toDateKey(startOfWeek(today))
+  const sw = (n: number, d = 0) => toDateKey(addDays(startOfWeek(today), n * 7 + d))
+  const studyPlan: StudyPlan = {
+    id: uid(), program_id: program.id, name: 'Exámenes finales', start_date: sw(-1), end_date: sw(3, 6), exam_date: sw(4, 1),
+    phases: [
+      { name: 'Fase 1 · Primera vuelta', start: sw(-1), end: sw(0, 6), goal: 'Subrayar y estudiar todos los temas al ritmo de las clases' },
+      { name: 'Fase 2 · Repaso espaciado', start: sw(1), end: sw(2, 6), goal: 'Repasar lo visto y practicar ejercicios' },
+      { name: 'Fase 3 · Simulacros', start: sw(3), end: sw(3, 6), goal: 'Exámenes de prueba y repaso de fallos' },
+    ],
+    notes: '', created_at: now,
+  }
+  const pi = (kind: StudyPlanItem['kind'], date: string, title: string, si: number | null, is_done = false, end_date: string | null = null): StudyPlanItem => ({
+    id: uid(), plan_id: studyPlan.id, subject_id: si === null ? null : study_subjects[si].id, kind, date, end_date, title, notes: '', is_done, created_at: now,
+  })
+  const study_plan_items: StudyPlanItem[] = [
+    pi('goal', sw(-1), 'Sistemas Distribuidos: subrayar y 1ª vuelta de los temas 1–3', 0, true, sw(-1, 6)),
+    pi('goal', sw(-1), 'Aprendizaje Automático: temas 1–4 al día con las clases', 1, true, sw(-1, 6)),
+    pi('review', sw(-1, 5), 'Repaso espaciado: temas de la semana', null, true),
+    pi('goal', monday, 'Sistemas Distribuidos: temas 4–6', 0, false, sw(0, 6)),
+    pi('goal', monday, 'Aprendizaje Automático: temas 5–8 y ejercicios', 1, false, sw(0, 6)),
+    pi('review', sw(0, 2), 'Repaso espaciado de lo que toque (bloque fijo)', null),
+    pi('buffer', sw(0, 6), 'Día colchón', null),
+    pi('goal', sw(1), 'Repaso completo de Sistemas Distribuidos', 0, false, sw(1, 6)),
+    pi('review', sw(1, 5), 'Repaso espaciado', null),
+    pi('goal', sw(2), 'Repaso de Aprendizaje Automático y ejercicios prácticos', 1, false, sw(2, 6)),
+    pi('mock', sw(2, 5), 'Simulacro cruzado de las dos asignaturas', null),
+    pi('goal', sw(3), 'Fallos de simulacros y trampas de test', null, false, sw(3, 6)),
+    pi('mock', sw(3, 2), 'Simulacro final', null),
+    pi('buffer', sw(3, 6), 'Descanso antes del examen', null),
+  ]
+  const tp = (si: number, n: number, p: Partial<StudyTopic> = {}): StudyTopic => ({
+    id: uid(), subject_id: study_subjects[si].id, position: n, name: `Tema ${n}`, highlighted: false, studied: false, reviews: 0, last_studied: null,
+    final_pass: false, confidence: null, notes: '', created_at: now, ...p,
+  })
+  const study_topics: StudyTopic[] = [
+    tp(0, 1, { highlighted: true, studied: true, reviews: 1, last_studied: day(-12), confidence: 3 }),
+    tp(0, 2, { highlighted: true, studied: true, last_studied: day(-9), confidence: 2, notes: 'No confundir relojes de Lamport con vectoriales.' }),
+    tp(0, 3, { highlighted: true, studied: true, last_studied: day(-3), confidence: 2 }),
+    tp(0, 4, { highlighted: true }),
+    tp(0, 5),
+    tp(0, 6),
+    ...Array.from({ length: 8 }, (_, i) => tp(1, i + 1, i < 4 ? { highlighted: true, studied: i < 3, last_studied: i < 3 ? day(-8 + i) : null } : {})),
+  ]
+
   return {
     events,
     projects,
@@ -387,6 +432,9 @@ export function buildDemoDataset(today = new Date()): Dataset {
     study_subjects,
     study_assessments,
     study_files,
+    study_topics,
+    study_plans: [studyPlan],
+    study_plan_items,
     category_rules: [{ id: uid(), pattern: 'mercado', type: 'expense', category: 'groceries', created_at: now }],
     bills: [{ id: uid(), name: 'Música en streaming', amount: 10.99, category: 'subscriptions', account: 'Cuenta nómina', period: 'monthly', anchor_date: day(-27), notify_days: 1, active: true, created_at: now }],
     ...buildDemoPokemon(today),

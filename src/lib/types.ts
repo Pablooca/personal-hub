@@ -207,6 +207,70 @@ export interface StudyFile {
   created_at: string
 }
 
+/** A topic of a subject and how far its study has gone. */
+export interface StudyTopic {
+  id: string
+  user_id?: string
+  subject_id: string
+  position: number
+  name: string
+  /** Underlined (with the colour system). */
+  highlighted: boolean
+  /** First full pass done. */
+  studied: boolean
+  /** Spaced reviews done after the first pass. */
+  reviews: number
+  /** YYYY-MM-DD of the first pass or the last review: drives the next review. */
+  last_studied: string | null
+  /** Intensive pass before the exam. */
+  final_pass: boolean
+  /** 1 = flojo · 2 = regular · 3 = dominado. */
+  confidence: number | null
+  /** Test traps, doubts. */
+  notes: string
+  created_at: string
+}
+
+export interface StudyPlanPhase {
+  name: string
+  start: string // YYYY-MM-DD
+  end: string // YYYY-MM-DD
+  goal: string
+}
+
+/** An exam-prep plan of a program: phases, weekly goals and dated blocks. */
+export interface StudyPlan {
+  id: string
+  user_id?: string
+  program_id: string
+  name: string
+  start_date: string // YYYY-MM-DD
+  end_date: string // YYYY-MM-DD
+  /** First exam day. */
+  exam_date: string | null
+  phases: StudyPlanPhase[]
+  notes: string
+  created_at: string
+}
+
+export const PLAN_ITEM_KINDS = ['goal', 'review', 'mock', 'buffer', 'milestone'] as const
+export type PlanItemKind = (typeof PLAN_ITEM_KINDS)[number]
+
+export interface StudyPlanItem {
+  id: string
+  user_id?: string
+  plan_id: string
+  subject_id: string | null
+  /** goal = weekly goal (date → end_date) · the rest are dated blocks. */
+  kind: PlanItemKind
+  date: string // YYYY-MM-DD
+  end_date: string | null // YYYY-MM-DD, weekly goals only
+  title: string
+  notes: string
+  is_done: boolean
+  created_at: string
+}
+
 // ---------------------------------------------------------------------------
 // Pokémon Competitive (TCG & VGC)
 // ---------------------------------------------------------------------------
@@ -619,6 +683,9 @@ export interface Tables {
   study_subjects: StudySubject
   study_assessments: StudyAssessment
   study_files: StudyFile
+  study_topics: StudyTopic
+  study_plans: StudyPlan
+  study_plan_items: StudyPlanItem
   tcg_decks: TcgDeck
   vgc_teams: VgcTeam
   tournaments: Tournament

@@ -2,7 +2,7 @@ import type { Dataset, TableName } from '../lib/types'
 
 export const TABLES: TableName[] = [
   'events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs',
-  'study_programs', 'study_subjects', 'study_assessments', 'study_files',
+  'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'study_topics', 'study_plans', 'study_plan_items',
   'tcg_decks', 'vgc_teams', 'deck_versions', 'matchup_notes', 'tournaments', 'tournament_rounds', 'pokemon_matches', 'owned_cards', 'collection_snapshots',
   'shoes', 'race_goals', 'run_plan', 'runs', 'run_workouts',
   'category_rules', 'bills',
@@ -21,6 +21,9 @@ export const emptyDataset = (): Dataset => ({
   study_subjects: [],
   study_assessments: [],
   study_files: [],
+  study_topics: [],
+  study_plans: [],
+  study_plan_items: [],
   tcg_decks: [],
   vgc_teams: [],
   deck_versions: [],
@@ -62,12 +65,17 @@ export function cascadeRemove(d: Dataset, table: TableName, ids: Set<string>): D
   if (table === 'projects') next.project_tasks = next.project_tasks.filter((t) => !t.project_id || !ids.has(t.project_id))
   if (table === 'project_tasks') next.work_logs = next.work_logs.map((w) => (w.task_id && ids.has(w.task_id) ? { ...w, task_id: null } : w))
   if (table === 'study_programs') {
+    const plans = new Set(next.study_plans.filter((p) => ids.has(p.program_id)).map((p) => p.id))
     const subjects = new Set(next.study_subjects.filter((s) => ids.has(s.program_id)).map((s) => s.id))
-    return subjects.size ? cascadeRemove(next, 'study_subjects', subjects) : next
+    const after = plans.size ? cascadeRemove(next, 'study_plans', plans) : next
+    return subjects.size ? cascadeRemove(after, 'study_subjects', subjects) : after
   }
+  if (table === 'study_plans') next.study_plan_items = next.study_plan_items.filter((i) => !ids.has(i.plan_id))
   if (table === 'study_subjects') {
     next.study_assessments = next.study_assessments.filter((a) => !ids.has(a.subject_id))
     next.study_files = next.study_files.filter((f) => !ids.has(f.subject_id))
+    next.study_topics = next.study_topics.filter((t) => !ids.has(t.subject_id))
+    next.study_plan_items = next.study_plan_items.map((i) => (i.subject_id && ids.has(i.subject_id) ? { ...i, subject_id: null } : i))
   }
   if (table === 'race_goals') {
     const sessions = new Set(next.run_plan.filter((p) => ids.has(p.goal_id)).map((p) => p.id))

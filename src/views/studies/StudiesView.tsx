@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react'
 import { ArrowLeft, BookOpen, GraduationCap, Pencil, Plus, Trash2 } from 'lucide-react'
 import { PageHeader } from '../../components/Shell'
-import { Badge, Button, Check, Empty, Field, Modal, ProgressBar, cx } from '../../components/ui'
+import { Badge, Button, Check, Empty, Field, Modal, ProgressBar, Segmented, cx } from '../../components/ui'
+import { toDateKey } from '../../lib/dates'
 import { COLOR_BG } from '../../lib/categories'
 import { fmtGrade, gradeLabel, gradeTone, programStats, subjectGrade } from '../../lib/studies'
 import { CATEGORY_COLORS, type CategoryColor, type StudyProgram, type StudySubject, type SubjectStatus } from '../../lib/types'
 import { useData } from '../../state/data'
 import { useFocusTarget } from '../../state/nav'
+import { PlanPanel } from './PlanPanel'
 import { SubjectDetail } from './SubjectDetail'
 
-type Route = { kind: 'list' } | { kind: 'program'; id: string } | { kind: 'subject'; programId: string; id: string }
+type Route = { kind: 'list' } | { kind: 'program'; id: string; planId?: string } | { kind: 'subject'; programId: string; id: string }
 
 const fmtCredits = (n: number) => n.toLocaleString('es-ES', { maximumFractionDigits: 1 })
 
@@ -89,7 +91,12 @@ export function StudiesView() {
     window.scrollTo({ top: 0 })
   }
 
-  useFocusTarget(['subject'], (t) => {
+  useFocusTarget(['subject', 'plan'], (t) => {
+    if (t.kind === 'plan') {
+      const plan = data.study_plans.find((x) => x.id === t.id)
+      if (plan) go({ kind: 'program', id: plan.program_id, planId: plan.id })
+      return
+    }
     const s = data.study_subjects.find((x) => x.id === t.id)
     if (s) go({ kind: 'subject', programId: s.program_id, id: s.id })
   })
@@ -101,7 +108,15 @@ export function StudiesView() {
   if (route.kind === 'program' || route.kind === 'subject') {
     const program = data.study_programs.find((p) => p.id === (route.kind === 'program' ? route.id : route.programId))
     if (program)
-      return <ProgramDetail program={program} onBack={() => go({ kind: 'list' })} onOpenSubject={(id) => go({ kind: 'subject', programId: program.id, id })} />
+      return (
+        <ProgramDetail
+          key={`${program.id}-${route.kind === 'program' ? (route.planId ?? '') : ''}`}
+          program={program}
+          planId={route.kind === 'program' ? route.planId : undefined}
+          onBack={() => go({ kind: 'list' })}
+          onOpenSubject={(id) => go({ kind: 'subject', programId: program.id, id })}
+        />
+      )
   }
   return <ProgramList onOpen={(id) => go({ kind: 'program', id })} onOpenSubject={(id) => {
     const s = data.study_subjects.find((x) => x.id === id)
@@ -240,8 +255,11 @@ function ProgramModal({ program, onClose, onCreated }: { program: Partial<StudyP
 }
 
 // ---------------------------------------------------------------- program detail
-function ProgramDetail({ program, onBack, onOpenSubject }: { program: StudyProgram; onBack: () => void; onOpenSubject: (id: string) => void }) {
+function ProgramDetail({ program, planId, onBack, onOpenSubject }: { program: StudyProgram; planId?: string; onBack: () => void; onOpenSubject: (id: string) => void }) {
   const { data, remove, deleteStudyFiles } = useData()
+  const today = toDateKey(new Date())
+  const activePlan = data.study_plans.some((p) => p.program_id === program.id && p.start_date <= today && today <= p.end_date)
+  const [tab, setTab] = useState<'subjects' | 'plan'>(planId || activePlan ? 'plan' : 'subjects')
   const grades = useSubjectGrades()
   const [editingProgram, setEditingProgram] = useState(false)
   const [newSubject, setNewSubject] = useState(false)
@@ -320,7 +338,21 @@ function ProgramDetail({ program, onBack, onOpenSubject }: { program: StudyProgr
         </div>
       </div>
 
-      {subjects.length === 0 ? (
+      <Segmented
+        className="mt-4"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'plan', label: 'Plan de estudio' },
+          { value: 'subjects', label: `Asignaturas (${subjects.length})` },
+        ]}
+      />
+
+      {tab === 'plan' ? (
+        <div className="mt-3">
+          <PlanPanel program={program} focusPlanId={planId} />
+        </div>
+      ) : subjects.length === 0 ? (
         <div className="mt-4">
           <Empty icon={<BookOpen className="size-5" />}>
             Añade la primera asignatura.

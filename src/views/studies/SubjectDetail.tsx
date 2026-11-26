@@ -9,6 +9,7 @@ import { SUBJECT_STATUSES, type AssessmentKind, type StudyAssessment, type Study
 import { useData } from '../../state/data'
 import { useToast } from '../../state/toast'
 import { STATUS_LABELS, STATUS_STYLES, SubjectModal } from './StudiesView'
+import { TopicsPanel } from './TopicsPanel'
 
 /** "7,5" / "7.5" → 7.5 ; '' → null ; invalid → undefined */
 function parseNum(raw: string, min: number, max: number): number | null | undefined {
@@ -189,6 +190,10 @@ export function SubjectDetail({ subject, onBack }: { subject: StudySubject; onBa
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
         <Assessments subject={subject} assessments={assessments} totalWeight={g.totalWeight} weightsOk={g.weightsOk} />
         <Files subject={subject} files={files} />
+      </div>
+
+      <div className="mt-4">
+        <TopicsPanel subject={subject} />
       </div>
 
       {editing && <SubjectModal programId={subject.program_id} subject={subject} onClose={() => setEditing(false)} />}
