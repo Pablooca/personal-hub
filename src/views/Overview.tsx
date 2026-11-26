@@ -68,7 +68,9 @@ export function Overview({ onNavigate, onOpenProject }: { onNavigate: (v: ViewId
   const weekKey = toDateKey(addDays(startOfDay(now), 7))
   const todayItems = items.filter((i) => i.date === todayKey)
   // Late tasks and deliveries never get lost; past runs and tournaments don't nag.
-  const late = items.filter((i) => i.date < todayKey && !i.done && (i.source === 'task' || i.source === 'study' || i.source === 'plan'))
+  const weekAgo = toDateKey(addDays(startOfDay(now), -7))
+  // A missed study task stays visible for a week; after that it lives in the plan.
+  const late = items.filter((i) => i.date < todayKey && !i.done && (i.source === 'task' || i.source === 'study' || (i.source === 'plan' && i.date >= weekAgo && !/^(Colchón|Descanso)/.test(i.detail))))
   const soon = items.filter((i) => i.date > todayKey && i.date <= weekKey && !i.done)
   const total = today.length + todayItems.length
   const done = doneToday + todayItems.filter((i) => i.done).length

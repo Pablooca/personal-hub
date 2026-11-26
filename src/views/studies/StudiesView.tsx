@@ -9,6 +9,7 @@ import { CATEGORY_COLORS, type CategoryColor, type StudyProgram, type StudySubje
 import { useData } from '../../state/data'
 import { useFocusTarget } from '../../state/nav'
 import { PlanPanel } from './PlanPanel'
+import { PdfButton } from './PlanTools'
 import { SubjectDetail } from './SubjectDetail'
 
 type Route = { kind: 'list' } | { kind: 'program'; id: string; planId?: string } | { kind: 'subject'; programId: string; id: string }
@@ -287,6 +288,7 @@ function ProgramDetail({ program, planId, onBack, onOpenSubject }: { program: St
         title={program.name}
         actions={
           <>
+            {tab === 'plan' && <PdfButton program={program} />}
             <Button onClick={() => setEditingProgram(true)}>
               <Pencil className="size-4" /> <span className="max-sm:sr-only">Editar</span>
             </Button>

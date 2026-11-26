@@ -70,6 +70,7 @@ const ORDER: Record<TableName, { column: string; ascending: boolean }> = {
   study_assessments: { column: 'created_at', ascending: true },
   study_files: { column: 'created_at', ascending: false },
   study_topics: { column: 'position', ascending: true },
+  study_tests: { column: 'position', ascending: true },
   study_plans: { column: 'start_date', ascending: true },
   study_plan_items: { column: 'date', ascending: true },
   tcg_decks: { column: 'created_at', ascending: true },
@@ -136,7 +137,15 @@ function normalise<K extends TableName>(table: K, row: Tables[K]): Tables[K] {
   }
   if (table === 'study_topics') {
     const t = row as Tables['study_topics']
-    return { ...t, position: Number(t.position), reviews: Number(t.reviews), confidence: num(t.confidence) } as Tables[K]
+    return { ...t, position: Number(t.position), reviews: Number(t.reviews), confidence: num(t.confidence), pages: num(t.pages) } as Tables[K]
+  }
+  if (table === 'study_tests') {
+    const t = row as Tables['study_tests']
+    return { ...t, position: Number(t.position), level: num(t.level), questions: num(t.questions), minutes: num(t.minutes), score: num(t.score), best: num(t.best), attempts: Number(t.attempts) } as Tables[K]
+  }
+  if (table === 'study_plan_items') {
+    const i = row as Tables['study_plan_items']
+    return { ...i, topic_id: i.topic_id ?? null, test_id: i.test_id ?? null, origin: i.origin ?? '' } as Tables[K]
   }
   if (table === 'study_plans') {
     const p = row as Tables['study_plans']
@@ -307,7 +316,7 @@ export function createSupabaseRepository(client: SupabaseClient, userId: string)
 // ---------------------------------------------------------------------------
 // Local (Demo Mode) — synthetic data persisted in localStorage, zero network.
 // ---------------------------------------------------------------------------
-const DEMO_KEY = 'ph-demo-dataset-v23'
+const DEMO_KEY = 'ph-demo-dataset-v24'
 export const STUDY_BUCKET = 'study-files'
 
 function readDemo(): Dataset {

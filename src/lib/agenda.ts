@@ -71,7 +71,7 @@ export function agendaItems(d: Dataset, { matched, bills = [] }: AgendaDeps): Ag
   for (const i of d.study_plan_items) {
     if (i.kind === 'goal') continue
     const subject = i.subject_id ? subjects.get(i.subject_id) : undefined
-    const kind = i.kind === 'review' ? 'Repaso' : i.kind === 'mock' ? 'Simulacro' : i.kind === 'buffer' ? 'Día colchón' : 'Hito'
+    const kind = { study: 'Estudio', test: 'Test', review: 'Repaso', mock: 'Simulacro', buffer: 'Colchón', rest: 'Descanso', milestone: 'Hito' }[i.kind]
     out.push({ key: `plan-${i.id}`, source: 'plan', date: i.date, time: null, title: i.title, detail: [kind, subject?.code || subject?.name].filter(Boolean).join(' · '), done: i.is_done, target: { kind: 'plan', id: i.plan_id } })
   }
   for (const t of d.tournaments) {

@@ -119,22 +119,29 @@ export function PlanModal({ programId, plan, onClose, onCreated }: { programId: 
 export type ItemDraft = Partial<StudyPlanItem> & { plan_id: string }
 
 export function ItemModal({ draft, subjects, onClose }: { draft: ItemDraft; subjects: { id: string; name: string }[]; onClose: () => void }) {
-  const { create, update, remove } = useData()
+  const { data, create, update, remove } = useData()
   const [kind, setKind] = useState<PlanItemKind>(draft.kind ?? 'goal')
   const [title, setTitle] = useState(draft.title ?? '')
   const [date, setDate] = useState(draft.date ?? '')
   const [end, setEnd] = useState(draft.end_date ?? '')
   const [subject, setSubject] = useState(draft.subject_id ?? '')
+  const [topic, setTopic] = useState(draft.topic_id ?? '')
+  const [test, setTest] = useState(draft.test_id ?? '')
+  const topics = data.study_topics.filter((t) => t.subject_id === subject).sort((a, b) => a.position - b.position)
+  const tests = data.study_tests.filter((t) => t.subject_id === subject).sort((a, b) => a.position - b.position)
   const [notes, setNotes] = useState(draft.notes ?? '')
   const isGoal = kind === 'goal'
   const valid = title.trim() && isDate(date) && (!isGoal || !end || (isDate(end) && end >= date))
 
   async function save() {
     if (!valid) return
-    const row = { kind, title: title.trim(), date, end_date: isGoal ? end || addDaysKey(date, 6) : null, subject_id: subject || null, notes: notes.trim() }
+    const row = {
+      kind, title: title.trim(), date, end_date: isGoal ? end || addDaysKey(date, 6) : null, subject_id: subject || null,
+      topic_id: subject && topics.some((t) => t.id === topic) ? topic : null, test_id: subject && tests.some((t) => t.id === test) ? test : null, notes: notes.trim(),
+    }
     onClose()
     if (draft.id) await update('study_plan_items', draft.id, row)
-    else await create('study_plan_items', { ...row, plan_id: draft.plan_id, is_done: false })
+    else await create('study_plan_items', { ...row, plan_id: draft.plan_id, is_done: false, origin: '' })
   }
 
   return (
@@ -205,6 +212,30 @@ export function ItemModal({ draft, subjects, onClose }: { draft: ItemDraft; subj
             ))}
           </select>
         </Field>
+        {subject && (topics.length > 0 || tests.length > 0) && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Tema">
+              <select className="field" value={topic} onChange={(e) => setTopic(e.target.value)}>
+                <option value="">—</option>
+                {topics.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Test">
+              <select className="field" value={test} onChange={(e) => setTest(e.target.value)}>
+                <option value="">—</option>
+                {tests.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        )}
         <Field label="Notas">
           <textarea className="field min-h-16" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={4000} />
         </Field>

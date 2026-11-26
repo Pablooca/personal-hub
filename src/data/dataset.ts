@@ -2,7 +2,7 @@ import type { Dataset, TableName } from '../lib/types'
 
 export const TABLES: TableName[] = [
   'events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs',
-  'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'study_topics', 'study_plans', 'study_plan_items',
+  'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'study_topics', 'study_tests', 'study_plans', 'study_plan_items',
   'tcg_decks', 'vgc_teams', 'deck_versions', 'matchup_notes', 'tournaments', 'tournament_rounds', 'pokemon_matches', 'owned_cards', 'collection_snapshots',
   'shoes', 'race_goals', 'run_plan', 'runs', 'run_workouts',
   'category_rules', 'bills',
@@ -22,6 +22,7 @@ export const emptyDataset = (): Dataset => ({
   study_assessments: [],
   study_files: [],
   study_topics: [],
+  study_tests: [],
   study_plans: [],
   study_plan_items: [],
   tcg_decks: [],
@@ -70,11 +71,20 @@ export function cascadeRemove(d: Dataset, table: TableName, ids: Set<string>): D
     const after = plans.size ? cascadeRemove(next, 'study_plans', plans) : next
     return subjects.size ? cascadeRemove(after, 'study_subjects', subjects) : after
   }
+  if (table === 'study_topics') {
+    next.study_tests = next.study_tests.map((t) => (t.topic_id && ids.has(t.topic_id) ? { ...t, topic_id: null } : t))
+    next.study_plan_items = next.study_plan_items.map((i) => (i.topic_id && ids.has(i.topic_id) ? { ...i, topic_id: null } : i))
+  }
+  if (table === 'study_tests') next.study_plan_items = next.study_plan_items.map((i) => (i.test_id && ids.has(i.test_id) ? { ...i, test_id: null } : i))
   if (table === 'study_plans') next.study_plan_items = next.study_plan_items.filter((i) => !ids.has(i.plan_id))
   if (table === 'study_subjects') {
     next.study_assessments = next.study_assessments.filter((a) => !ids.has(a.subject_id))
     next.study_files = next.study_files.filter((f) => !ids.has(f.subject_id))
+    const topics = new Set(next.study_topics.filter((t) => ids.has(t.subject_id)).map((t) => t.id))
+    const tests = new Set(next.study_tests.filter((t) => ids.has(t.subject_id)).map((t) => t.id))
     next.study_topics = next.study_topics.filter((t) => !ids.has(t.subject_id))
+    next.study_tests = next.study_tests.filter((t) => !ids.has(t.subject_id))
+    next.study_plan_items = next.study_plan_items.map((i) => (i.topic_id && topics.has(i.topic_id)) || (i.test_id && tests.has(i.test_id)) ? { ...i, topic_id: i.topic_id && topics.has(i.topic_id) ? null : i.topic_id, test_id: i.test_id && tests.has(i.test_id) ? null : i.test_id } : i)
     next.study_plan_items = next.study_plan_items.map((i) => (i.subject_id && ids.has(i.subject_id) ? { ...i, subject_id: null } : i))
   }
   if (table === 'race_goals') {

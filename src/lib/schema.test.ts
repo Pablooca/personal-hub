@@ -42,6 +42,7 @@ const TABLES: Record<string, string> = {
   study_assessments: 'StudyAssessment',
   study_files: 'StudyFile',
   study_topics: 'StudyTopic',
+  study_tests: 'StudyTest',
   study_plans: 'StudyPlan',
   study_plan_items: 'StudyPlanItem',
   tcg_decks: 'TcgDeck',

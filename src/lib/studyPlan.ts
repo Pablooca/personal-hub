@@ -2,13 +2,16 @@
  * Exam-prep plan: weeks, phases, spaced reviews and progress per subject.
  * Pure functions (dates are YYYY-MM-DD strings) so they can be unit-tested.
  */
-import type { PlanItemKind, StudyPlan, StudyPlanItem, StudyPlanPhase, StudyTopic } from './types'
+import type { PlanItemKind, StudyPlan, StudyPlanItem, StudyPlanPhase, StudyTest, StudyTopic } from './types'
 
 export const PLAN_KIND_LABELS: Record<PlanItemKind, string> = {
   goal: 'Objetivo semanal',
+  study: 'Estudio',
+  test: 'Test',
   review: 'Repaso espaciado',
   mock: 'Simulacro',
-  buffer: 'Día colchón',
+  buffer: 'Colchón',
+  rest: 'Descanso',
   milestone: 'Hito',
 }
 
@@ -159,7 +162,7 @@ export interface PlanStatus {
 export function planStatus(plan: Pick<StudyPlan, 'start_date' | 'end_date' | 'exam_date'>, items: StudyPlanItem[], today: string): PlanStatus {
   const span = Math.max(1, daysBetween(plan.start_date, plan.end_date))
   const elapsed = Math.max(0, Math.min(100, Math.round((daysBetween(plan.start_date, today) / span) * 100)))
-  const behind = items.filter((i) => !i.is_done && i.kind !== 'buffer' && (i.end_date ?? i.date) < today).length
+  const behind = items.filter((i) => !i.is_done && i.kind !== 'buffer' && i.kind !== 'rest' && (i.end_date ?? i.date) < today).length
   return {
     daysToExam: plan.exam_date ? daysBetween(today, plan.exam_date) : null,
     elapsed,
@@ -173,4 +176,60 @@ export function planStatus(plan: Pick<StudyPlan, 'start_date' | 'end_date' | 'ex
 export function fmtRange(a: string, b: string): string {
   const f = (k: string) => new Date(toUtc(k)).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', timeZone: 'UTC' }).replace('.', '')
   return a === b ? f(a) : `${f(a)} – ${f(b)}`
+}
+
+// ------------------------------------------------------------------ days
+const KIND_ORDER: Record<PlanItemKind, number> = { milestone: 0, study: 1, test: 2, review: 3, mock: 4, buffer: 5, rest: 6, goal: 7 }
+
+/** Tasks of each day, in a stable order (milestones first, rest last). */
+export function byDay(items: StudyPlanItem[]): [string, StudyPlanItem[]][] {
+  const m = new Map<string, StudyPlanItem[]>()
+  for (const i of items) {
+    if (i.kind === 'goal') continue
+    m.set(i.date, [...(m.get(i.date) ?? []), i])
+  }
+  return [...m.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([d, list]) => [d, list.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.created_at.localeCompare(b.created_at) || a.title.localeCompare(b.title))])
+}
+
+/** "jue 26 nov" */
+export function fmtDay(k: string): string {
+  return new Date(toUtc(k)).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).replace(/\./g, '').replace(',', '')
+}
+
+// ------------------------------------------------------------------ tests
+export const PASS_SCORE = 5
+export const LEVEL_LABELS: Record<number, string> = { 1: 'Básico', 2: 'Intermedio', 3: 'Avanzado', 4: 'Experto' }
+
+/** Changes after sitting a test: last grade, best grade, one more attempt. */
+export function recordScore(t: Pick<StudyTest, 'best' | 'attempts'>, score: number, today: string): Partial<StudyTest> {
+  return { score, best: t.best === null ? score : Math.max(t.best, score), attempts: t.attempts + 1, last_done: today }
+}
+
+export type TestState = 'pending' | 'failed' | 'passed' | 'mastered'
+export function testState(t: Pick<StudyTest, 'score' | 'attempts'>): TestState {
+  if (t.score === null) return t.attempts > 0 ? 'passed' : 'pending'
+  return t.score >= 8 ? 'mastered' : t.score >= PASS_SCORE ? 'passed' : 'failed'
+}
+
+export interface TestStats {
+  total: number
+  done: number
+  passed: number
+  failed: number
+  /** Average of the last grades. */
+  average: number | null
+}
+
+export function testStats(tests: Pick<StudyTest, 'score' | 'attempts'>[]): TestStats {
+  const graded = tests.filter((t) => t.score !== null)
+  const states = tests.map(testState)
+  return {
+    total: tests.length,
+    done: tests.filter((t) => t.attempts > 0 || t.score !== null).length,
+    passed: states.filter((s) => s === 'passed' || s === 'mastered').length,
+    failed: states.filter((s) => s === 'failed').length,
+    average: graded.length ? Math.round((graded.reduce((a, t) => a + (t.score as number), 0) / graded.length) * 100) / 100 : null,
+  }
 }

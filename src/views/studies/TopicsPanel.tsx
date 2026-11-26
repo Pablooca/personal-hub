@@ -5,6 +5,7 @@ import { toDateKey } from '../../lib/dates'
 import { CONFIDENCE_LABELS, daysBetween, fmtRange, markReviewed, nextReview, topicProgress } from '../../lib/studyPlan'
 import type { StudySubject, StudyTopic } from '../../lib/types'
 import { useData } from '../../state/data'
+import { TestChip, TestModal } from './TestsPanel'
 
 /** Small on/off pill for a step of the topic. */
 export function StepChip({ on, onClick, children, title }: { on: boolean; onClick: () => void; children: ReactNode; title?: string }) {
@@ -45,9 +46,12 @@ export function TopicsPanel({ subject }: { subject: StudySubject }) {
   const [count, setCount] = useState('')
   const [name, setName] = useState('')
   const [open, setOpen] = useState<string | null>(null)
+  const [testId, setTestId] = useState<string | null>(null)
+  const tests = data.study_tests.filter((t) => t.subject_id === subject.id)
+  const openTest = tests.find((t) => t.id === testId)
 
   const nextPos = topics.reduce((m, t) => Math.max(m, t.position), 0) + 1
-  const blank = { highlighted: false, studied: false, reviews: 0, last_studied: null, final_pass: false, confidence: null, notes: '' }
+  const blank = { highlighted: false, studied: false, reviews: 0, last_studied: null, final_pass: false, confidence: null, notes: '', pages: null }
 
   async function add(e: FormEvent) {
     e.preventDefault()
@@ -123,6 +127,16 @@ export function TopicsPanel({ subject }: { subject: StudySubject }) {
                       }}
                     />
                     {r && <span className={cx('block text-[11px]', r.tone)}>{r.text}</span>}
+                    {tests.some((x) => x.topic_id === t.id) && (
+                      <span className="mt-1 flex flex-wrap gap-1">
+                        {tests
+                          .filter((x) => x.topic_id === t.id)
+                          .sort((a, b) => (a.level ?? 0) - (b.level ?? 0))
+                          .map((x) => (
+                            <TestChip key={x.id} t={x} onOpen={(y) => setTestId(y.id)} />
+                          ))}
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <StepChip on={t.highlighted} onClick={() => set(t, { highlighted: !t.highlighted })} title="Subrayado con los 4 colores">
@@ -194,6 +208,7 @@ export function TopicsPanel({ subject }: { subject: StudySubject }) {
         </ul>
       )}
 
+      {openTest && <TestModal test={openTest} subject={subject} topics={topics} onClose={() => setTestId(null)} />}
       <form onSubmit={add} className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">
         <input className="field h-9 min-w-0 flex-1 text-xs" placeholder="Nuevo tema (p. ej. Anexo A1 · Práctico)" value={name} onChange={(e) => setName(e.target.value)} maxLength={160} />
         <span className="text-xs text-faint">o</span>

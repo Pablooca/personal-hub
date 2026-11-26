@@ -1,7 +1,7 @@
 import { addDays, combineDateTime, startOfWeek, toDateKey } from '../lib/dates'
 import { holidayMap } from '../lib/holidays'
 import { uid } from '../lib/format'
-import type { Account, CalendarEvent, Category, Dataset, Project, ProjectTask, StudyAssessment, StudyFile, StudyPlan, StudyPlanItem, StudyProgram, StudySubject, StudyTopic, Transaction, WorkLog } from '../lib/types'
+import type { Account, CalendarEvent, Category, Dataset, Project, ProjectTask, StudyAssessment, StudyFile, StudyPlan, StudyPlanItem, StudyProgram, StudySubject, StudyTest, StudyTopic, Transaction, WorkLog } from '../lib/types'
 import { buildDemoPokemon } from './demoPokemon'
 import { buildDemoRunning } from './demoRunning'
 import { defaultCategories } from '../lib/categories'
@@ -388,7 +388,7 @@ export function buildDemoDataset(today = new Date()): Dataset {
     notes: '', created_at: now,
   }
   const pi = (kind: StudyPlanItem['kind'], date: string, title: string, si: number | null, is_done = false, end_date: string | null = null): StudyPlanItem => ({
-    id: uid(), plan_id: studyPlan.id, subject_id: si === null ? null : study_subjects[si].id, kind, date, end_date, title, notes: '', is_done, created_at: now,
+    id: uid(), plan_id: studyPlan.id, subject_id: si === null ? null : study_subjects[si].id, topic_id: null, test_id: null, kind, date, end_date, title, notes: '', is_done, origin: '', created_at: now,
   })
   const study_plan_items: StudyPlanItem[] = [
     pi('goal', sw(-1), 'Sistemas Distribuidos: subrayar y 1ª vuelta de los temas 1–3', 0, true, sw(-1, 6)),
@@ -408,7 +408,7 @@ export function buildDemoDataset(today = new Date()): Dataset {
   ]
   const tp = (si: number, n: number, p: Partial<StudyTopic> = {}): StudyTopic => ({
     id: uid(), subject_id: study_subjects[si].id, position: n, name: `Tema ${n}`, highlighted: false, studied: false, reviews: 0, last_studied: null,
-    final_pass: false, confidence: null, notes: '', created_at: now, ...p,
+    final_pass: false, confidence: null, notes: '', pages: null, created_at: now, ...p,
   })
   const study_topics: StudyTopic[] = [
     tp(0, 1, { highlighted: true, studied: true, reviews: 1, last_studied: day(-12), confidence: 3 }),
@@ -419,6 +419,34 @@ export function buildDemoDataset(today = new Date()): Dataset {
     tp(0, 6),
     ...Array.from({ length: 8 }, (_, i) => tp(1, i + 1, i < 4 ? { highlighted: true, studied: i < 3, last_studied: i < 3 ? day(-8 + i) : null } : {})),
   ]
+  // Four levels per topic for the first subject, plus whole-syllabus mock exams.
+  const scores: (number | null)[][] = [[9, 8, 6.5, 4], [8.5, 7, null, null], [7, null, null, null]]
+  const study_tests: StudyTest[] = [
+    ...study_topics.slice(0, 6).flatMap((t, ti) =>
+      [1, 2, 3, 4].map((lv): StudyTest => {
+        const score = scores[ti]?.[lv - 1] ?? null
+        return {
+          id: uid(), subject_id: t.subject_id, topic_id: t.id, position: ti * 4 + lv, name: `Test ${t.name} · Nivel ${lv}`, kind: 'topic', level: lv,
+          questions: 30 - lv * 4, minutes: null, path: '', score, best: score, attempts: score === null ? 0 : 1, last_done: score === null ? null : day(-ti - 2), notes: '', created_at: now,
+        }
+      }),
+    ),
+    ...[1, 2, 3].map((n): StudyTest => ({
+      id: uid(), subject_id: study_subjects[1].id, topic_id: null, position: 100 + n, name: `Simulacro ${n}`, kind: 'mock', level: null,
+      questions: 28, minutes: 60, path: '', score: n === 1 ? 6.8 : null, best: n === 1 ? 6.8 : null, attempts: n === 1 ? 1 : 0, last_done: n === 1 ? day(-1) : null, notes: '', created_at: now,
+    })),
+  ]
+  // A few day-by-day tasks around today.
+  study_plan_items.push(
+    pi('study', day(0), 'Sistemas Distribuidos · Tema 4: subrayado y 1ª vuelta', 0),
+    { ...pi('test', day(0), 'Test Tema 3 · Nivel 2', 0), test_id: study_tests[9].id },
+    pi('study', day(1), 'Aprendizaje Automático · Tema 4: 1ª vuelta', 1),
+    { ...pi('mock', day(2), 'Simulacro 2 cronometrado (60 min)', 1), test_id: study_tests.at(-2)!.id },
+    pi('rest', day(2), 'Tarde de descanso', null),
+   pi('study', day(-2), 'Sistemas Distribuidos · Tema 3: 1ª vuelta (atrasada)', 0),
+    pi('test', day(-1), 'Aprendizaje Automático · autotest del Tema 3', 1),
+    pi('buffer', day(3), 'Colchón', null),
+  )
 
   return {
     events,
@@ -433,6 +461,7 @@ export function buildDemoDataset(today = new Date()): Dataset {
     study_assessments,
     study_files,
     study_topics,
+    study_tests,
     study_plans: [studyPlan],
     study_plan_items,
     category_rules: [{ id: uid(), pattern: 'mercado', type: 'expense', category: 'groceries', created_at: now }],

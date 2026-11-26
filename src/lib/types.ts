@@ -228,6 +228,38 @@ export interface StudyTopic {
   confidence: number | null
   /** Test traps, doubts. */
   notes: string
+  /** Pages in the summary PDF (weights the daily load). */
+  pages: number | null
+  created_at: string
+}
+
+export const TEST_KINDS = ['topic', 'global', 'mock'] as const
+export type TestKind = (typeof TEST_KINDS)[number]
+
+/** A practice test or mock exam (from the subject folder). */
+export interface StudyTest {
+  id: string
+  user_id?: string
+  subject_id: string
+  /** null = covers the whole subject. */
+  topic_id: string | null
+  position: number
+  name: string
+  /** topic = test of one topic · global = whole syllabus · mock = mock exam. */
+  kind: TestKind
+  /** Difficulty level (1 = básico … 4 = experto). */
+  level: number | null
+  questions: number | null
+  /** Time to sit it as a timed mock. */
+  minutes: number | null
+  /** Where the file is, relative to the subject folder. */
+  path: string
+  /** Last grade, out of 10. */
+  score: number | null
+  best: number | null
+  attempts: number
+  last_done: string | null // YYYY-MM-DD
+  notes: string
   created_at: string
 }
 
@@ -253,7 +285,7 @@ export interface StudyPlan {
   created_at: string
 }
 
-export const PLAN_ITEM_KINDS = ['goal', 'review', 'mock', 'buffer', 'milestone'] as const
+export const PLAN_ITEM_KINDS = ['goal', 'study', 'test', 'review', 'mock', 'buffer', 'rest', 'milestone'] as const
 export type PlanItemKind = (typeof PLAN_ITEM_KINDS)[number]
 
 export interface StudyPlanItem {
@@ -261,13 +293,17 @@ export interface StudyPlanItem {
   user_id?: string
   plan_id: string
   subject_id: string | null
-  /** goal = weekly goal (date → end_date) · the rest are dated blocks. */
+  topic_id: string | null
+  test_id: string | null
+  /** goal = weekly goal (date → end_date) · the rest are tasks of one day. */
   kind: PlanItemKind
   date: string // YYYY-MM-DD
   end_date: string | null // YYYY-MM-DD, weekly goals only
   title: string
   notes: string
   is_done: boolean
+  /** '' = by hand · 'placeholder' = generic, waiting for the syllabus · 'module' = generated from the syllabus. */
+  origin: string
   created_at: string
 }
 
@@ -684,6 +720,7 @@ export interface Tables {
   study_assessments: StudyAssessment
   study_files: StudyFile
   study_topics: StudyTopic
+  study_tests: StudyTest
   study_plans: StudyPlan
   study_plan_items: StudyPlanItem
   tcg_decks: TcgDeck

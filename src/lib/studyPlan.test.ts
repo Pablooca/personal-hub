@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { addDaysKey, currentWeek, daysBetween, dueTopics, fmtRange, markReviewed, nextReview, phaseOf, planStatus, planWeeks, topicProgress, topicStage } from './studyPlan.ts'
+import { addDaysKey, byDay, currentWeek, fmtDay, recordScore, testState, testStats, daysBetween, dueTopics, fmtRange, markReviewed, nextReview, phaseOf, planStatus, planWeeks, topicProgress, topicStage } from './studyPlan.ts'
 import type { StudyPlanItem, StudyTopic } from './types.ts'
 
 const topic = (p: Partial<StudyTopic> = {}): StudyTopic => ({
@@ -8,7 +8,7 @@ const topic = (p: Partial<StudyTopic> = {}): StudyTopic => ({
   last_studied: null, final_pass: false, confidence: null, notes: '', created_at: '2026-01-01T00:00:00Z', ...p,
 })
 const item = (p: Partial<StudyPlanItem>): StudyPlanItem => ({
-  id: crypto.randomUUID(), plan_id: 'p', subject_id: null, kind: 'goal', date: '2026-11-26', end_date: null, title: 'x', notes: '', is_done: false, created_at: '2026-01-01T00:00:00Z', ...p,
+  id: crypto.randomUUID(), plan_id: 'p', subject_id: null, topic_id: null, test_id: null, kind: 'goal', date: '2026-11-26', end_date: null, title: 'x', notes: '', is_done: false, created_at: '2026-01-01T00:00:00Z', ...p,
 })
 
 test('date helpers cross months and years', () => {
@@ -92,4 +92,30 @@ test('plan status: countdown, elapsed and what is behind (buffers never count)',
 test('ranges in Spanish', () => {
   assert.equal(fmtRange('2026-11-26', '2026-12-06'), '26 nov – 6 dic')
   assert.equal(fmtRange('2027-04-10', '2027-04-10'), '10 abr')
+})
+
+test('days: goals left out, milestones first and rest last', () => {
+  const items = [
+    item({ kind: 'rest', date: '2026-11-29', title: 'Tarde libre' }),
+    item({ kind: 'test', date: '2026-11-29', title: 'Test T2 N1' }),
+    item({ kind: 'study', date: '2026-11-29', title: 'T3' }),
+    item({ kind: 'milestone', date: '2026-11-29', title: 'Entrega' }),
+    item({ kind: 'study', date: '2026-11-27', title: 'T1' }),
+    item({ kind: 'goal', date: '2026-11-26', end_date: '2026-12-06', title: 'Semana' }),
+  ]
+  assert.deepEqual(byDay(items).map(([d, l]) => [d, l.map((i) => i.title)]), [
+    ['2026-11-27', ['T1']],
+    ['2026-11-29', ['Entrega', 'T3', 'Test T2 N1', 'Tarde libre']],
+  ])
+  assert.equal(fmtDay('2026-11-26'), 'jue 26 nov')
+})
+
+test('tests: record a grade, states and stats', () => {
+  assert.deepEqual(recordScore({ best: null, attempts: 0 }, 6.5, '2026-11-27'), { score: 6.5, best: 6.5, attempts: 1, last_done: '2026-11-27' })
+  assert.deepEqual(recordScore({ best: 8, attempts: 2 }, 7, '2026-12-01'), { score: 7, best: 8, attempts: 3, last_done: '2026-12-01' })
+  assert.equal(testState({ score: null, attempts: 0 }), 'pending')
+  assert.equal(testState({ score: 4.9, attempts: 1 }), 'failed')
+  assert.equal(testState({ score: 5, attempts: 1 }), 'passed')
+  assert.equal(testState({ score: 9, attempts: 1 }), 'mastered')
+  assert.deepEqual(testStats([{ score: 4, attempts: 1 }, { score: 9, attempts: 2 }, { score: null, attempts: 0 }]), { total: 3, done: 2, passed: 1, failed: 1, average: 6.5 })
 })

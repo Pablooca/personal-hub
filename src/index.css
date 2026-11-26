@@ -156,3 +156,18 @@ input[type='range'] {
 [role='dialog'] {
   animation: sheet-in 160ms ease-out;
 }
+
+/* Printing a page (Ctrl+P): no navigation or action buttons, white paper. */
+@media print {
+  aside,
+  nav,
+  .print-hide {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  .card {
+    break-inside: avoid;
+  }
+}

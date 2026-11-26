@@ -6,7 +6,7 @@
 --
 --  Tables:   events · projects · project_tasks · transactions · categories · accounts · work_logs ·
 --            study_programs · study_subjects · study_assessments · study_files ·
---            study_topics · study_plans · study_plan_items ·
+--            study_topics · study_tests · study_plans · study_plan_items ·
 --            tcg_decks · vgc_teams · tournaments · tournament_rounds ·
 --            race_goals · run_plan · runs · run_workouts · notification_log
 --  Security: Row Level Security on every table. Each row belongs to exactly
@@ -599,7 +599,8 @@ create policy "study_files_storage_delete" on storage.objects for delete to auth
   using (bucket_id = 'study-files' and (storage.foldername(name))[1] = (select auth.uid())::text);
 
 -- =============================================================================
---  8b. STUDY PLAN — topics with their progress, and exam-prep plans
+--  8b. STUDY PLAN — topics with their progress, practice tests and exam-prep plans
+--      study_tests       → per subject/topic: level, score, attempts
 --      study_topics      → per subject: highlighted, first pass, spaced reviews
 --      study_plans       → per program: date range, exam date, phases
 --      study_plan_items  → weekly goals (date range) and dated blocks
@@ -621,6 +622,27 @@ create table if not exists public.study_topics (
   created_at    timestamptz not null default now()
 );
 
+-- Practice tests and mock exams of a subject, optionally tied to a topic.
+create table if not exists public.study_tests (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  subject_id  uuid not null references public.study_subjects (id) on delete cascade,
+  topic_id    uuid references public.study_topics (id) on delete set null,
+  position    integer not null default 0,
+  name        text not null check (char_length(name) between 1 and 160),
+  kind        text not null default 'topic' check (kind in ('topic', 'global', 'mock')),
+  level       integer check (level is null or level between 1 and 9),
+  questions   integer check (questions is null or questions between 1 and 999),
+  minutes     integer check (minutes is null or minutes between 1 and 999),
+  path        text not null default '' check (char_length(path) <= 400),  -- where the file is in the subject folder
+  score       numeric(4, 2) check (score is null or score between 0 and 10),  -- last grade, out of 10
+  best        numeric(4, 2) check (best is null or best between 0 and 10),
+  attempts    integer not null default 0 check (attempts between 0 and 999),
+  last_done   date,
+  notes       text not null default '' check (char_length(notes) <= 4000),
+  created_at  timestamptz not null default now()
+);
+
 create table if not exists public.study_plans (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
@@ -640,7 +662,7 @@ create table if not exists public.study_plan_items (
   user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
   plan_id     uuid not null references public.study_plans (id) on delete cascade,
   subject_id  uuid references public.study_subjects (id) on delete set null,
-  kind        text not null default 'goal' check (kind in ('goal', 'review', 'mock', 'buffer', 'milestone')),
+  kind        text not null default 'goal',
   date        date not null,
   end_date    date,  -- weekly goals: the week they cover
   title       text not null check (char_length(title) between 1 and 300),
@@ -650,12 +672,29 @@ create table if not exists public.study_plan_items (
   check (end_date is null or end_date >= date)
 );
 
+-- Pages of each topic in its summary PDF (weights the daily load).
+alter table public.study_topics add column if not exists pages integer check (pages is null or pages between 1 and 999);
+
+-- Day-by-day plans: study / test / rest items, tied to a topic or a test.
+-- origin: '' = written by hand · 'placeholder' / 'module' = generated, replaced when a summary is uploaded.
+alter table public.study_plan_items add column if not exists origin text not null default '' check (char_length(origin) <= 40);
+alter table public.study_plan_items add column if not exists topic_id uuid references public.study_topics (id) on delete set null;
+alter table public.study_plan_items add column if not exists test_id uuid references public.study_tests (id) on delete set null;
+alter table public.study_plan_items drop constraint if exists study_plan_items_kind_check;
+alter table public.study_plan_items add constraint study_plan_items_kind_check
+  check (kind in ('goal', 'study', 'test', 'review', 'mock', 'buffer', 'rest', 'milestone'));
+
+create index if not exists study_tests_subject_idx on public.study_tests (subject_id, position);
+create index if not exists study_tests_topic_idx on public.study_tests (topic_id);
+create index if not exists study_plan_items_topic_idx on public.study_plan_items (topic_id);
+create index if not exists study_plan_items_test_idx on public.study_plan_items (test_id);
 create index if not exists study_topics_subject_idx on public.study_topics (subject_id, position);
 create index if not exists study_plans_program_idx on public.study_plans (program_id);
 create index if not exists study_plan_items_plan_idx on public.study_plan_items (plan_id, date);
 create index if not exists study_plan_items_subject_idx on public.study_plan_items (subject_id);
 
 alter table public.study_topics     enable row level security;
+alter table public.study_tests      enable row level security;
 alter table public.study_plans      enable row level security;
 alter table public.study_plan_items enable row level security;
 
@@ -668,9 +707,13 @@ begin
   for spec in
     select * from (values
       ('study_topics',     'exists (select 1 from public.study_subjects s where s.id = subject_id and s.user_id = (select auth.uid()))'),
+      ('study_tests',      'exists (select 1 from public.study_subjects s where s.id = subject_id and s.user_id = (select auth.uid()))'
+                           ' and (topic_id is null or exists (select 1 from public.study_topics t where t.id = topic_id and t.user_id = (select auth.uid())))'),
       ('study_plans',      'exists (select 1 from public.study_programs p where p.id = program_id and p.user_id = (select auth.uid()))'),
       ('study_plan_items', 'exists (select 1 from public.study_plans p where p.id = plan_id and p.user_id = (select auth.uid()))'
-                           ' and (subject_id is null or exists (select 1 from public.study_subjects s where s.id = subject_id and s.user_id = (select auth.uid())))')
+                           ' and (subject_id is null or exists (select 1 from public.study_subjects s where s.id = subject_id and s.user_id = (select auth.uid())))'
+                           ' and (topic_id is null or exists (select 1 from public.study_topics t where t.id = topic_id and t.user_id = (select auth.uid())))'
+                           ' and (test_id is null or exists (select 1 from public.study_tests x where x.id = test_id and x.user_id = (select auth.uid())))')
     ) as v(tbl, extra)
   loop
     guard := '(select auth.uid()) = user_id and ' || spec.extra;
@@ -1032,7 +1075,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'study_topics', 'study_plans', 'study_plan_items', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'pokemon_matches', 'race_goals', 'run_plan', 'runs', 'run_workouts', 'category_rules', 'bills', 'shoes', 'deck_versions', 'matchup_notes', 'owned_cards', 'collection_snapshots'] loop
+  foreach t in array array['events', 'projects', 'project_tasks', 'transactions', 'categories', 'accounts', 'work_logs', 'study_programs', 'study_subjects', 'study_assessments', 'study_files', 'study_topics', 'study_tests', 'study_plans', 'study_plan_items', 'tcg_decks', 'vgc_teams', 'tournaments', 'tournament_rounds', 'pokemon_matches', 'race_goals', 'run_plan', 'runs', 'run_workouts', 'category_rules', 'bills', 'shoes', 'deck_versions', 'matchup_notes', 'owned_cards', 'collection_snapshots'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
