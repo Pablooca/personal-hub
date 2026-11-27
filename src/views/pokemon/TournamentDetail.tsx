@@ -95,9 +95,17 @@ export function TournamentDetail({ tournament: t, onBack, onCalculator }: { tour
                 </>
               ) : (
                 <span className="flex -space-x-1.5">
-                  {r.opponent_pokemon.filter((p) => p.species).map((p, i) => (
-                    <SpeciesSprite key={i} species={p.species} size={32} label={[p.species, p.item].filter(Boolean).join(' @ ')} />
-                  ))}
+                  {r.opponent_pokemon.filter((p) => p.species).map((p, i) => {
+                    const brought = r.games.some((g) => g.rival?.length) ? r.games.filter((g) => g.rival?.includes(p.species)).length : null
+                    const megas = r.games.filter((g) => g.rival_mega === p.species).length
+                    const label = [[p.species, p.item].filter(Boolean).join(' @ '), brought !== null && `en ${brought} de ${r.games.length} partidas`, megas > 0 && `mega en ${megas}`].filter(Boolean).join(' · ')
+                    return (
+                      <span key={i} className={cx('relative', brought === 0 && 'opacity-35')}>
+                        <SpeciesSprite species={p.species} size={32} label={label} />
+                        {megas > 0 && <span aria-hidden className="absolute -right-0.5 -bottom-0.5 rounded bg-accent px-0.5 text-[8px] leading-tight font-bold text-accent-fg">M</span>}
+                      </span>
+                    )
+                  })}
                   {!r.opponent_pokemon.length && <span className="text-xs text-muted">Sin Pokémon registrados</span>}
                 </span>
               )}

@@ -187,6 +187,12 @@ export interface OwnMonStats {
   versus: Map<string, Tally>
 }
 
+/** Rival species actually brought in some game, or the whole team when no selection was recorded. */
+export function rivalFaced(r: Pick<TournamentRound, 'games' | 'opponent_pokemon'>): Set<string> {
+  const brought = new Set(r.games.flatMap((g) => g.rival ?? []))
+  return brought.size ? brought : new Set(r.opponent_pokemon.map((p) => p.species).filter(Boolean))
+}
+
 /** My own Pokémon: times brought, win rate, and matchups against rival species. */
 export function ownMons(ms: Match[]): OwnMonStats[] {
   const acc = new Map<string, OwnMonStats>()
@@ -196,7 +202,7 @@ export function ownMons(ms: Match[]): OwnMonStats[] {
       if (!acc.has(species)) acc.set(species, { species, record: emptyTally(), usage: 0, versus: new Map() })
       const a = acc.get(species)!
       addResult(a.record, r.result)
-      for (const rival of new Set(r.opponent_pokemon.map((p) => p.species).filter(Boolean))) {
+      for (const rival of rivalFaced(r)) {
         if (!a.versus.has(rival)) a.versus.set(rival, emptyTally())
         addResult(a.versus.get(rival)!, r.result)
       }
