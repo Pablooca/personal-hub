@@ -311,3 +311,23 @@ test('VGC aggregation per Pokémon', () => {
   assert.deepEqual([own[0].species, own[0].usage, own[1].usage], ['Delphox', 100, 50])
   assert.deepEqual(own[0].versus.get('Incineroar'), { w: 1, l: 1, t: 0 })
 })
+
+test('VGC picks recorded game by game', () => {
+  const mon = (species: string) => ({ species, item: '', nature: '', moves: [] })
+  const ms = matchesOf([T({ game: 'vgc' })], [
+    R({
+      opponent_pokemon: ['Incineroar', 'Garchomp', 'Raichu', 'Sinistcha', 'Tinkaton', 'Basculegion'].map(mon),
+      my_pokemon: ['Delphox', 'Glimmora', 'Garchomp'],
+      games: [
+        { result: 'win', first: null, mine: ['Delphox', 'Glimmora'], rival: ['Incineroar', 'Raichu'], rival_mega: 'Raichu' },
+        { result: 'loss', first: null, mine: ['Delphox', 'Garchomp'], rival: ['Incineroar', 'Sinistcha'] },
+        { result: 'win', first: null, mine: ['Glimmora'], rival: ['Raichu'] },
+      ],
+    }),
+  ])
+  const own = new Map(ownMons(ms).map((m) => [m.species, m]))
+  assert.deepEqual(own.get('Delphox')!.record, { w: 1, l: 1, t: 0 })
+  assert.deepEqual(own.get('Glimmora')!.versus.get('Raichu'), { w: 2, l: 0, t: 0 })
+  assert.equal(own.get('Glimmora')!.versus.get('Tinkaton'), undefined)
+  assert.equal(Math.round(own.get('Garchomp')!.usage), 33)
+})

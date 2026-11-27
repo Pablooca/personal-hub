@@ -469,6 +469,8 @@ export interface Tournament {
 export interface RoundGame {
   result: 'win' | 'loss' | 'tie'
   first: boolean | null
+  /** VGC: my Pokémon brought to this game (up to 4). */
+  mine?: string[]
   /** VGC: species of the rival's team it brought to this game (up to 4). */
   rival?: string[]
   /** VGC: species of the rival that mega evolved in this game ('' = none). */

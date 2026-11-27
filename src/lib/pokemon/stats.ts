@@ -196,13 +196,20 @@ export function rivalFaced(r: Pick<TournamentRound, 'games' | 'opponent_pokemon'
 /** My own Pokémon: times brought, win rate, and matchups against rival species. */
 export function ownMons(ms: Match[]): OwnMonStats[] {
   const acc = new Map<string, OwnMonStats>()
-  const recorded = ms.filter((m) => m.t.game === 'vgc' && m.r.my_pokemon.length)
-  for (const { r } of recorded) {
-    for (const species of new Set(r.my_pokemon)) {
+  // Game by game when the picks of each game were recorded; otherwise the whole round.
+  const recorded: { mine: string[]; rivals: Set<string>; result: RoundResult | RoundGame['result'] }[] = []
+  for (const { t, r } of ms) {
+    if (t.game !== 'vgc') continue
+    const games = r.games.filter((g) => g.mine?.length)
+    if (games.length) for (const g of games) recorded.push({ mine: g.mine!, rivals: g.rival?.length ? new Set(g.rival) : rivalFaced(r), result: g.result })
+    else if (r.my_pokemon.length) recorded.push({ mine: r.my_pokemon, rivals: rivalFaced(r), result: r.result })
+  }
+  for (const r of recorded) {
+    for (const species of new Set(r.mine)) {
       if (!acc.has(species)) acc.set(species, { species, record: emptyTally(), usage: 0, versus: new Map() })
       const a = acc.get(species)!
       addResult(a.record, r.result)
-      for (const rival of rivalFaced(r)) {
+      for (const rival of r.rivals) {
         if (!a.versus.has(rival)) a.versus.set(rival, emptyTally())
         addResult(a.versus.get(rival)!, r.result)
       }

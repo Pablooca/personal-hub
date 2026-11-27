@@ -136,6 +136,7 @@ export function RoundModal({
   const [mons, setMons] = useState<RivalPokemon[]>(round?.opponent_pokemon ?? [])
   const [mine, setMine] = useState<string[]>(round?.my_pokemon ?? [])
   const [notes, setNotes] = useState(round?.notes ?? '')
+  const own = useMemo(() => (team ? parseTeam(team.paste).mons.map((m) => m.species) : []), [team])
 
   const customInvalid = tcg && rival.id === 'other' && rival.icons.length === 0
   /** Nothing was played: no games, dice or decks to record. A no-show still has a rival. */
@@ -157,12 +158,15 @@ export function RoundModal({
     const bye = result === 'bye'
     const free = isFreeWin(result)
     const team = mons.filter((m) => m.species)
+    const played = tcg ? games : games.map((g) => cleanPicks(g, team))
+    // The round keeps every Pokémon I brought in some game (or the old round-level choice).
+    const brought = [...new Set(played.flatMap((g) => g.mine ?? []))]
     const row = {
       tournament_id: t.id,
       phase,
       number,
       result,
-      games: free ? [] : tcg ? games : games.map((g) => cleanPicks(g, team)),
+      games: free ? [] : played,
       won_dice: free || !tcg ? null : dice,
       went_first: free || !tcg ? null : (games[0]?.first ?? first),
       opponent_name: bye ? '' : opponent.trim(),
@@ -170,7 +174,7 @@ export function RoundModal({
       opponent_icons: free || !tcg ? [] : rival.icons,
       opponent_deck_name: free || !tcg ? '' : rival.name.trim(),
       opponent_pokemon: free || tcg ? [] : team.map((m) => ({ ...m, moves: m.moves.filter(Boolean) })),
-      my_pokemon: free || tcg ? [] : mine,
+      my_pokemon: free || tcg ? [] : brought.length ? brought : mine,
       notes,
     }
     onSaved(another)
@@ -249,7 +253,7 @@ export function RoundModal({
                 first={first}
                 onChange={changeGames}
                 onFirst={setFirst}
-                extra={tcg ? undefined : (g, i, set) => <GamePicks n={i + 1} game={g} team={mons} champions={champions} onChange={set} />}
+                extra={tcg ? undefined : (g, i, set) => <GamePicks n={i + 1} game={g} own={own} team={mons} champions={champions} onChange={set} />}
               />
             </div>
           )}
@@ -285,7 +289,7 @@ export function RoundModal({
                 <RivalDeckPicker value={rival} onChange={setRival} invalid={customInvalid} />
                 <RivalNote key={`${rival.id}-${rival.icons.join()}-${rival.name}`} deckId={t.deck_id} rival={rival} />
               </>
-            ) : <VgcSide mons={mons} setMons={setMons} mine={mine} setMine={setMine} team={team} max={6} />}
+            ) : <VgcSide mons={mons} setMons={setMons} mine={mine} setMine={setMine} team={team} max={6} perGame />}
           </div>
         )}
       </div>
@@ -397,7 +401,8 @@ export function rivalFromPaste(text: string): RivalPokemon[] {
 const blank = (): RivalPokemon => ({ species: '', item: '', nature: '', moves: ['', '', '', ''] })
 
 /** `max`: 4 when only the Pokémon seen are known, 6 for the whole rival team (tournaments). */
-export function VgcSide({ mons, setMons, mine, setMine, team, max = 4 }: { mons: RivalPokemon[]; setMons: (m: RivalPokemon[]) => void; mine: string[]; setMine: (m: string[]) => void; team: VgcTeam | null; max?: number }) {
+/** `perGame`: my picks are chosen in each game, not here. */
+export function VgcSide({ mons, setMons, mine, setMine, team, max = 4, perGame = false }: { mons: RivalPokemon[]; setMons: (m: RivalPokemon[]) => void; mine: string[]; setMine: (m: string[]) => void; team: VgcTeam | null; max?: number; perGame?: boolean }) {
   const champions = useChampions()
   const own = useMemo(() => (team ? parseTeam(team.paste).mons.map((m) => m.species) : []), [team])
   const slots = [...mons, ...(mons.length < max ? [blank()] : [])]
@@ -424,7 +429,7 @@ export function VgcSide({ mons, setMons, mine, setMine, team, max = 4 }: { mons:
 
   return (
     <div className="space-y-5">
-      <div>
+      {!perGame && <div>
         <span className="label">Mis 4 elegidos</span>
         {own.length ? (
           <div className="flex flex-wrap gap-1.5">
@@ -448,7 +453,7 @@ export function VgcSide({ mons, setMons, mine, setMine, team, max = 4 }: { mons:
         ) : (
           <p className="text-sm text-muted">Asigna un equipo para marcar qué Pokémon llevaste.</p>
         )}
-      </div>
+      </div>}
 
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -564,8 +569,9 @@ export function cleanPicks(g: RoundGame, team: RivalPokemon[]): RoundGame {
   const species = new Set(team.map((m) => m.species).filter(Boolean))
   const rival = (g.rival ?? []).filter((s) => species.has(s)).slice(0, 4)
   const mega = g.rival_mega && species.has(g.rival_mega) && (!rival.length || rival.includes(g.rival_mega)) ? g.rival_mega : ''
-  const { rival: _r, rival_mega: _m, ...rest } = g
-  return { ...rest, ...(rival.length ? { rival } : {}), ...(mega ? { rival_mega: mega } : {}) }
+  const { mine: _y, rival: _r, rival_mega: _m, ...rest } = g
+  const mine = [...new Set(g.mine ?? [])].slice(0, 4)
+  return { ...rest, ...(mine.length ? { mine } : {}), ...(rival.length ? { rival } : {}), ...(mega ? { rival_mega: mega } : {}) }
 }
 
 /** Mega forme of a rival Pokémon: from its stone, or the only one its species has. */
@@ -577,9 +583,49 @@ function megaForme(champions: Champions | null, m: RivalPokemon): string | null 
   return formes.size === 1 ? [...formes][0] : null
 }
 
-function GamePicks({ n, game, team, champions, onChange }: { n: number; game: RoundGame; team: RivalPokemon[]; champions: Champions | null; onChange: (p: Partial<RoundGame>) => void }) {
+/** Up to 4 sprites chosen from a team. */
+function PickRow({ label, species, picked, onChange }: { label: string; species: string[]; picked: string[]; onChange: (p: string[]) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {species.map((s) => {
+        const on = picked.includes(s)
+        return (
+          <button
+            key={s}
+            type="button"
+            aria-pressed={on}
+            aria-label={`${s} ${label}`}
+            title={s}
+            disabled={!on && picked.length >= 4}
+            onClick={() => onChange(on ? picked.filter((x) => x !== s) : [...picked, s])}
+            className={cx('grid size-11 place-items-center rounded-lg border transition', on ? 'border-accent bg-accent/10' : 'border-line bg-surface-2 opacity-50 hover:opacity-100 disabled:hover:opacity-50')}
+          >
+            <SpeciesSprite species={s} size={36} />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function GamePicks({ n, game, own, team, champions, onChange }: { n: number; game: RoundGame; own: string[]; team: RivalPokemon[]; champions: Champions | null; onChange: (p: Partial<RoundGame>) => void }) {
+  const mine = (game.mine ?? []).filter((s) => own.includes(s))
+  const myRow = (
+    <div>
+      <span className="mb-1 block text-[11px] text-muted">
+        Yo saqué <span className="num">{mine.length}/4</span>
+      </span>
+      {own.length ? <PickRow label={`mío en la partida ${n}`} species={own} picked={mine} onChange={(p) => onChange({ mine: p })} /> : <p className="text-xs text-muted">Asigna un equipo al torneo para marcar qué sacaste.</p>}
+    </div>
+  )
   const mons = team.filter((m) => m.species)
-  if (!mons.length) return <p className="text-xs text-muted">Añade el equipo del rival para marcar qué sacó.</p>
+  if (!mons.length)
+    return (
+      <div className="space-y-2">
+        {myRow}
+        <p className="text-xs text-muted">Añade el equipo del rival para marcar qué sacó.</p>
+      </div>
+    )
   const present = new Set(mons.map((m) => m.species))
   const brought = (game.rival ?? []).filter((s) => present.has(s))
   const mega = game.rival_mega && present.has(game.rival_mega) ? game.rival_mega : ''
@@ -588,38 +634,19 @@ function GamePicks({ n, game, team, champions, onChange }: { n: number; game: Ro
   const able = pool.filter((m) => megaForme(champions, m))
   const megaOptions = able.length ? able : pool
 
-  function toggle(s: string) {
-    const on = brought.includes(s)
-    if (!on && brought.length >= 4) return
-    const next = on ? brought.filter((x) => x !== s) : [...brought, s]
-    onChange({ rival: next, rival_mega: mega && next.length && !next.includes(mega) ? '' : mega })
-  }
-
   return (
     <div className="space-y-2">
+      {myRow}
       <div>
         <span className="mb-1 block text-[11px] text-muted">
           Rival sacó <span className="num">{brought.length}/4</span>
         </span>
-        <div className="flex flex-wrap gap-1">
-          {mons.map((m) => {
-            const on = brought.includes(m.species)
-            return (
-              <button
-                key={m.species}
-                type="button"
-                aria-pressed={on}
-                aria-label={`${m.species} en la partida ${n}`}
-                title={m.species}
-                onClick={() => toggle(m.species)}
-                disabled={!on && brought.length >= 4}
-                className={cx('grid size-11 place-items-center rounded-lg border transition', on ? 'border-accent bg-accent/10' : 'border-line bg-surface-2 opacity-50 hover:opacity-100 disabled:hover:opacity-50')}
-              >
-                <SpeciesSprite species={m.species} size={36} />
-              </button>
-            )
-          })}
-        </div>
+        <PickRow
+          label={`del rival en la partida ${n}`}
+          species={mons.map((m) => m.species)}
+          picked={brought}
+          onChange={(next) => onChange({ rival: next, rival_mega: mega && next.length && !next.includes(mega) ? '' : mega })}
+        />
       </div>
       <div>
         <span className="mb-1 block text-[11px] text-muted">Mega del rival</span>
