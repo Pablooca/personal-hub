@@ -384,3 +384,11 @@ export function extractPayment(body: unknown): ExtractedPayment {
   }
   return out
 }
+
+/** `"test": true` (or "sí", "true", "1") in the body: answer what would be saved, without saving it. */
+export function isTestRun(body: unknown): boolean {
+  if (!isRecord(body)) return false
+  const v = body.test ?? body.prueba
+  if (v === true || v === 1) return true
+  return typeof v === 'string' && ['true', 'si', 'sí', '1', 'yes'].includes(v.trim().toLowerCase())
+}

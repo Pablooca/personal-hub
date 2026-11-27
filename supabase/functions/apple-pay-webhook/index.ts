@@ -21,7 +21,7 @@
  *   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID      optional: announce each payment on Telegram
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { categorize, matchOwnRule, categoryLabel, extractPayment, formatEuro, noAmountMessage, isAutomaticCategory, resolveCategory, parseAmount, parseDate } from './normalize.ts'
+import { categorize, matchOwnRule, categoryLabel, extractPayment, formatEuro, noAmountMessage, isAutomaticCategory, isTestRun, resolveCategory, parseAmount, parseDate } from './normalize.ts'
 import { expensesMessage, sendTelegram } from '../_shared/telegram.ts'
 
 const MAX_BODY_BYTES = 8 * 1024
@@ -134,6 +134,16 @@ Deno.serve(async (req) => {
         accounts?.find((a) => cardKey.includes(a.name.toLowerCase()) || a.name.toLowerCase().includes(cardKey))
       : undefined
     const account = matched?.name ?? accounts?.find((a) => a.is_primary)?.name ?? (card || 'Apple Pay')
+
+    // ---------------------------------------------------------- test run
+    // Lets the Shortcut be checked without paying: nothing is saved nor announced.
+    if (isTestRun(body)) {
+      return json(200, {
+        ok: true,
+        test: true,
+        message: `PRUEBA (no se guarda): ${formatEuro(amount)} en ${merchant} · ${categoryLabel(category)} · cuenta ${account}${unknownChoice ? ` · «${unknownChoice}» no es una de tus categorías` : ''}`,
+      })
+    }
 
     // ---------------------------------------------------------- de-duplicate
     // Automations occasionally fire twice for the same payment.

@@ -201,6 +201,7 @@ curl -X POST "https://<project-ref>.supabase.co/functions/v1/apple-pay-webhook" 
 4. Añade **Obtener valor del diccionario** → clave `message` → del *Contenido de la URL*.
 5. Añade **Mostrar notificación** con el *Valor del diccionario*.
 6. Guarda. Haz un pago de prueba y comprueba que aparece en Finanzas.
+   - **Sin pagar:** crea un atajo normal (no automatización) con las mismas acciones, pon valores escritos a mano en `amount`, `merchant` y `card` (p. ej. `3,20 €`, `MERCADONA`, el nombre de tu tarjeta) y añade la clave `test` de tipo *Booleano* = *Verdadero*. Al ejecutarlo, la notificación dice «PRUEBA (no se guarda): …» con el importe, la categoría y la cuenta que se usarían, sin guardar ni avisar por Telegram.
 7. Para ver exactamente qué envió tu tarjeta (y cómo se interpretó):
    ```bash
    supabase logs --remote --service functions --since 24h --search "Apple Pay body"

@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { categorize, extractPayment, isAutomaticCategory, matchOwnRule, noAmountMessage, resolveCategory, parseAmount, parseDate, parsePlainText } from '../apple-pay-webhook/normalize.ts'
+import { categorize, extractPayment, isAutomaticCategory, isTestRun, matchOwnRule, noAmountMessage, resolveCategory, parseAmount, parseDate, parsePlainText } from '../apple-pay-webhook/normalize.ts'
 
 const NOW = new Date('2026-11-22T17:41:00Z') // 18:41 in Madrid
 const TZ = 'Europe/Madrid'
@@ -154,4 +154,9 @@ test('category chosen in the Shortcut: internal name or app label, case/accent i
     assert.equal(resolveCategory(auto, mine), null)
   }
   assert.equal(isAutomaticCategory('Ocio'), false)
+})
+
+test('test runs: only an explicit flag', () => {
+  for (const b of [{ test: true }, { test: 'true' }, { prueba: 'Sí' }, { test: 1 }]) assert.equal(isTestRun(b), true, JSON.stringify(b))
+  for (const b of [{}, { test: false }, { test: 'no' }, { payload: { test: true } }, null]) assert.equal(isTestRun(b), false, JSON.stringify(b))
 })
