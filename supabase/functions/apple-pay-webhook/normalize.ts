@@ -186,9 +186,29 @@ const LABELS: Record<string, string> = {
   leisure: 'Ocio',
   education: 'Formación',
   shopping: 'Compras',
+  housing: 'Vivienda',
+  other: 'Otros',
   uncategorized: 'Sin categorizar',
 }
-export const categoryLabel = (c: string) => LABELS[c] ?? c
+export const categoryLabel = (c: string) => LABELS[c] ?? c.replace(/_/g, ' ').replace(/^\p{L}/u, (x) => x.toUpperCase())
+
+const AUTOMATIC = new Set(['', 'auto', 'automatica', 'automatico', 'automatic', 'sin categoria', 'sin categorizar'])
+/** "", "Automática", "Sin categoría"… → let the rules decide. */
+export const isAutomaticCategory = (input: string) =>
+  AUTOMATIC.has(input.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[_\s]+/g, ' ').trim())
+
+/**
+ * The category picked in the Shortcut, as one of the user's expense categories.
+ * Accepts the internal name ("groceries", "gimnasio") or the label shown in the
+ * app ("Supermercado", "Gimnasio"), ignoring case and accents.
+ * null = automatic (empty, "Automática"…) or a name that is not one of the user's categories.
+ */
+export function resolveCategory(input: string, categories: ReadonlyArray<string>): string | null {
+  const key = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[_\s]+/g, ' ').trim()
+  const k = key(input)
+  if (isAutomaticCategory(k)) return null
+  return categories.find((c) => key(c) === k || key(categoryLabel(c)) === k) ?? null
+}
 
 export const formatEuro = (n: number) =>
   `${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })} €`
@@ -210,6 +230,8 @@ export interface ExtractedPayment {
   merchant: string
   card: string
   date: unknown
+  /** Category chosen in the Shortcut (optional; empty = automatic). */
+  category: string
   source: PayloadSource
 }
 
@@ -219,6 +241,7 @@ const KEY_ALIASES = {
   merchant: ['comercio', 'establecimiento', 'merchant', 'name', 'nombre', 'title', 'titulo', 'description', 'descripcion'],
   card: ['tarjeta o cartera', 'tarjeta o pase', 'card or pass', 'tarjeta', 'cartera', 'card', 'pass', 'account', 'cuenta'],
   date: ['fecha', 'date', 'timestamp', 'createdat', 'created at', 'created_at'],
+  category: ['categoria', 'category'],
 } as const
 
 type Field = keyof typeof KEY_ALIASES
@@ -304,11 +327,24 @@ export function parsePlainText(text: string): { amount: string | null; merchant:
 }
 
 /**
+ * Text for the 400 answer (shown as the Shortcut's notification). When iOS only
+ * sent the merchant — what happens when the whole "Shortcut Input" is put in one
+ * JSON field — say how to fix the Shortcut instead of a generic error.
+ */
+export function noAmountMessage(e: ExtractedPayment): string {
+  if (e.amount === undefined && e.merchant && (e.source === 'text' || e.source === 'none')) {
+    return `Solo ha llegado el comercio («${e.merchant.slice(0, 60)}»), sin importe. En el Atajo, envía «Importe» de la Entrada del atajo en la clave amount (ver README).`
+  }
+  const got = asText(e.amount).slice(0, 40)
+  return `No se ha encontrado un importe válido (> 0) en la petición${got ? `: ${got}` : ''}`
+}
+
+/**
  * Pull amount / merchant / card / date out of whatever the Shortcut sent.
  * Flat top-level fields win (explicit curl tests); `payload` fills the gaps.
  */
 export function extractPayment(body: unknown): ExtractedPayment {
-  const out: ExtractedPayment = { amount: undefined, merchant: '', card: '', date: undefined, source: 'none' }
+  const out: ExtractedPayment = { amount: undefined, merchant: '', card: '', date: undefined, category: '', source: 'none' }
   if (!isRecord(body)) return out
 
   const { payload, ...flat } = body
@@ -317,6 +353,7 @@ export function extractPayment(body: unknown): ExtractedPayment {
     if (!out.merchant) out.merchant = asText(pick(obj, 'merchant'))
     if (!out.card) out.card = asText(pick(obj, 'card'))
     if (out.date === undefined) out.date = pick(obj, 'date')
+    if (!out.category) out.category = asText(pick(obj, 'category'))
   }
 
   fill(flat)
@@ -336,7 +373,8 @@ export function extractPayment(body: unknown): ExtractedPayment {
     } else {
       const t = parsePlainText(raw)
       if (out.amount === undefined && t.amount) out.amount = t.amount
-      if (!out.merchant) out.merchant = t.merchant
+      // Bare text with no amount nor "en …" is just the merchant (iOS turning the whole input into text).
+      if (!out.merchant) out.merchant = t.merchant || (t.amount ? '' : raw.replace(/\s+/g, ' ').trim().slice(0, 200))
       if (!out.card) out.card = t.card
       if (out.source === 'none') out.source = 'text'
     }

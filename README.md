@@ -180,23 +180,30 @@ curl -X POST "https://<project-ref>.supabase.co/functions/v1/apple-pay-webhook" 
    - **Encabezados:**
      - `Authorization` → `Bearer <secreto-generado>`
      - `Content-Type` → `application/json`
-   - **Cuerpo de la solicitud:** `JSON`, con **una sola clave**:
-     | Clave | Tipo | Valor |
+   - **Cuerpo de la solicitud:** `JSON`, con **un campo por dato**. En cada valor inserta la variable mágica **Entrada del atajo**, tócala y elige la propiedad correspondiente:
+     | Clave | Tipo | Valor (propiedad de *Entrada del atajo*) |
      | --- | --- | --- |
-     | `payload` | *Diccionario* (o *Texto*) | variable mágica **Entrada del atajo** |
+     | `amount` | *Texto* | **Importe** |
+     | `merchant` | *Texto* | **Comercio** |
+     | `card` | *Texto* | **Tarjeta o pase** |
+     | `category` *(opcional)* | *Texto* | *Elemento elegido* de una acción **Elegir de la lista** (ver abajo) |
 
-     La función acepta lo que iOS mande en `payload`:
+     > ⚠️ No pongas la *Entrada del atajo* entera en un solo campo: iOS la convierte en texto y solo envía el nombre del comercio (`{"payload":"Comercial Jardin"}`), sin importe. En ese caso la notificación dirá «Solo ha llegado el comercio…».
+
+     **Categoría al pagar (opcional):** antes de «Obtener contenido de URL» añade **Elegir de la lista** con tus categorías de gasto tal como se ven en la app (`Supermercado`, `Restaurantes`, `Gimnasio`…) y una opción `Automática`. La función acepta el nombre visible o el interno, sin distinguir mayúsculas ni tildes. Con `Automática`, un campo vacío o un nombre que no es una de tus categorías, se usan tus reglas y las automáticas; en este último caso la notificación lo indica.
+
+     La fecha no hace falta (se usa la de hoy en `Europe/Madrid`). La función también acepta un campo `payload` con:
      - un objeto con claves en español o inglés (`Importe`/`Amount`, `Comercio`/`Merchant`, `Tarjeta o cartera`/`Card or Pass`, `Fecha`/`Date`…; sin distinguir mayúsculas ni tildes);
-     - ese mismo objeto como texto JSON, si elegiste el tipo *Texto*;
+     - ese mismo objeto como texto JSON;
      - una frase como `14,50 € en MERCADONA con DEBITO SMART`, `Pago de 14,50 € en MERCADONA` o `DEBITO SMART: 14,50 € en MERCADONA`.
 
-     También sigue aceptando campos planos (`amount`, `merchant`, `card`, `date`), útiles para probar con `curl`.
+     Los campos planos (`amount`, `merchant`, `card`, `date`) son también los que usarías para probar con `curl`.
 4. Añade **Obtener valor del diccionario** → clave `message` → del *Contenido de la URL*.
 5. Añade **Mostrar notificación** con el *Valor del diccionario*.
 6. Guarda. Haz un pago de prueba y comprueba que aparece en Finanzas.
 7. Para ver exactamente qué envió tu tarjeta (y cómo se interpretó):
    ```bash
-   supabase functions logs apple-pay-webhook
+   supabase logs --remote --service functions --since 24h --search "Apple Pay body"
    ```
    Cada petición autenticada registra `Incoming Apple Pay body: …` y `apple-pay-webhook: parsed {source, amount, merchant, card, date, category}`.
 

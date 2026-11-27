@@ -21,7 +21,7 @@
  *   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID      optional: announce each payment on Telegram
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { categorize, matchOwnRule, categoryLabel, extractPayment, formatEuro, parseAmount, parseDate } from './normalize.ts'
+import { categorize, matchOwnRule, categoryLabel, extractPayment, formatEuro, noAmountMessage, isAutomaticCategory, resolveCategory, parseAmount, parseDate } from './normalize.ts'
 import { expensesMessage, sendTelegram } from '../_shared/telegram.ts'
 
 const MAX_BODY_BYTES = 8 * 1024
@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
     return json(400, { ok: false, message: 'JSON no válido' })
   }
 
-  // Raw shape as sent by iOS, to inspect with `supabase functions logs apple-pay-webhook`.
+  // Raw shape as sent by iOS, to inspect with `supabase logs --remote --service functions --search "Apple Pay body"`.
   // Only reached after authentication; headers (and so the secret) are never logged.
   console.log('Incoming Apple Pay body:', JSON.stringify(body).slice(0, 4000))
 
@@ -95,14 +95,15 @@ Deno.serve(async (req) => {
     console.warn('apple-pay-webhook: no valid amount', { source: extracted.source, amount: clean(extracted.amount, 40) })
     return json(400, {
       ok: false,
-      message: `No se ha encontrado un importe válido (> 0) en la petición${extracted.amount !== undefined ? `: ${clean(extracted.amount, 40)}` : ''}`,
+      message: noAmountMessage(extracted),
     })
   }
 
   const merchant = clean(extracted.merchant, 200) || 'Pago Apple Pay'
   const card = clean(extracted.card, 60)
   const date = parseDate(extracted.date, timeZone)
-  console.log('apple-pay-webhook: parsed', JSON.stringify({ source: extracted.source, amount, merchant, card, date }))
+  const chosen = clean(extracted.category, 60)
+  console.log('apple-pay-webhook: parsed', JSON.stringify({ source: extracted.source, amount, merchant, card, date, category: chosen }))
 
   const db = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -110,9 +111,17 @@ Deno.serve(async (req) => {
 
   try {
     // ---------------------------------------------------------- category
-    // The user's rules first, then the built-in ones. A problem reading them never blocks the payment.
-    const { data: rules } = await db.from('category_rules').select('pattern, category').eq('user_id', ownerId).eq('type', 'expense')
-    const category = matchOwnRule(rules ?? [], merchant) ?? categorize(merchant)
+    // The one picked in the Shortcut if it is one of your categories; otherwise
+    // your rules first, then the built-in ones. A problem reading them never blocks the payment.
+    const cats = chosen && !isAutomaticCategory(chosen) ? (await db.from('categories').select('name').eq('user_id', ownerId).eq('type', 'expense')).data : null
+    const picked = cats ? resolveCategory(chosen, cats.map((c) => c.name)) : null
+    /** Something was chosen but it is not one of your categories (it is said in the notification). */
+    const unknownChoice = cats && !picked ? chosen : ''
+    let category = picked
+    if (!category) {
+      const { data: rules } = await db.from('category_rules').select('pattern, category').eq('user_id', ownerId).eq('type', 'expense')
+      category = matchOwnRule(rules ?? [], merchant) ?? categorize(merchant)
+    }
 
     // ---------------------------------------------------------- account
     // Card name matching one of your accounts → that account;
@@ -165,7 +174,7 @@ Deno.serve(async (req) => {
 
     return json(200, {
       ok: true,
-      message: `Registrado: ${formatEuro(amount)} en ${merchant} (${categoryLabel(category)})`,
+      message: `Registrado: ${formatEuro(amount)} en ${merchant} (${categoryLabel(category)})${unknownChoice ? ` · «${unknownChoice}» no es una de tus categorías` : ''}`,
     })
   } catch (err) {
     console.error('apple-pay-webhook: database error', err)

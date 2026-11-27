@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { categorize, extractPayment, matchOwnRule, parseAmount, parseDate, parsePlainText } from '../apple-pay-webhook/normalize.ts'
+import { categorize, extractPayment, isAutomaticCategory, matchOwnRule, noAmountMessage, resolveCategory, parseAmount, parseDate, parsePlainText } from '../apple-pay-webhook/normalize.ts'
 
 const NOW = new Date('2026-11-22T17:41:00Z') // 18:41 in Madrid
 const TZ = 'Europe/Madrid'
@@ -128,4 +128,30 @@ test("the user's own rules go before the built-in ones", () => {
   assert.equal(matchOwnRule(rules, 'COMPRA  Empire   Games Sevilla'), 'pokémon')
   assert.equal(matchOwnRule(rules, 'Mercadona'), null)
   assert.equal(matchOwnRule([{ pattern: ' ', category: 'x' }], 'Mercadona'), null)
+})
+
+test('only the merchant arrives (whole Shortcut Input in one field) → explains how to fix the Shortcut', () => {
+  const e = extractPayment({ payload: 'Comercial Jardin' })
+  assert.equal(parseAmount(e.amount), null)
+  assert.match(noAmountMessage(e), /Solo ha llegado el comercio \(«Comercial Jardin»\), sin importe/)
+  assert.equal(noAmountMessage(extractPayment({ amount: '0,00 €' })), 'No se ha encontrado un importe válido (> 0) en la petición: 0,00 €')
+  assert.equal(noAmountMessage(extractPayment({})), 'No se ha encontrado un importe válido (> 0) en la petición')
+})
+
+test('category chosen in the Shortcut: internal name or app label, case/accent insensitive; automatic or unknown → null', () => {
+  const mine = ['groceries', 'dining', 'gimnasio', 'pokémon', 'savings_withdrawal', 'other']
+  assert.equal(extractPayment({ amount: '3', merchant: 'X', category: 'Supermercado' }).category, 'Supermercado')
+  assert.equal(extractPayment({ payload: { Importe: '3', Categoría: 'Ocio' } }).category, 'Ocio')
+  assert.equal(resolveCategory('Supermercado', mine), 'groceries')
+  assert.equal(resolveCategory('restaurantes', mine), 'dining')
+  assert.equal(resolveCategory('GIMNASIO', mine), 'gimnasio')
+  assert.equal(resolveCategory('Pokemon', mine), 'pokémon')
+  assert.equal(resolveCategory('Savings withdrawal', mine), 'savings_withdrawal')
+  assert.equal(resolveCategory('Otros', mine), 'other')
+  assert.equal(resolveCategory('Vivienda', mine), null) // not one of mine
+  for (const auto of ['', 'Automática', 'auto', 'Sin categoría']) {
+    assert.equal(isAutomaticCategory(auto), true, auto)
+    assert.equal(resolveCategory(auto, mine), null)
+  }
+  assert.equal(isAutomaticCategory('Ocio'), false)
 })
